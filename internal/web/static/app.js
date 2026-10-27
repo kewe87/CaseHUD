@@ -34,6 +34,22 @@ function el(tag, attrs = {}, ...children) {
 }
 // What the manufacturer offers for a device (firmware check): text plus a link
 // to the download page, opened in the browser. Only textContent, no HTML.
+// fwLabel shortens a device's firmware string to version and build date, e.g.
+// "F_LCD,01,HS,WM,TL-LCD,V1.01.06,0.6 (Dec 27 2023," -> "V1.01.06 · 27.12.2023".
+// Strings without a recognisable version are shown as they are.
+function fwLabel(raw) {
+  if (!raw) return "";
+  // Bar displays report "lianli88_0001_0023": the second number n is the
+  // version, (n - 8) / 10 as major.minor (valid from 18).
+  const bar = raw.match(/^lianli88_\d{4}_(\d{4})$/);
+  if (bar && +bar[1] >= 18) return `V${Math.floor((+bar[1] - 8) / 10)}.${(+bar[1] - 8) % 10}`;
+  const v = raw.match(/\bV\d+(?:\.\d+)+/);
+  if (!v) return raw;
+  const d = raw.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) +(\d{1,2}) +(\d{4})/);
+  if (!d) return v[0];
+  const date = new Date(+d[3], "JanFebMarAprMayJunJulAugSepOctNovDec".indexOf(d[1]) / 3, +d[2]);
+  return v[0] + " · " + date.toLocaleDateString(LANG === "de" ? "de-DE" : "en-GB");
+}
 function fwNoteNodes(n) {
   if (!n || !n.status) return [];
   const link = (txt) => el("a", { href: n.url, target: "_blank", rel: "noopener" }, txt);
@@ -119,9 +135,11 @@ const showTab = (name) => $('[data-tab="' + name + '"]').click();
 $("#btn-rescan").addEventListener("click", async () => {
   const b = $("#btn-rescan");
   b.disabled = true;
-  b.animate([{ transform: "rotate(0)" }, { transform: "rotate(360deg)" }], { duration: 700, iterations: 2 });
+  // Only the icon turns, for as long as the scan runs, and stops after a full turn.
+  const spin = b.querySelector("svg").animate([{ transform: "rotate(0)" }, { transform: "rotate(360deg)" }], { duration: 700, iterations: Infinity });
   try { await api("POST", "/api/rescan"); await refresh(); toast(t("rescan.done")); }
   catch (e) { toast(e.message, true); }
+  spin.effect.updateTiming({ iterations: Math.ceil((spin.currentTime || 0) / 700) || 1 });
   b.disabled = false;
 });
 for (const b of $$("[data-lang]")) {
@@ -488,8 +506,11 @@ function renderDrawer() {
   };
   bri.onchange = () => setPanelSettled(p.id, cfg, true);
   $("#dr-theme-field").hidden = cfg.mode !== "design";
-  $("#dr-theme").replaceChildren(...["dark", "light"].map((th) =>
-    el("button", { class: (cfg.theme || "dark") === th ? "active" : "", onclick: () => { change({ theme: th === "dark" ? "" : th }); renderDrawer(); } }, t("theme." + th))));
+  // Redraw only the buttons: p.config holds the new theme only once the save
+  // has answered, so a full renderDrawer here would bring the old one back.
+  const renderTheme = () => $("#dr-theme").replaceChildren(...["dark", "light"].map((th) =>
+    el("button", { class: (cfg.theme || "dark") === th ? "active" : "", onclick: () => { change({ theme: th === "dark" ? "" : th }); renderTheme(); } }, t("theme." + th))));
+  renderTheme();
   const renderRot = () => $("#dr-rot").replaceChildren(...[0, 90, 180, 270].map((r) =>
     el("button", { class: cfg.rotation === r ? "active" : "", onclick: () => {
       cfg.rotation = r; renderRot(); // the device is written once the clicks stop
@@ -504,7 +525,8 @@ function renderDrawer() {
   oc.onchange = () => api("POST", `/api/panels/${encodeURIComponent(p.id)}/offline-clock`, { on: oc.checked })
     .then(() => { p.offlineClock = oc.checked; toast(t("saved")); }).catch((e) => { oc.checked = !oc.checked; toast(e.message, true); });
   $("#dr-fw-field").hidden = !p.firmware; // read only, shown when the display reported one
-  $("#dr-fw").textContent = p.firmware || "";
+  $("#dr-fw").textContent = fwLabel(p.firmware);
+  $("#dr-fw").title = p.firmware || ""; // the raw string, for reports
   $("#dr-fw-note").replaceChildren(...fwNoteNodes(p.firmwareLatest));
   const fl = $("#dr-flip");
   $("#dr-flip-field").hidden = p.deviceFlip === undefined;

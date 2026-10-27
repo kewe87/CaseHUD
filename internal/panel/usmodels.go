@@ -64,6 +64,7 @@ type usModel struct {
 	// (layers) and plays H.264 itself (video).
 	clock, layers, video bool
 	turn180              bool // understands the device-side 180 degree rotation (see SetDeviceFlip)
+	fixedFlip            bool // always turns by 180 degrees itself, no switch (8.8"; see devFlip)
 	exitImage            bool // Close can leave a picture (SetExitImage); 8.8" only
 }
 
@@ -120,7 +121,7 @@ var usModel88 = usModel{
 	brightMax: usMaxBacklight, maxJPEG: us88MaxJPEG, fps: us88FPS,
 	sendTurn: true, ackFrames: true, zlp: true,
 	version: usVersion88,
-	clock:   true, layers: true, video: true, turn180: true, exitImage: true,
+	clock:   true, layers: true, video: true, fixedFlip: true, exitImage: true,
 }
 
 var usModel92 = usModel{

@@ -432,10 +432,18 @@ func TestLayersAreBarsOnly(t *testing.T) {
 }
 
 func TestVideoTurn(t *testing.T) {
-	p := &universal88{}
-	for rot, want := range map[int]int{0: 1, 90: 2, 180: 3, 270: 0} {
+	// 8.8": the device turns by 180 degrees itself, 90 is drawn like 270.
+	p := &universal88{m: &usModel88}
+	for rot, want := range map[int]int{0: 1, 90: 0, 180: 1, 270: 0} {
 		if got := p.VideoTurn(rot); got != want {
-			t.Errorf("rotation %d: turn %d, want %d", rot, got, want)
+			t.Errorf("8.8 rotation %d: turn %d, want %d", rot, got, want)
+		}
+	}
+	// A bar without the device turn does all of it on the host.
+	q := &universal88{m: &usModel92}
+	for rot, want := range map[int]int{0: 1, 90: 2, 180: 3, 270: 0} {
+		if got := q.VideoTurn(rot); got != want {
+			t.Errorf("9.2 rotation %d: turn %d, want %d", rot, got, want)
 		}
 	}
 }
@@ -765,8 +773,44 @@ func TestLayerAndVideoPathsStayInTheAllowList(t *testing.T) {
 	}
 }
 
-func TestDeviceFlipIsOffByDefaultAndSoftwareMirrors(t *testing.T) {
+// The 8.8" always turns by 180 degrees itself: no switch, 180 and 90 write
+// 0x0D 2, 0 and 270 write 0, and the host neither mirrors nor turns by 180.
+func TestUS88AlwaysTurnsOnDevice(t *testing.T) {
 	p, dev := barOn(t, &usModel88, ack0)
+	if !p.devFlip() || p.CanDeviceFlip() || p.SetDeviceFlip(false) == nil {
+		t.Fatal("8.8 must turn on the device, without a switch")
+	}
+	dev.take()
+	var turns []byte
+	l := us88Landscape()
+	c := image.NewRGBA(image.Rect(0, 0, us88Width, us88Height))
+	c.Pix[0] = 9
+	for _, rot := range []int{180, 90, 270, 0} {
+		p.SetRotation(rot)
+		switch rot {
+		case 180:
+			if !bytes.Equal(p.orient(l).Pix, us88Rotate(l, false).Pix) {
+				t.Fatal("host mirrors at 180")
+			}
+		case 90:
+			if !bytes.Equal(p.orient(c).Pix, us88Upright(c, 270).Pix) {
+				t.Fatal("90 not drawn like 270")
+			}
+		}
+		for _, w := range dev.take() {
+			if pl := decryptBlock(w[:504]); pl[0] == byte(usOpTurn) {
+				turns = append(turns, pl[8])
+			}
+		}
+	}
+	if !bytes.Equal(turns, []byte{2, 0}) {
+		t.Fatalf("device turns %v, want 2 (180, kept for 90) then 0 (270, kept for 0)", turns)
+	}
+}
+
+// Other bars keep the switch, off by default.
+func TestDeviceFlipIsOffByDefaultAndSoftwareMirrors(t *testing.T) {
+	p, dev := barOn(t, &usModel92, ack0)
 	if p.devFlip() {
 		t.Fatal("device flip must be off by default")
 	}
@@ -781,7 +825,7 @@ func TestDeviceFlipIsOffByDefaultAndSoftwareMirrors(t *testing.T) {
 	if err := p.SetDeviceFlip(true); err != nil {
 		t.Fatal(err)
 	}
-	p.SetRotation(0) // the device already holds 0: nothing written
+	p.SetRotation(0) // switching on wrote 0 (never sent before), this writes nothing
 	p.SetRotation(180)
 	l := us88Landscape()
 	got := p.orient(l) // rotation 180 with the device turning it
@@ -792,8 +836,8 @@ func TestDeviceFlipIsOffByDefaultAndSoftwareMirrors(t *testing.T) {
 			turns = append(turns, pl[8])
 		}
 	}
-	if !bytes.Equal(turns, []byte{2, 0}) {
-		t.Fatalf("device turns %v, want 2 then 0", turns)
+	if !bytes.Equal(turns, []byte{0, 2, 0}) {
+		t.Fatalf("device turns %v, want 0 (switch on), 2, then 0", turns)
 	}
 	// the frame is then not mirrored by the host
 	want := us88Rotate(l, false)
@@ -846,7 +890,7 @@ func TestSetDeviceFlipWhileTurned(t *testing.T) {
 		}
 		return out
 	}
-	p, dev := barOn(t, &usModel88, ack0)
+	p, dev := barOn(t, &usModel92, ack0)
 	p.SetRotation(180)
 	if got := turns(dev); len(got) != 0 {
 		t.Fatalf("software flip wrote turns %v", got)

@@ -17,8 +17,9 @@ import (
 )
 
 type fakeUSB struct {
-	writes [][]byte
-	reply  []byte
+	writes   [][]byte
+	reply    []byte
+	answered int // writes whose version query was answered
 }
 
 func (f *fakeUSB) Write(ep byte, buf []byte, _ int) (int, error) {
@@ -26,7 +27,26 @@ func (f *fakeUSB) Write(ep byte, buf []byte, _ int) (int, error) {
 	return len(buf), nil
 }
 
+// fakeVersionReply answers a version query (0x0A) like the 8.8" does: the
+// fakes below consume a scripted reply for it as before, but always answer it.
+var fakeVersionReply = append([]byte{byte(usOpInfo), 0xC8, 0, 0, 0, 0, 0, 0}, "lianli88_0001_0023\x00"...)
+
+// lastOp is the command of the last block written, if it was a sealed 8.8" block.
+func lastOp(ws [][]byte) byte {
+	if len(ws) == 0 || len(ws[len(ws)-1]) < 512 {
+		return 0
+	}
+	blk, _ := des.NewCipher(usKey)
+	out := make([]byte, 8)
+	cipher.NewCBCDecrypter(blk, usKey).CryptBlocks(out, ws[len(ws)-1][:8])
+	return out[0]
+}
+
 func (f *fakeUSB) Read(ep byte, buf []byte, _ int) (int, error) {
+	if lastOp(f.writes) == byte(usOpInfo) && f.answered != len(f.writes) {
+		f.answered, f.reply = len(f.writes), nil
+		return copy(buf, fakeVersionReply), nil
+	}
 	if f.reply == nil {
 		return 0, winusb.ErrTimeout
 	}
@@ -207,8 +227,12 @@ func TestUS88Brightness(t *testing.T) {
 	if p.SetRotation(45) == nil || p.SetRotation(180) != nil || p.rotation != 180 {
 		t.Fatal("rotation handling")
 	}
-	if len(f.writes) != 1 {
-		t.Fatal("rotation must stay in software")
+	// 180 is the device's own turn (0x0D 2); no other rotation command.
+	if len(f.writes) != 2 {
+		t.Fatalf("%d writes, want brightness and one turn", len(f.writes))
+	}
+	if pl := usOpen(t, f.writes[1]); pl[0] != byte(usOpTurn) || pl[8] != 2 {
+		t.Fatalf("turn cmd = % x", pl[:9])
 	}
 }
 
@@ -269,10 +293,19 @@ func TestUS88UprightRotation(t *testing.T) {
 			}
 		}
 	}
+	// 90 is 270 turned by 180 degrees: what the 8.8" does itself with 0x0D 2.
+	a, z := us88Upright(canvas, 90), us88Upright(canvas, 270)
+	for y := 0; y < us88Height; y++ {
+		for x := 0; x < us88Width; x++ {
+			if a.RGBAAt(x, y) != z.RGBAAt(us88Width-1-x, us88Height-1-y) {
+				t.Fatalf("90 is not 270 turned by 180 at (%d,%d)", x, y)
+			}
+		}
+	}
 	// A portrait frame sent through ShowJPEG at 90 is accepted.
 	f := &fakeUSB{reply: make([]byte, 512)}
 	p := &universal88{dev: f}
-	p.SetRotation(90)
+	p.rotation = 90
 	var b bytes.Buffer
 	jpeg.Encode(&b, canvas, nil)
 	if err := p.ShowJPEG(b.Bytes()); err != nil {
@@ -451,11 +484,12 @@ func BenchmarkUS88PipelineRaw(b *testing.B) {
 
 // scriptUSB lets a test decide the outcome of every write and read.
 type scriptUSB struct {
-	writes  [][]byte
-	failW   int      // fail this many writes first (non-timeout error)
-	acks    [][]byte // replies for successive reads; nil entry = timeout
-	closed  bool
-	readIdx int
+	writes   [][]byte
+	failW    int      // fail this many writes first (non-timeout error)
+	acks     [][]byte // replies for successive reads; nil entry = timeout
+	closed   bool
+	readIdx  int
+	answered int // writes whose version query was answered
 }
 
 func (s *scriptUSB) Write(ep byte, buf []byte, _ int) (int, error) {
@@ -468,6 +502,10 @@ func (s *scriptUSB) Write(ep byte, buf []byte, _ int) (int, error) {
 }
 
 func (s *scriptUSB) Read(ep byte, buf []byte, _ int) (int, error) {
+	if lastOp(s.writes) == byte(usOpInfo) && s.answered != len(s.writes) {
+		s.answered = len(s.writes)
+		return copy(buf, fakeVersionReply), nil // the scripted entry goes to the drain read
+	}
 	if s.readIdx >= len(s.acks) || s.acks[s.readIdx] == nil {
 		s.readIdx++
 		return 0, winusb.ErrTimeout
@@ -577,8 +615,10 @@ func TestUS88CloseLeavesExitImage(t *testing.T) {
 	}
 }
 
-// A device that already holds the brightness and turn gets neither again, on
-// start-up or later; a changed value is written once.
+// A device that already holds the brightness does not get it again, on
+// start-up or later; a changed value is written once. The turn is written
+// once per connect even when the cache says the device holds it, since other
+// software may have changed it.
 func TestUS88SettingsWrittenOnlyWhenChanged(t *testing.T) {
 	f := &fakeUSB{}
 	p := &universal88{dev: f, brightness: 100}
@@ -586,10 +626,17 @@ func TestUS88SettingsWrittenOnlyWhenChanged(t *testing.T) {
 	if err := p.wake(); err != nil {
 		t.Fatal(err)
 	}
+	turns := 0
 	for _, w := range f.writes {
-		if op := usOpen(t, w)[0]; op == byte(usOpBacklight) || op == byte(usOpTurn) {
-			t.Fatalf("stored setting rewritten on start-up (op %#x)", op)
+		switch usOpen(t, w)[0] {
+		case byte(usOpBacklight):
+			t.Fatal("stored brightness rewritten on start-up")
+		case byte(usOpTurn):
+			turns++
 		}
+	}
+	if turns != 1 {
+		t.Fatalf("turn written %d times on connect, want 1", turns)
 	}
 	n := len(f.writes)
 	for i := 0; i < 10; i++ {

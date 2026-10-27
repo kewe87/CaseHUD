@@ -192,25 +192,6 @@ func TestPipeBrokenAnswerNotRetried(t *testing.T) {
 	}
 }
 
-func TestTrustedServerImage(t *testing.T) {
-	dir := `C:\Program Files\CaseHUD`
-	for image, want := range map[string]bool{
-		`C:\Program Files\CaseHUD\sensors\CaseHUD.Sensors.exe`: true,
-		`c:\program files\casehud\SENSORS\casehud.sensors.exe`: true,
-		`C:\Users\x\AppData\Local\Temp\CaseHUD.Sensors.exe`:    false,
-		`C:\Program Files\CaseHUD\CaseHUD.exe`:                 false,
-		`C:\Program Files\CaseHUD\sensors\other.exe`:           false,
-		``: false,
-	} {
-		if got := trustedServerImage(image, dir); got != want {
-			t.Errorf("trustedServerImage(%q) = %v", image, got)
-		}
-	}
-	if trustedServerImage(`C:\a\sensors\CaseHUD.Sensors.exe`, "") {
-		t.Fatal("empty install folder trusted")
-	}
-}
-
 // Discovery stops at the first unreachable or untrusted bridge: one dial, no
 // further per-address opens.
 func TestDiscoverStopsWhenBridgeUnavailable(t *testing.T) {

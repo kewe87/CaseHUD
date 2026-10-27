@@ -27,6 +27,7 @@ import (
 	"image/draw"
 	"image/jpeg"
 	"image/png"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -149,6 +150,9 @@ func discoverUSB(models ...*usModel) ([]Panel, error) {
 		}
 		if w := Cache().Get(p.SettingsKey()); w.Rotation != nil && *w.Rotation >= 0 && *w.Rotation < 255 {
 			p.sentTurn = *w.Rotation + 1
+			if m.fixedFlip && *w.Rotation == 2 {
+				p.rotation = 180 // until the engine says otherwise; saves a 0x0D 0 then 2 at start
+			}
 		}
 		if w := Cache().Get(p.SettingsKey()); w.OfflineClock != nil {
 			p.offlineClock = *w.OfflineClock
@@ -388,10 +392,10 @@ func (p *universal88) wakeBar() error {
 			if !m.sendTurn && !p.devFlip() {
 				continue // a stored setting: only the 8.8" gets it rewritten
 			}
+			// Sent on every connect even when the cache says the device holds
+			// it: other software may have changed it, and a stale cache would
+			// never correct the device. Once per connect is no flash-wear risk.
 			args = []byte{p.barTurn()}
-			if p.sentTurn == int(args[0])+1 {
-				continue // the device already holds this turn
-			}
 		case usOpClock:
 			if !m.clock {
 				continue
@@ -405,6 +409,10 @@ func (p *universal88) wakeBar() error {
 			if p.offlineClock {
 				continue // the user wants the device's own clock left alone
 			}
+		}
+		if st.op == usOpInfo && p.mdl().framing != usFrameSL {
+			p.readVersion()
+			continue
 		}
 		r, err := p.issue(st.op, args)
 		if err != nil && i == 0 {
@@ -437,6 +445,35 @@ func (p *universal88) noteFirmware(r []byte) {
 	}
 	p.fw = string(r[8:end])
 	p.fwText.set(p.fw)
+}
+
+// readVersion asks an 8.8"-framed bar for its version. A reply counts only if
+// it is the version reply (0x0A, status 0xC8): a late answer to an earlier
+// command may still be waiting. The device can also miss the first query
+// right after connecting, so a few attempts are made. The query stores
+// nothing on the device.
+func (p *universal88) readVersion() {
+	var last []byte
+	for try := 0; try < 4; try++ {
+		if try > 0 {
+			time.Sleep(500 * time.Millisecond)
+		}
+		if err := p.write(p.seal(usOpInfo, nil)); err != nil {
+			return
+		}
+		for i := 0; i < 3; i++ { // skip stale replies to earlier commands
+			r, err := p.ack()
+			if err != nil {
+				break
+			}
+			last = r
+			if len(r) > 8 && r[0] == byte(usOpInfo) && r[1] == 0xC8 {
+				p.noteFirmware(r)
+				return
+			}
+		}
+	}
+	log.Printf("%s: no version reply (last: % x)", p.Name(), last[:min(len(last), 24)])
 }
 
 // Version is the firmware string the device reported at start ("" if none).
@@ -568,7 +605,11 @@ func (p *universal88) orient(rgba *image.RGBA) *image.RGBA {
 		return rgba // fan screens turn the picture themselves
 	}
 	if rgba.Rect.Dx() == p.mdl().short {
-		return us88Upright(rgba, p.rotation)
+		rot := p.rotation
+		if rot == 90 && p.devFlip() {
+			rot = 270 // the device turns it by 180 degrees
+		}
+		return us88Upright(rgba, rot)
 	}
 	return us88Rotate(rgba, p.rotation == 180 && !p.devFlip())
 }

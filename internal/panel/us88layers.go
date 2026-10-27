@@ -85,12 +85,13 @@ func (p *universal88) OfflineClock() bool {
 
 // --- device-side rotation ------------------------------------------------
 
-// Device-side rotation: with SetDeviceFlip(true) the bar turns the picture by
-// 180 degrees itself (0x0D 2) instead of the host mirroring the frame. It is an
-// experimental per-device switch, off by default, because it is not known
-// whether the device applies this to host pictures or only to its own drawings
-// (clock); see docs/DRIVERS.md. With it on, rotation 180 writes 0x0D 2, every
-// other rotation 0x0D 0 (the quarter turns stay in software).
+// Device-side rotation: the bar turns the picture by 180 degrees itself (0x0D 2)
+// instead of the host mirroring the frame. The device only knows 0 and 180
+// degrees. The 8.8" always does this (fixedFlip); on other bars it is an
+// experimental per-device switch (SetDeviceFlip), off by default, because it
+// has not been checked on their hardware. With it on, rotation 180 and 90
+// write 0x0D 2, 0 and 270 write 0x0D 0; the host only lays the picture on its
+// side (and 90 is drawn like 270, the device turns it).
 
 // SetDeviceFlip implements DeviceFlipper. It changes what the next frames look
 // like (the host stops or starts mirroring) and sends the turn right away when
@@ -112,11 +113,14 @@ func (p *universal88) SetDeviceFlip(on bool) error {
 	return nil
 }
 
-func (p *universal88) devFlip() bool { return p.flipOn && p.mdl().turn180 }
+func (p *universal88) devFlip() bool {
+	m := p.mdl()
+	return m.fixedFlip || p.flipOn && m.turn180
+}
 
 // barTurn is the device rotation value of a bar: 2 for a device-side flip, else 0.
 func (p *universal88) barTurn() byte {
-	if p.devFlip() && p.rotation == 180 {
+	if p.devFlip() && (p.rotation == 180 || p.rotation == 90) {
 		return 2
 	}
 	return 0
@@ -209,6 +213,9 @@ func (p *universal88) LayerCaps() LayerCaps {
 func (p *universal88) VideoTurn(rotation int) int {
 	switch rotation {
 	case 90:
+		if p.devFlip() {
+			return 0 // drawn like 270, the device turns it
+		}
 		return 2
 	case 180:
 		if p.devFlip() {

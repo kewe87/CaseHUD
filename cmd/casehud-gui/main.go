@@ -62,11 +62,6 @@ func main() {
 	if err := os.MkdirAll(store.Dir, 0o700); err != nil {
 		fatal(err)
 	}
-	logFile, err := os.OpenFile(filepath.Join(store.Dir, "casehud.log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-	if err == nil {
-		log.SetOutput(logFile)
-	}
-
 	if _, err := os.Stat(filepath.Join(store.Dir, "config.json")); err == nil {
 		web.RestrictFile(filepath.Join(store.Dir, "config.json"))
 	}
@@ -75,7 +70,8 @@ func main() {
 	instFile := filepath.Join(store.Dir, "instance.url")
 	if b, err := os.ReadFile(instFile); err == nil && !*demo {
 		running := strings.TrimSpace(string(b))
-		if *background {
+		// A start meant for the tray (autostart) never brings the window up.
+		if *background || *minimized {
 			if instanceRunning(running) {
 				return
 			}
@@ -83,6 +79,14 @@ func main() {
 			return
 		}
 	}
+
+	// Opened only now: a second start that hands over to the running
+	// instance must not empty that instance's log.
+	logFile, err := os.OpenFile(filepath.Join(store.Dir, "casehud.log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err == nil {
+		log.SetOutput(logFile)
+	}
+	log.Printf("CaseHUD %s, started with %q", version, os.Args[1:])
 
 	engine := &app.Engine{Store: store, Demo: *demo}
 	if err := engine.Start(context.Background()); err != nil {

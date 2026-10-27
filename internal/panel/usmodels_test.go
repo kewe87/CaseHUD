@@ -96,6 +96,9 @@ func decryptBlock(b []byte) []byte {
 func reply(op byte, b8 byte) []byte {
 	r := make([]byte, 512)
 	r[0], r[8] = op, b8
+	if op == byte(usOpInfo) {
+		r[1] = 0xC8 // the version reply carries this status
+	}
 	return r
 }
 

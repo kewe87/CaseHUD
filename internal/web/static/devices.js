@@ -41,6 +41,8 @@ function renderDevices() {
   const d = state && state.devices;
   if (!d || !$("#set-exp")) return;
   $("#set-exp").checked = !!d.experimental;
+  // Experts only, but stays visible while switched on so it can be switched off.
+  $("#exp-card").classList.toggle("expert", !d.experimental);
   if (d.reportUrl) $("#exp-report").href = d.reportUrl;
   const list = $("#exp-list");
   list.replaceChildren(...d.drivers.map((x) => el("label", { class: "row" },

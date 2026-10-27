@@ -144,8 +144,8 @@ Tabelle ergänzt.
 |---|---|---|
 | Lian Li UNI FAN TL LCD 120 (TLC12) | Display, Anordnung | Entwickler |
 | Lian Li UNI FAN TL LCD Reverse 120 (TLFC12) | Display, Anordnung | Entwickler |
-| Lian Li UNI FAN TL Reverse 120 (TLF12) | Anordnung, Beleuchtung (in Arbeit) | Entwickler |
-| Lian Li UNI FAN TL Controller (2. Generation) | Topologie, Beleuchtung (in Arbeit) | Entwickler |
+| Lian Li UNI FAN TL Reverse 120 (TLF12) | Anordnung, Beleuchtung | Entwickler |
+| Lian Li UNI FAN TL Controller (2. Generation) | Topologie, Beleuchtung | Entwickler |
 
 **Displays**
 
@@ -158,13 +158,13 @@ Tabelle ergänzt.
 
 | Hardware | Funktionen | Getestet von |
 |---|---|---|
-| ASUS ROG STRIX X870E-E GAMING WIFI | Sensoren inkl. T_Sensor (Wassertemperatur), Beleuchtung (in Arbeit) | Entwickler |
+| ASUS ROG STRIX X870E-E GAMING WIFI | Sensoren inkl. T_Sensor (Wassertemperatur), Beleuchtung (Onboard, ARGB) | Entwickler |
 
 **Arbeitsspeicher**
 
 | Hardware | Funktionen | Getestet von |
 |---|---|---|
-| G.Skill Trident Z5 RGB DDR5-8000 CL40 (F5-8000J4048G24G) | Beleuchtung über den Sensor-Dienst (in Arbeit) | Entwickler |
+| G.Skill Trident Z5 RGB DDR5-8000 CL40 (F5-8000J4048G24G) | Beleuchtung über die SMBus-Brücke des Sensor-Dienstes | Entwickler |
 
 **Wasserkühlung**
 
