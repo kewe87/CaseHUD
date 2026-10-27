@@ -1,0 +1,15 @@
+Disclaimer
+
+CaseHUD is free open-source software under the GPL-3.0 and is provided without any warranty (see GPL-3.0, sections 15 and 16).
+
+Devices are driven through unofficial, independently developed protocols. Use is at your own risk.
+
+To the extent permitted by law, no liability is accepted for hardware damage or data loss. Liability for intent, gross negligence and injury to life, body or health remains unaffected.
+
+CaseHUD is not an official product of Lian Li or any other manufacturer and is not affiliated with them. Trademarks and product names belong to their respective owners.
+
+CaseHUD installs a sensor service that runs with system rights and the PawnIO driver for reading sensors.
+
+Lighting and experimental devices are optional and off by default.
+
+CaseHUD writes its logo once as the start and idle image of supported fan displays and assigns a serial number to displays that have none. Both are permanent writes to the device; both can be switched off under Settings → Devices.

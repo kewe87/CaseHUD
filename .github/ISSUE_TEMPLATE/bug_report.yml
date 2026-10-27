@@ -1,0 +1,59 @@
+name: Fehler melden / Bug report
+description: Etwas funktioniert nicht wie erwartet. / Something does not work as expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Sicherheitslücken bitte vertraulich melden, nicht hier.** / **Report security issues privately, not here.**
+        [Private Meldung / Private report](https://github.com/kewe87/CaseHUD/security/advisories/new)
+
+        Issues auf Deutsch oder Englisch sind willkommen. / Issues in German or English are welcome.
+  - type: input
+    id: version
+    attributes:
+      label: CaseHUD-Version / CaseHUD version
+      description: Zu sehen in der App oder im Dateinamen des Setups. / Shown in the app or in the setup file name.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows-Version / Windows version
+      placeholder: "Windows 11 24H2"
+  - type: dropdown
+    id: device
+    attributes:
+      label: Gerät(e) / Device(s)
+      multiple: true
+      options:
+        - UNI FAN TL LCD
+        - HydroShift LCD / Galahad II LCD / Galahad II Vision
+        - Universal Screen 8.8"
+        - AWTRIX (Ulanzi TC001 / TC002)
+        - Anderes / Other
+        - Kein Gerät (Demo-Modus) / No device (demo mode)
+  - type: textarea
+    id: what
+    attributes:
+      label: Was ist passiert, was hast du erwartet? / What happened, what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Schritte zum Nachstellen / Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+  - type: textarea
+    id: log
+    attributes:
+      label: Log-Auszug / Log excerpt
+      description: |
+        App: `%APPDATA%\casehud\casehud.log`
+        Sensor-Dienst / sensor service: `C:\Program Files\CaseHUD\sensors\sensors.log`
+        Bitte vor dem Einfügen auf persönliche Daten prüfen. / Please check for personal data before pasting.
+      render: text

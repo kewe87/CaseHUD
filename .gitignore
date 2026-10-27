@@ -1,0 +1,12 @@
+/dist/
+/build/
+*.exe
+preview.png
+/third_party/
+/stage/
+/installer/casehud.ico
+*.syso
+/sensors/CaseHUD.Sensors/obj/
+/sensors/CaseHUD.Sensors/bin/
+/sensors/CaseHUD.Sensors.Tests/obj/
+/sensors/CaseHUD.Sensors.Tests/bin/

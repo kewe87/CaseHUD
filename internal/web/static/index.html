@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>CaseHUD</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="conflicts.css">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+</head>
+<body>
+<header>
+  <div class="brand"><img src="logo.svg" alt="" class="logo"><span>CaseHUD</span></div>
+  <nav id="tabs">
+    <button data-tab="displays" class="active"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span data-i18n="tab.displays"></span></button>
+    <button data-tab="scenes"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg><span data-i18n="tab.scenes"></span></button>
+    <button data-tab="light"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg><span data-i18n="tab.light"></span></button>
+    <button data-tab="designs"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20z"/><path d="M14 7l3 3"/></svg><span data-i18n="tab.designs"></span></button>
+    <button data-tab="media"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg><span data-i18n="tab.media"></span></button>
+    <button data-tab="settings"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span data-i18n="tab.settings"></span></button>
+  </nav>
+  <div class="status">
+    <button id="status-pill" class="pill" data-i18n-title="status.title"><span class="dot"></span><span id="status-text"></span></button>
+    <button id="btn-oss" class="icon-btn heart" data-i18n-title="oss.title" aria-label="Open Source">
+      <svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.8 4.5c2.1 0 3.6 1.2 5.2 3 1.6-1.8 3.1-3 5.2-3 3.8 0 5.9 3.9 4.4 7.3C19.5 16.4 12 21 12 21z" fill="currentColor"/></svg>
+    </button>
+    <button id="btn-rescan" class="icon-btn" data-i18n-title="btn.rescan.title" aria-label="Rescan">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+    </button>
+    <div class="lang" role="group" aria-label="Sprache / Language">
+      <button data-lang="de">DE</button><button data-lang="en">EN</button>
+    </div>
+  </div>
+</header>
+
+<div id="update-banner" class="update-banner" hidden>
+  <span class="dot"></span><span id="update-text"></span>
+  <a id="update-link" class="button primary" target="_blank" rel="noopener" data-i18n="upd.open"></a>
+  <button id="update-close" class="icon-btn" data-i18n-aria="btn.close" aria-label="Close">✕</button>
+</div>
+<main>
+  <!-- Displays -->
+  <section id="tab-displays" class="tab active">
+    <div class="page-head">
+      <div><h1 data-i18n="tab.displays"></h1><p class="sub" id="panel-count"></p></div>
+      <div class="actions-row">
+        <button id="btn-arrange" class="ghost" data-i18n="btn.arrange"></button>
+        <button id="btn-identify-all" class="ghost" data-i18n="btn.identifyAll"></button>
+      </div>
+    </div>
+    <div id="arrange-view" class="arrange" hidden>
+      <div class="page-head">
+        <div><h1 data-i18n="arr.title"></h1><p class="sub" data-i18n="arr.sub"></p></div>
+        <div class="actions-row">
+          <button id="btn-arrange-reset" class="ghost" data-i18n="arr.reset"></button>
+          <button id="btn-arrange-back" class="ghost" data-i18n="arr.back"></button>
+        </div>
+      </div>
+      <div id="arr-warnings"></div>
+      <div class="card arr-board">
+        <div class="arr-ctrl"><b data-i18n="arr.controller"></b><small id="arr-count"></small></div>
+        <div id="arr-ports" class="arr-ports"></div>
+        <div id="arr-scan" class="arr-scan"></div>
+        <small class="arr-note" data-i18n="arr.blink.note"></small>
+      </div>
+      <div class="card arr-hints">
+        <h3 data-i18n="arr.hints"></h3>
+        <ul>
+          <li data-i18n="arr.hint.usb"></li>
+          <li data-i18n="arr.hint.port1"></li>
+          <li data-i18n="arr.hint.limits"></li>
+          <li data-i18n="arr.hint.local"></li>
+        </ul>
+      </div>
+    </div>
+    <button id="state-chip" class="state-chip" type="button" hidden></button>
+    <button id="light-chip" class="state-chip warn" type="button" hidden></button>
+    <div id="scan-error" class="banner error" hidden></div>
+    <div id="monitor-mode" class="banner" hidden>
+      <b data-i18n="mm.title"></b>
+      <span data-i18n="mm.sub"></span>
+      <span id="mm-actions"></span>
+    </div>
+    <div id="groups"></div>
+
+    <section id="aw-card" class="aw-group">
+      <h3 class="section"><span data-i18n="group.awtrix"></span>
+        <span class="actions"><button id="btn-aw-search" class="ghost" data-i18n="aw.searchbtn"></button></span></h3>
+      <p class="sub aw-desc" data-i18n="aw.desc"></p>
+      <div id="aw-found" hidden></div>
+      <div id="aw-list" class="grid aw-devices"></div>
+      <div class="card aw-addcard">
+        <div class="row-text"><b data-i18n="aw.add"></b><small data-i18n="aw.add.sub"></small></div>
+        <div class="aw-add"><input id="aw-host" placeholder="awtrix_1a2b3c.local"><button id="btn-aw-add" class="ghost" data-i18n="aw.addbtn"></button></div>
+      </div>
+    </section>
+
+    <div id="no-panels" class="empty" hidden>
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/><path d="M12 3.5c2.5 2 2.8 5 0 6M20.5 12c-2 2.5-5 2.8-6 0M12 20.5c-2.5-2-2.8-5 0-6M3.5 12c2-2.5 5-2.8 6 0"/></svg>
+      </div>
+      <h2 data-i18n="nopanels.title"></h2>
+      <p data-i18n-html="nopanels.text"></p>
+    </div>
+  </section>
+
+  <!-- Scenes, automation, rotation -->
+  <section id="tab-scenes" class="tab">
+    <div class="page-head">
+      <div><h1 data-i18n="tab.scenes"></h1><p class="sub" data-i18n="scenes.page.sub"></p></div>
+    </div>
+    <div id="scenes-empty" class="empty" hidden><p data-i18n="scenes.nopanels"></p></div>
+    <div id="scenes-body">
+    <section id="auto-part" class="part">
+      <div class="part-head"><h2 data-i18n="part.scenes"></h2><p class="sub" data-i18n="part.scenes.sub"></p></div>
+      <div class="card stack" id="scene-card">
+        <div id="scene-list" class="scene-list"></div>
+        <div class="inline-form">
+          <input id="rot-scene-name" data-i18n-placeholder="rot.scenename" maxlength="40">
+          <button id="btn-save-scene" class="ghost" data-i18n="rot.savescene"></button>
+          <button id="btn-gaming-scene" class="ghost" data-i18n="scenes.gaming" data-i18n-title="scenes.gaming.sub"></button>
+        </div>
+        <small class="muted" data-i18n="scenes.gaming.sub"></small>
+      </div>
+    </section>
+
+    <section id="part-auto" class="part">
+      <div class="part-head"><h2 data-i18n="part.auto"></h2><p class="sub" data-i18n="part.auto.sub"></p></div>
+      <div class="card stack" id="auto-card">
+        <div class="card-head">
+          <input type="checkbox" class="switch" id="auto-enabled" data-i18n-title="auto.enable">
+          <div><h3 class="card-title" data-i18n="auto.switch"></h3><p class="sub" id="auto-status"></p></div>
+        </div>
+        <p class="sub" data-i18n="auto.desc"></p>
+        <div id="auto-banner" class="auto-banner" hidden></div>
+        <div id="auto-body" class="auto-body">
+          <div id="auto-rules" class="rules"></div>
+          <p class="auto-detected" id="auto-detected"></p>
+          <div class="inline-form">
+            <button id="auto-add" class="ghost" data-i18n="auto.add"></button>
+            <button id="auto-add-detected" class="ghost" hidden></button>
+            <button id="auto-ignore-detected" class="ghost" hidden></button>
+          </div>
+          <div class="auto-else"><b data-i18n="auto.else"></b><span id="auto-else-text"></span></div>
+          <div class="field" id="auto-ignore-box"><span data-i18n="auto.ignore.title"></span><div class="chips" id="auto-ignore"></div><small class="muted" data-i18n="auto.ignore.sub"></small></div>
+          <details class="more">
+            <summary data-i18n="auto.timing"></summary>
+            <div class="rot-grid">
+              <div class="field"><span data-i18n="auto.enterS"></span>
+                <select id="auto-enter"><option value="1">1 s</option><option value="3">3 s</option><option value="5">5 s</option><option value="10">10 s</option></select></div>
+              <div class="field"><span data-i18n="auto.leaveS"></span>
+                <select id="auto-leave"><option value="3">3 s</option><option value="10">10 s</option><option value="30">30 s</option><option value="60">1 min</option></select></div>
+            </div>
+            <small class="muted" data-i18n="auto.timing.sub"></small>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section id="part-rotation" class="part">
+      <div class="part-head"><h2 data-i18n="part.rotation"></h2><p class="sub" data-i18n="part.rotation.sub"></p></div>
+      <div class="card stack" id="rot-card">
+      <div class="card-head">
+        <input type="checkbox" class="switch" id="rot-enabled" data-i18n-title="rot.enable">
+        <div><h3 class="card-title" data-i18n="rot.switch"></h3><p class="sub" id="rot-status"></p></div>
+      </div>
+      <div id="rot-body" class="rot-body">
+        <div class="rot-grid">
+          <div class="field"><span data-i18n="rot.mode"></span><div class="seg small" id="rot-mode"></div><small class="muted" id="rot-mode-hint"></small></div>
+          <div class="field"><span data-i18n="rot.interval"></span>
+            <select id="rot-interval"><option value="5">5 s</option><option value="10">10 s</option><option value="15">15 s</option><option value="30">30 s</option><option value="60">1 min</option><option value="300">5 min</option></select></div>
+          <div class="field"><span data-i18n="rot.effect"></span><select id="rot-effect"></select></div>
+        </div>
+        <label class="check-row"><input type="checkbox" class="switch" id="rot-cascade"><span><b data-i18n="rot.cascade"></b><small data-i18n="rot.cascade.sub"></small></span></label>
+        <div id="rot-scenes-box" class="field"><span data-i18n="rot.scenes"></span>
+          <div class="chips" id="rot-scenes"></div>
+          <small class="muted" data-i18n="rot.scenes.sub"></small></div>
+        <div id="rot-conveyor-box" class="field"><span data-i18n="rot.conveyor"></span>
+          <div class="chips" id="rot-conveyor"></div>
+          <select id="rot-add-design" class="w-m"></select>
+          <small class="muted" data-i18n="rot.conveyor.sub"></small></div>
+        <div class="field" id="rot-order-box"><span data-i18n="rot.order"></span><div id="rot-order" class="order-list"></div></div>
+        <div><button id="rot-next" class="ghost" data-i18n="rot.next"></button></div>
+      </div>
+    </div>
+    </section>
+    </div>
+  </section>
+
+  <!-- Lighting -->
+  <section id="tab-light" class="tab">
+    <div class="page-head">
+      <div><h1 data-i18n="tab.light"></h1><p class="sub" data-i18n="light.sub"></p></div>
+    </div>
+    <section class="part">
+      <div class="card stack">
+        <div class="card-head">
+          <input type="checkbox" class="switch" id="light-enabled" data-i18n-title="light.master" data-i18n-aria="light.master">
+          <div><h3 class="card-title" data-i18n="light.master"></h3><p class="sub" id="light-status"></p></div>
+        </div>
+        <p class="sub warn" id="light-warn" hidden></p>
+        <p class="sub warn" id="light-reset" hidden></p>
+        <div id="light-look" class="light-look">
+          <div class="lp-grid">
+            <div class="lp"><label class="lp-head" for="light-brightness"><span class="lp-name" data-i18n="light.brightness"></span><span class="lp-val" id="light-brightness-val"></span></label>
+              <input type="range" id="light-brightness" min="0" max="100" step="1" value="100"></div>
+            <div class="lp"><label class="lp-head" for="light-effect"><span class="lp-name" data-i18n="light.effect"></span></label>
+              <select id="light-effect"></select></div>
+            <div class="lp"><label class="lp-head" for="light-exit"><span class="lp-name" data-i18n="light.exit"></span></label>
+              <select id="light-exit"><option value="off" data-i18n="light.exit.off"></option><option value="keep" data-i18n="light.exit.keep"></option><option value="device" data-i18n="light.exit.device"></option></select>
+              <small class="sub" data-i18n="light.exit.hint"></small></div>
+          </div>
+          <h4 class="light-sub" id="light-params-head" data-i18n="light.effect.params"></h4>
+          <div class="lp-grid" id="light-params"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="part" id="light-presets-part">
+      <details class="card stack presets" id="light-presets">
+        <summary><span class="presets-title" data-i18n="light.presets"></span><small id="light-presets-count"></small></summary>
+        <p class="sub" data-i18n="light.presets.sub"></p>
+        <div id="light-presets-list" class="presets-list"></div>
+        <div class="presets-foot">
+          <button id="light-lib-refresh" class="ghost" data-i18n="light.lib.refresh"></button>
+          <small id="light-lib-status" class="sub" role="status"></small>
+        </div>
+        <p class="sub warn" id="light-lib-error" hidden></p>
+      </details>
+    </section>
+
+    <section class="part">
+      <div class="part-head part-head-row">
+        <div><h2 data-i18n="light.devices"></h2><p class="sub" data-i18n="light.devices.sub"></p></div>
+        <button id="light-rescan" class="ghost" data-i18n="light.rescan"></button>
+      </div>
+      <div id="light-devices" class="light-devices"></div>
+    </section>
+
+    <section class="part" id="light-layout" hidden>
+      <div class="part-head"><h2 data-i18n="light.layout"></h2><p class="sub" data-i18n="light.layout.sub"></p></div>
+      <div class="card stack">
+        <div id="light-canvas-box" class="light-canvas-box"></div>
+        <div id="light-unplaced" class="unplaced" hidden></div>
+        <div class="legend" id="light-legend"></div>
+      </div>
+    </section>
+
+    <section class="part" id="light-tl-part" hidden>
+      <div class="card stack">
+        <div class="card-head">
+          <input type="checkbox" class="switch" id="light-tl" data-i18n-aria="light.tl">
+          <div><h3 class="card-title" data-i18n="light.tl"></h3></div>
+        </div>
+        <p class="sub" data-i18n="light.tl.sub"></p>
+      </div>
+    </section>
+  </section>
+
+  <!-- Designs -->
+  <section id="tab-designs" class="tab">
+    <div class="page-head">
+      <div><h1 data-i18n="tab.designs"></h1><p class="sub" data-i18n="designs.sub"></p></div>
+      <div class="head-actions">
+        <div class="seg" id="designs-view"></div>
+        <span class="head-group" id="designs-actions">
+          <span class="seg-label" data-i18n="designs.preview"></span><div class="seg small" id="gallery-theme"></div>
+          <button id="btn-community" class="ghost" data-i18n="btn.community"></button>
+          <label class="button ghost"><span data-i18n="btn.import"></span><input id="design-import" type="file" accept=".json,application/json" hidden></label>
+          <button id="btn-new-design" class="primary" data-i18n="btn.newdesign"></button>
+        </span>
+        <button id="btn-new-layout" class="primary" data-i18n="btn.newlayout" hidden></button>
+      </div>
+    </div>
+    <div id="designs-pane">
+      <div id="designs-sets"></div>
+      <h3 class="section" id="custom-head" data-i18n="designs.custom"></h3>
+      <div id="designs-custom" class="grid designs"></div>
+    </div>
+    <div id="layouts-pane" hidden>
+      <h2 class="pane-title" data-i18n="layouts.title"></h2>
+      <p class="sub layouts-intro" data-i18n="layouts.sub"></p>
+      <div id="layouts-list"></div>
+    </div>
+  </section>
+
+  <!-- Media -->
+  <section id="tab-media" class="tab">
+    <div class="page-head">
+      <div><h1 data-i18n="tab.media"></h1><p class="sub" data-i18n="media.sub"></p></div>
+      <label class="button primary"><span data-i18n="btn.add"></span><input id="media-file" type="file" accept="image/png,image/jpeg,image/gif,video/*" multiple hidden></label>
+    </div>
+    <div id="ffmpeg-hint" class="banner" hidden data-i18n-html="ffmpeg.hint"></div>
+    <label id="dropzone" class="dropzone">
+      <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>
+      <b data-i18n="media.drop"></b>
+      <span data-i18n="media.dropSub"></span>
+      <input type="file" accept="image/png,image/jpeg,image/gif,video/*" multiple hidden id="media-file-2">
+    </label>
+    <div id="media" class="grid media"></div>
+    <p class="sub" id="media-hint" data-i18n="media.hint"></p>
+  </section>
+
+  <!-- Settings -->
+  <section id="tab-settings" class="tab">
+    <div class="page-head">
+      <div><h1 data-i18n="tab.settings"></h1><p class="sub" data-i18n="set.page.sub"></p></div>
+    </div>
+    <div class="settings">
+      <nav class="set-nav" id="set-nav" data-i18n-aria="set.nav">
+        <button type="button" data-target="set-general" class="active" data-i18n="set.g.general"></button>
+        <button type="button" data-target="set-sources" data-i18n="set.g.sources"></button>
+        <button type="button" data-target="set-devices" data-i18n="set.g.devices"></button>
+        <button type="button" data-target="set-display" class="expert" data-i18n="set.g.display"></button>
+        <button type="button" data-target="set-api" class="expert" data-i18n="set.g.api"></button>
+        <button type="button" data-target="set-info" data-i18n="set.g.info"></button>
+      </nav>
+      <div class="set-body">
+
+        <section class="set-group" id="set-general">
+          <h2 class="group-title" data-i18n="set.g.general"></h2>
+          <div class="card rows">
+            <label class="row"><div class="row-text"><b data-i18n="set.expert"></b><small data-i18n="set.expert.sub"></small></div><input type="checkbox" class="switch" id="set-expert"></label>
+            <label class="row" id="row-autostart"><div class="row-text"><b data-i18n="set.autostart"></b><small data-i18n="set.autostart.sub"></small></div><input type="checkbox" class="switch" id="set-autostart"></label>
+            <div class="row"><div class="row-text"><b data-i18n="set.temp"></b><small data-i18n="set.temp.sub"></small></div>
+              <select id="set-temp"><option value="c">°C (Celsius)</option><option value="f">°F (Fahrenheit)</option></select></div>
+            <div class="row"><div class="row-text"><b data-i18n="set.clock"></b><small data-i18n="set.clock.sub"></small></div>
+              <select id="set-clock"><option value="24">24 h · 23:45</option><option value="12">12 h · 11:45 PM</option></select></div>
+            <div class="row"><div class="row-text"><b data-i18n="arr.title"></b><small data-i18n="set.arrange.sub"></small></div>
+              <button id="set-open-arrange" class="ghost" data-i18n="arr.open"></button></div>
+            <label class="row"><div class="row-text"><b data-i18n="set.saver"></b><small data-i18n="set.saver.sub"></small></div><input type="checkbox" class="switch" id="set-saver"></label>
+            <label class="row"><div class="row-text"><b data-i18n="set.updates"></b><small data-i18n="set.updates.sub"></small></div><input type="checkbox" class="switch" id="set-updates"></label>
+            <label class="row"><div class="row-text"><b data-i18n="set.fwcheck"></b><small data-i18n="set.fwcheck.sub"></small></div><input type="checkbox" class="switch" id="set-fwcheck"></label>
+          </div>
+        </section>
+
+        <section class="set-group" id="set-sources">
+          <h2 class="group-title" data-i18n="set.g.sources"></h2>
+          <div class="card rows" id="lhm-card">
+            <div class="card-head">
+              <div><h3 data-i18n="lhm.title"></h3><p class="sub" id="lhm-status"></p></div>
+              <button id="btn-test" class="ghost" data-i18n="lhm.test"></button>
+            </div>
+            <ol class="steps" id="lhm-steps">
+              <li data-i18n-html="lhm.step1"></li>
+              <li data-i18n-html="lhm.step2"></li>
+              <li data-i18n-html="lhm.step3"></li>
+            </ol>
+            <div class="row expert"><div class="row-text"><b data-i18n="set.source"></b><small data-i18n="set.source.sub"></small></div>
+              <select id="set-source">
+                <option value="auto" data-i18n="src.auto"></option>
+                <option value="service" data-i18n="src.service"></option>
+                <option value="lhm" data-i18n="src.lhm"></option>
+                <option value="custom" data-i18n="src.custom"></option>
+              </select></div>
+            <div class="row expert" id="row-url"><div class="row-text"><b data-i18n="set.url"></b><small data-i18n="set.url.hint"></small></div>
+              <input id="set-url" class="wide-ctl" placeholder="http://…/data.json"></div>
+          </div>
+
+          <div class="card rows" id="pm-card">
+            <div class="card-head">
+              <div><h3 data-i18n="pm.title"></h3><p class="sub" id="pm-status"></p></div>
+              <button id="btn-pm-setup" class="ghost" data-i18n="pm.setup" hidden></button>
+            </div>
+            <p class="row-block sub" data-i18n="pm.desc"></p>
+            <label class="row expert"><div class="row-text"><b>PresentMon</b><small data-i18n="set.pm.sub"></small></div><input type="checkbox" class="switch" id="set-pm"></label>
+            <label class="row expert"><div class="row-text"><b>RivaTuner Statistics Server</b><small data-i18n="set.rtss.sub"></small></div><input type="checkbox" class="switch" id="set-rtss"></label>
+          </div>
+        </section>
+
+        <section class="set-group" id="set-devices">
+          <h2 class="group-title" data-i18n="set.g.devices"></h2>
+          <div class="card rows" id="exp-card">
+            <p class="row-block sub" data-i18n="dev.exp.desc"></p>
+            <label class="row"><div class="row-text"><b data-i18n="dev.exp"></b><small data-i18n="dev.exp.sub"></small></div><input type="checkbox" class="switch" id="set-exp"></label>
+            <div id="exp-list"></div>
+            <div class="row"><div class="row-text"><small data-i18n="dev.exp.report"></small></div>
+              <a class="ghost button" id="exp-report" href="https://github.com/kewe87/CaseHUD/issues/new?template=hardware_report.yml" target="_blank" rel="noopener" data-i18n="dev.report"></a></div>
+          </div>
+          <div class="card rows" id="tls-card">
+            <label class="row"><div class="row-text"><b data-i18n="tls.title"></b><small data-i18n="tls.sub"></small></div><input type="checkbox" class="switch" id="set-tls"></label>
+            <label class="row"><div class="row-text"><b data-i18n="tls.serial"></b><small data-i18n="tls.serial.sub"></small></div><input type="checkbox" class="switch" id="set-tls-serial"></label>
+            <div class="row"><div class="row-text"><small data-i18n="tls.again.sub"></small></div><button id="tls-again" class="ghost" data-i18n="tls.again"></button></div>
+          </div>
+        </section>
+
+        <section class="set-group expert" id="set-display">
+          <h2 class="group-title" data-i18n="set.g.display"></h2>
+          <div class="card rows">
+            <div class="row"><div class="row-text"><b data-i18n="set.interval"></b><small data-i18n="set.interval.sub"></small></div>
+              <select id="set-interval">
+                <option value="0" data-i18n="int.design"></option>
+                <option value="500">0,5 s</option>
+                <option value="1000">1 s</option>
+                <option value="2000">2 s</option>
+                <option value="5000">5 s</option>
+              </select></div>
+            <label class="row"><div class="row-text"><b data-i18n="set.anim"></b><small data-i18n="set.anim.sub"></small></div><input type="checkbox" class="switch" id="set-anim"></label>
+            <label class="row"><div class="row-text"><b data-i18n="set.devvideo"></b><small id="set-devvideo-sub" data-i18n="set.devvideo.sub"></small></div><input type="checkbox" class="switch" id="set-devvideo"></label>
+          </div>
+        </section>
+
+        <section class="set-group expert" id="set-api">
+          <h2 class="group-title" data-i18n="set.g.api"></h2>
+          <div class="card rows">
+            <label class="row"><div class="row-text"><b data-i18n="set.mcp"></b><small data-i18n="set.mcp.sub"></small></div><input type="checkbox" class="switch" id="set-mcp"></label>
+            <div class="row row-top" id="row-mcp" hidden><div class="row-text grow"><small data-i18n="set.mcp.how"></small><pre id="mcp-snippet" class="snippet"></pre></div>
+              <button id="btn-mcp-copy" class="ghost" data-i18n="btn.copy"></button></div>
+            <label class="row"><div class="row-text"><b data-i18n="set.api"></b><small data-i18n-html="set.api.sub"></small></div><input type="checkbox" class="switch" id="set-localapi"></label>
+          </div>
+        </section>
+
+        <section class="set-group" id="set-info">
+          <h2 class="group-title" data-i18n="set.g.info"></h2>
+          <div class="card rows">
+            <div class="row"><div class="row-text"><b data-i18n="set.version"></b><small id="set-version"></small></div><a class="ghost button" href="https://github.com/kewe87/casehud" target="_blank" rel="noopener">GitHub</a></div>
+            <div class="row expert"><div class="row-text"><b data-i18n="set.log"></b><small data-i18n="set.log.sub"></small></div><button id="btn-open-log" class="ghost" data-i18n="btn.open"></button></div>
+            <div class="row row-top" id="row-diag">
+              <div class="row-text grow">
+                <b data-i18n="diag.title"></b><small data-i18n="diag.sub"></small>
+                <label class="check-row diag-trace"><input type="checkbox" class="switch" id="diag-trace"><span><b data-i18n="diag.trace"></b><small data-i18n="diag.trace.sub"></small></span></label>
+                <small id="diag-status" class="diag-status" role="status" aria-live="polite"></small>
+              </div>
+              <button id="btn-diag" class="ghost" data-i18n="diag.export"></button>
+            </div>
+            <div class="row expert"><div class="row-text"><b data-i18n="set.datadir"></b><small id="set-datadir" class="path"></small></div><button id="btn-open-data" class="ghost" data-i18n="btn.open"></button></div>
+            <div class="row"><div class="row-text"><b data-i18n="set.oss"></b><small data-i18n="set.oss.sub"></small></div><button id="btn-oss-2" class="ghost" data-i18n="btn.open"></button></div>
+            <div class="row"><div class="row-text"><b data-i18n="set.license"></b><small>© 2026 kewe87 · GNU GPL v3.0</small></div></div>
+          </div>
+          <div class="card info-card privacy">
+            <h3 data-i18n="priv.title"></h3>
+            <p class="sub" data-i18n-html="priv.text"></p>
+          </div>
+          <div class="card info-card">
+            <h3 data-i18n="disc.title"></h3>
+            <div class="disc-text">
+              <p data-i18n="disc.p1"></p><p data-i18n="disc.p2"></p><p data-i18n="disc.p3"></p>
+              <p data-i18n="disc.p4"></p><p data-i18n="disc.p5"></p><p data-i18n="disc.p6"></p><p data-i18n="disc.p7"></p>
+            </div>
+            <small id="disc-status" class="disc-status"></small>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- Display drawer -->
+<div id="scrim" class="scrim" hidden></div>
+<aside id="drawer" class="drawer" hidden>
+  <div class="drawer-head">
+    <div class="drawer-preview" id="dr-preview"><img alt=""></div>
+    <div><h2 id="dr-name"></h2><p class="sub" id="dr-meta"></p></div>
+    <button id="dr-close" class="icon-btn" data-i18n-title="btn.close" aria-label="Close">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="field">
+      <span data-i18n="field.name"></span>
+      <div class="input-row">
+        <input id="dr-label" data-i18n-placeholder="ph.name">
+        <button id="dr-identify" class="ghost" data-i18n="btn.identify"></button>
+      </div>
+    </div>
+    <div class="field">
+      <span data-i18n="field.content"></span>
+      <div class="seg" id="dr-mode"></div>
+    </div>
+    <div id="dr-content"></div>
+    <div class="field" id="dr-theme-field">
+      <span data-i18n="field.theme"></span>
+      <div class="seg small" id="dr-theme"></div>
+    </div>
+    <div class="field">
+      <span><span data-i18n="field.brightness"></span> <b id="dr-bri-val"></b></span>
+      <input type="range" id="dr-bri" min="0" max="100">
+    </div>
+    <div class="field">
+      <span data-i18n="field.rotation"></span>
+      <div class="seg small" id="dr-rot"></div>
+      <p class="sub" id="dr-rot-hint" data-i18n="rot.bar" hidden></p>
+    </div>
+    <div class="field" id="dr-oclock-field" hidden>
+      <label class="check-row"><input type="checkbox" class="switch" id="dr-oclock"><span><b data-i18n="field.oclock"></b><small data-i18n="field.oclock.sub"></small></span></label>
+    </div>
+    <div class="field" id="dr-flip-field" hidden>
+      <label class="check-row"><input type="checkbox" class="switch" id="dr-flip"><span><b data-i18n="field.flip"></b><small data-i18n="field.flip.sub"></small></span></label>
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <button id="dr-apply-all" class="ghost"></button>
+  </div>
+</aside>
+
+<!-- Layout editor -->
+<div id="layout-editor" class="editor" hidden>
+  <div class="editor-bar">
+    <button id="le-close" class="ghost" data-i18n="ed.back"></button>
+    <input id="le-name" class="title-input" data-i18n-placeholder="le.name" maxlength="60">
+    <span class="spacer"></span>
+    <button id="le-save" class="primary" data-i18n="ed.save"></button>
+  </div>
+  <div class="layout-ed-body" id="le-body"></div>
+</div>
+
+<!-- Design editor -->
+<div id="editor" class="editor" hidden>
+  <div class="editor-bar">
+    <button id="ed-close" class="ghost" data-i18n="ed.back"></button>
+    <input id="ed-name" class="title-input" data-i18n-placeholder="ed.name">
+    <span class="spacer"></span>
+    <button id="ed-export" class="ghost" data-i18n="btn.export"></button>
+    <button id="ed-undo" class="icon-btn" data-i18n-title="ed.undo" aria-label="Undo">↶</button>
+    <button id="ed-save" class="primary" data-i18n="ed.save"></button>
+  </div>
+  <div class="editor-body">
+    <div class="stage-wrap">
+      <div id="stage" class="stage">
+        <img id="stage-img" alt="">
+        <div id="guide-v" class="guide v" hidden></div>
+        <div id="guide-h" class="guide h" hidden></div>
+        <div id="overlay" class="overlay"></div>
+      </div>
+      <div class="stage-tools">
+        <button data-add="gauge" class="tool"><svg viewBox="0 0 24 24"><path d="M5 18a8 8 0 1 1 14 0"/></svg><span data-i18n="w.gauge"></span></button>
+        <button data-add="value" class="tool"><svg viewBox="0 0 24 24"><path d="M5 7h3v10M11 17h8M15 7v10"/></svg><span data-i18n="w.value"></span></button>
+        <button data-add="bar" class="tool"><svg viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="4" rx="2"/><path d="M3 12h11"/></svg><span data-i18n="w.bar"></span></button>
+        <button data-add="graph" class="tool"><svg viewBox="0 0 24 24"><path d="M3 17l5-6 4 3 5-7 4 4"/></svg><span data-i18n="w.graph"></span></button>
+        <button data-add="text" class="tool"><svg viewBox="0 0 24 24"><path d="M5 6h14M12 6v13"/></svg><span data-i18n="w.text"></span></button>
+        <button data-add="clock" class="tool"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg><span data-i18n="w.clock"></span></button>
+      </div>
+      <label class="inline"><input type="checkbox" id="ed-roundmask"> <span data-i18n="ed.round"></span></label>
+    </div>
+    <div class="field" id="dr-fw-field" hidden>
+      <span><span data-i18n="field.firmware"></span>: <b id="dr-fw"></b> <span id="dr-fw-note"></span></span>
+      <p class="sub" data-i18n="field.firmware.sub"></p>
+    </div>
+    <aside class="props">
+      <section>
+        <h3 data-i18n="ed.layers"></h3>
+        <div id="layers" class="layers"></div>
+      </section>
+      <section>
+        <h3 data-i18n="ed.widget"></h3>
+        <div id="widget-empty" class="muted pad" data-i18n="ed.empty"></div>
+        <div class="form" id="widget-form"></div>
+        <div class="row-buttons" id="widget-actions" hidden>
+          <button id="w-dup" class="ghost" data-i18n="btn.duplicate"></button>
+          <button id="w-del" class="danger" data-i18n="btn.delete"></button>
+        </div>
+      </section>
+      <section>
+        <h3 data-i18n="ed.design"></h3>
+        <div class="form" id="design-form"></div>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<dialog id="oss" class="oss">
+  <div class="oss-head">
+    <div class="oss-heart">❤</div>
+    <div><h2 data-i18n="oss.title"></h2><p class="sub" data-i18n="oss.sub"></p></div>
+    <button class="icon-btn" id="oss-close" data-i18n-aria="btn.close" aria-label="Close">✕</button>
+  </div>
+  <div class="oss-list" id="oss-list"></div>
+  <p class="oss-foot" data-i18n-html="oss.foot"></p>
+</dialog>
+
+<dialog id="community" class="oss community">
+  <div class="oss-head">
+    <div class="oss-heart community-icon">✦</div>
+    <div><h2 data-i18n="comm.title"></h2><p class="sub" data-i18n-html="comm.sub"></p></div>
+    <button class="icon-btn" id="community-close" data-i18n-aria="btn.close" aria-label="Close">✕</button>
+  </div>
+  <div id="community-body" class="community-body"></div>
+</dialog>
+
+<dialog id="notice" class="oss notice">
+  <div class="oss-head">
+    <div class="oss-heart notice-icon" aria-hidden="true">!</div>
+    <div><h2 id="notice-title"></h2><p class="sub" id="notice-sub"></p></div>
+  </div>
+  <div class="notice-body" id="notice-body"></div>
+  <div class="notice-actions">
+    <button class="ghost" id="notice-no"></button>
+    <button class="primary" id="notice-ok"></button>
+  </div>
+</dialog>
+
+<div id="menu" class="menu" hidden></div>
+<datalist id="sensor-list"></datalist>
+<div id="toast" class="toast" hidden></div>
+<script src="i18n.js"></script>
+<script src="app.js"></script>
+<script src="disclaimer.js"></script>
+<script src="lighting.js"></script>
+<script src="devices.js"></script>
+<script src="tlstart.js"></script>
+<script src="conflicts.js"></script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+name: Design einreichen / Submit a design
+description: Ein eigenes Design für die Community-Galerie vorschlagen. / Propose your own design for the community gallery.
+labels: ["design"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Die Galerie in CaseHUD liest ihre Designs aus dem Repo [kewe87/casehud-library](https://github.com/kewe87/casehud-library) (CC BY 4.0). Reiche dein Design hier ein, es wird dort aufgenommen. Vorschaubilder sind nicht nötig, CaseHUD rendert sie selbst. / The gallery in CaseHUD reads its designs from [kewe87/casehud-library](https://github.com/kewe87/casehud-library) (CC BY 4.0). Submit your design here and it will be added there. No preview images needed, CaseHUD renders them itself.
+
+        Export: Designs, Design wählen, als JSON exportieren. / Export: Designs, pick a design, export as JSON.
+  - type: input
+    id: name
+    attributes:
+      label: Name des Designs / Design name
+    validations:
+      required: true
+  - type: input
+    id: author
+    attributes:
+      label: Name für die Urheberangabe / Name to credit as author
+      description: Z. B. dein GitHub-Name. / E.g. your GitHub name.
+  - type: dropdown
+    id: target
+    attributes:
+      label: Zielanzeige / Target display
+      options:
+        - Rund 400x400 (UNI FAN TL LCD)
+        - Rund 480x480 (HydroShift / Galahad II)
+        - Universal Screen 8.8"
+        - AWTRIX (32x8 / 52x16)
+        - Anderes / Other
+    validations:
+      required: true
+  - type: textarea
+    id: json
+    attributes:
+      label: Design-JSON / Design JSON
+      description: Exportiertes JSON einfügen oder als .json-Datei hochladen. / Paste the exported JSON or upload it as a .json file.
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: preview
+    attributes:
+      label: Vorschau (optional) / Preview (optional)
+      description: Screenshot oder Foto per Drag and Drop einfügen. / Drag and drop a screenshot or photo.
+  - type: textarea
+    id: description
+    attributes:
+      label: Kurzbeschreibung / Short description
+  - type: checkboxes
+    id: licence
+    attributes:
+      label: Lizenz / Licence
+      options:
+        - label: Das Design ist mein eigenes Werk und darf unter CC BY 4.0 veröffentlicht werden. / The design is my own work and may be published under CC BY 4.0.
+          required: true
+        - label: Es enthält keine fremden Bilder, Schriften oder Marken ohne Erlaubnis. / It contains no third-party images, fonts or trademarks without permission.
+          required: true

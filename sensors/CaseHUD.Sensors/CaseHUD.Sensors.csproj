@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    CaseHUD sensor service: LibreHardwareMonitorLib bundled as a library, running as a Windows service and serving the same JSON
+    as LibreHardwareMonitor's remote web server on http://127.0.0.1:8086/.
+    Targets .NET Framework 4.7.2, which ships with Windows 10/11, so no
+    runtime has to be installed.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>CaseHUD.Sensors</AssemblyName>
+    <RootNamespace>CaseHUD.Sensors</RootNamespace>
+    <PlatformTarget>x64</PlatformTarget>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Copyright>Copyright (C) 2026 kewe87</Copyright>
+    <Product>CaseHUD</Product>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System.ServiceProcess" />
+    <Reference Include="System.Web.Extensions" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+  <!-- CI builds against a LibreHardwareMonitor checkout (LhmSource), e.g. a
+       fork with board fixes; without it the NuGet package is used. -->
+  <ItemGroup Condition="'$(LhmSource)' != ''">
+    <ProjectReference Include="$(LhmSource)\LibreHardwareMonitorLib\LibreHardwareMonitorLib.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(LhmSource)' == ''">
+    <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.*" />
+  </ItemGroup>
+</Project>

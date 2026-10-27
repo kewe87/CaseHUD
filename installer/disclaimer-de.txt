@@ -1,0 +1,15 @@
+Haftungsausschluss
+
+CaseHUD ist kostenlose Open-Source-Software unter der GPL-3.0 und wird ohne jegliche Gewährleistung bereitgestellt (siehe GPL-3.0, Abschnitte 15 und 16).
+
+Geräte werden über inoffizielle, unabhängig entwickelte Protokolle angesteuert. Die Nutzung erfolgt auf eigenes Risiko.
+
+Soweit gesetzlich zulässig, wird keine Haftung für Schäden an Hardware oder für Datenverlust übernommen. Die Haftung für Vorsatz, grobe Fahrlässigkeit sowie für die Verletzung von Leben, Körper oder Gesundheit bleibt unberührt.
+
+CaseHUD ist kein offizielles Produkt von Lian Li oder anderen Herstellern und steht in keiner Verbindung zu ihnen. Marken und Produktnamen gehören ihren jeweiligen Inhabern.
+
+CaseHUD installiert einen Sensor-Dienst, der mit Systemrechten läuft, und den Treiber PawnIO zum Auslesen von Sensoren.
+
+Beleuchtung und experimentelle Geräte sind optional und standardmäßig ausgeschaltet.
+
+CaseHUD schreibt sein Logo einmalig als Start- und Ruhebild in unterstützte Lüfter-Displays und vergibt an Displays ohne Seriennummer eine Seriennummer. Beides sind dauerhafte Schreibvorgänge auf dem Gerät; Start- und Ruhebild und Seriennummer lassen sich unter Einstellungen → Geräte abschalten.

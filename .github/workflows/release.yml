@@ -1,0 +1,60 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, e.g. v1.0.0 (created on the selected branch)'
+        required: true
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Check the tag
+        shell: bash
+        run: '[[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "invalid tag: $TAG"; exit 1; }'
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Test
+        run: go test ./...
+      - name: Sensor service tests
+        run: dotnet test sensors/CaseHUD.Sensors.Tests -c Release
+      - name: Build setup and portable package
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./scripts/package-windows.ps1 -Version ($env:TAG.TrimStart("v"))
+      - name: Sign checksums
+        shell: pwsh
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          ./scripts/sign-release.ps1
+          ./scripts/sign-release.ps1 -Verify
+      - name: Point the tag at this commit (manual runs)
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          git tag -f "$TAG"
+          git push -f origin "refs/tags/$TAG"
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ env.TAG }}
+          files: dist/*
+          name: CaseHUD ${{ env.TAG }}
+          body_path: docs/releases/${{ env.TAG }}.md
+          generate_release_notes: true

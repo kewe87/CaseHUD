@@ -1,0 +1,68 @@
+name: Hardware-Testbericht / Hardware test report
+description: Hardware, die du mit CaseHUD getestet hast / hardware you tested with CaseHUD
+title: "[Hardware] "
+labels: ["hardware"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke fürs Testen! Gemeldete Hardware wird in die Tabellen „Getestete Hardware“ im README übernommen.
+        Thanks for testing! Reported hardware is added to the "tested hardware" tables in the README.
+  - type: dropdown
+    id: category
+    attributes:
+      label: Typ / Type
+      options:
+        - Lüfter oder Controller / Fan or controller
+        - Display (LCD, Pixeluhr) / Display (LCD, pixel clock)
+        - Mainboard
+        - Arbeitsspeicher / Memory
+        - Wasserkühlung / Water cooling
+        - Gehäuse / Case
+        - Anderes / Other
+    validations:
+      required: true
+  - type: input
+    id: vendor
+    attributes:
+      label: Hersteller / Manufacturer
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Genaues Modell und Teilenummer / Exact model and part number
+      description: z. B. „Trident Z5 RGB DDR5-8000 CL40 (F5-8000J4048G24G)“
+    validations:
+      required: true
+  - type: input
+    id: usbid
+    attributes:
+      label: USB-VID:PID (falls USB-Gerät / if USB device)
+      description: Geräte-Manager → Eigenschaften → Details → Hardware-IDs / Device Manager → Properties → Details → Hardware IDs
+  - type: textarea
+    id: works
+    attributes:
+      label: Was funktioniert? / What works?
+      description: z. B. Display, Sensoren, Beleuchtung, Anordnung / e.g. display, sensors, lighting, arrangement
+    validations:
+      required: true
+  - type: textarea
+    id: issues
+    attributes:
+      label: Was funktioniert nicht oder nur teilweise? / What does not work or only partly?
+  - type: input
+    id: version
+    attributes:
+      label: CaseHUD-Version
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows-Version
+  - type: input
+    id: credit
+    attributes:
+      label: Name in der Tabelle / Name in the table
+      description: Optional, z. B. dein GitHub-Name. Leer lassen, wenn du nicht genannt werden willst. / Optional, e.g. your GitHub name. Leave empty to stay unnamed.

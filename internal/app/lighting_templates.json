@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "templates": [
+    {
+      "id": "asus-x870e-o11-dynamic-evo",
+      "name": {
+        "de": "ASUS X870E · Lian Li O11 Dynamic EVO",
+        "en": "ASUS X870E · Lian Li O11 Dynamic EVO"
+      },
+      "description": {
+        "de": "Mainboard-Kanäle mit TL-Lüftern (Kanal 1), Gehäuseleiste (Kanal 2), Alphacool-Splitter (Kanal 3), Board-Abdeckung (Kanal 4) und dem LED-Ring des 8.8\"-Displays.",
+        "en": "Mainboard channels with TL fans (channel 1), case strip (channel 2), Alphacool splitter (channel 3), board cover (channel 4) and the LED ring of the 8.8\" display."
+      },
+      "requires": ["asusaura"],
+      "tlSync": "asusaura/argb1",
+      "zones": [
+        {
+          "backend": "asusaura", "zone": "argb1",
+          "label": { "de": "ARGB 1 · TL-Lüfter", "en": "ARGB 1 · TL fans" },
+          "name": { "de": "Lüfter (Sync)", "en": "Fans (sync)" },
+          "note": { "de": "3 Lüfter hintereinander (78 LEDs), über den TL-Controller im Mainboard-Sync.", "en": "3 fans in a row (78 LEDs), through the TL controller in mainboard sync." },
+          "segments": [
+            { "name": "TL-Lüfter 1", "shape": "component", "component": "fan-tl-26", "count": 26, "x": 0.70, "y": 0.05, "w": 0.18, "h": 0.28 },
+            { "name": "TL-Lüfter 2", "shape": "component", "component": "fan-tl-26", "count": 26, "x": 0.70, "y": 0.36, "w": 0.18, "h": 0.28 },
+            { "name": "TL-Lüfter 3", "shape": "component", "component": "fan-tl-26", "count": 26, "x": 0.70, "y": 0.67, "w": 0.18, "h": 0.28 }
+          ]
+        },
+        {
+          "backend": "asusaura", "zone": "argb2",
+          "label": { "de": "ARGB 2 · Gehäuseleiste", "en": "ARGB 2 · case strip" },
+          "name": { "de": "Gehäuseleiste", "en": "Case strip" },
+          "note": { "de": "Eingebaute Leiste des O11 Dynamic EVO (47 LEDs).", "en": "Built-in strip of the O11 Dynamic EVO (47 LEDs)." },
+          "segments": [
+            { "name": "Gehäuseleiste", "shape": "component", "component": "o11-dynamic-evo-argb-strip", "count": 47, "x": 0.05, "y": 0.93, "w": 0.90, "h": 0.03 }
+          ]
+        },
+        {
+          "backend": "asusaura", "zone": "argb3",
+          "label": { "de": "ARGB 3 · Alphacool-Splitter", "en": "ARGB 3 · Alphacool splitter" },
+          "name": { "de": "Wasserkühlung", "en": "Water cooling" },
+          "note": { "de": "Parallel am Splitter: Distro Plate (18), GPU-Block (11) und CPU-Block (8) bekommen dasselbe Signal ab LED 1. Die Zone hat 18 LEDs (das längste Bauteil).", "en": "Parallel on the splitter: distro plate (18), GPU block (11) and CPU block (8) get the same signal from LED 1. The zone has 18 LEDs (the longest part)." },
+          "segments": [
+            { "name": "Distro Plate", "shape": "component", "component": "core-distro-plate-o11-dynamic-evo-apex-vpp", "count": 18, "start": 0, "x": 0.06, "y": 0.52, "w": 0.28, "h": 0.175 },
+            { "name": "GPU-Block", "shape": "component", "component": "core-geforce-rtx-5080-zotac-solid-amp", "count": 11, "start": 0, "x": 0.38, "y": 0.52, "w": 0.18, "h": 0.19 },
+            { "name": "CPU-Block", "shape": "component", "component": "apex-1-cpu-block-am5-argb", "count": 8, "start": 0, "x": 0.58, "y": 0.52, "w": 0.08, "h": 0.11 }
+          ]
+        },
+        {
+          "backend": "asusaura", "zone": "ch4",
+          "label": { "de": "Kanal 4 · Board-Abdeckung", "en": "Channel 4 · board cover" },
+          "note": { "de": "Beleuchtete Abdeckung auf dem Mainboard (9 LEDs).", "en": "Lit cover on the mainboard (9 LEDs)." },
+          "segments": [
+            { "name": "Board-Abdeckung", "count": 9, "shape": "line", "angle": 90, "x": 0.15, "y": 0.10, "w": 0, "h": 0.25 }
+          ]
+        },
+        {
+          "backend": "asusaura", "zone": "onboard",
+          "label": { "de": "Onboard", "en": "Onboard" },
+          "count": 1
+        },
+        {
+          "backend": "lianli", "zone": "ring",
+          "label": { "de": "8.8\"-Display · LED-Ring", "en": "8.8\" display · LED ring" },
+          "note": { "de": "60 LEDs rund um das Display.", "en": "60 LEDs around the display." },
+          "segments": [
+            { "name": "LED-Ring", "count": 60, "shape": "rect", "reverse": true, "x": 0.30, "y": 0.02, "w": 0.40, "h": 0.12 }
+          ]
+        }
+      ]
+    }
+  ]
+}
