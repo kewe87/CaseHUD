@@ -125,7 +125,8 @@ CaseHUD funktioniert ohne Cloud und ohne Konto. Das ist alles, was das Programm 
 | Funktion | Ziel | Standard | Wann |
 |---|---|---|---|
 | Update-Hinweis | `api.github.com` (neueste Release-Version) | an, abschaltbar | beim Start und danach täglich |
-| Community-Galerie / Library | `raw.githubusercontent.com/kewe87/casehud-library` | nur auf Abruf | wenn du die Galerie bzw. die Licht-Presets öffnest oder aktualisierst |
+| Update installieren | `github.com/kewe87/CaseHUD/releases` (signierte Prüfsummen + Setup) | nur auf Klick | wenn du „Jetzt installieren“ wählst (oder ein Programm es über die API anstößt) |
+| Community-Galerie / Library | `raw.githubusercontent.com/kewe87/CaseHUD-Library` | nur auf Abruf | wenn du die Galerie bzw. die Licht-Presets öffnest oder aktualisierst |
 | Firmware-Prüfung | Download-Seite auf `lian-li.com` (es wird nur die Seite gelesen) | aus | einmal pro Start, nur wenn eingeschaltet; der Hersteller sieht dabei deine IP-Adresse |
 | AWTRIX-Suche | UDP 4210/4211 und HTTP im lokalen Netz | nur auf Abruf | wenn du nach Uhren suchst |
 | Lokale API und MCP | nur `127.0.0.1`, mit Token | aus | nur wenn eingeschaltet (Einstellungen → Schnittstellen) |
@@ -220,7 +221,10 @@ Bilder und GIFs funktionieren ohne.
   der SMBus-Brücke; für normale Benutzer nur lesbar), der Treiber PawnIO (eigenständig, ggf. von anderer Software
   genutzt; unter „Apps“ separat entfernbar) und die Gruppenmitgliedschaft. Dauerhafte Schreibvorgänge im Gerät,
   etwa das Startbild der Lüfter, bleiben im Gerät.
-- **Update:** das neue Setup einfach darüber installieren.
+- **Update:** Meldet CaseHUD eine neue Version, installiert „Jetzt installieren“ sie: CaseHUD lädt das Setup von
+  GitHub, prüft die Signatur der Prüfsummen und den Hash des Setups und startet es (Windows fragt nach
+  Administratorrechten). Danach startet CaseHUD wieder, Autostart bleibt wie eingestellt. Die portable ZIP
+  aktualisiert sich nicht selbst; alternativ das neue Setup einfach darüber installieren.
 
 **Kommandozeile der GUI (`CaseHUD.exe`):**
 
@@ -233,6 +237,7 @@ Bilder und GIFs funktionieren ohne.
 | `--port N` | Port der Oberfläche auf 127.0.0.1 (Standard: zufällig) |
 | `--data ORDNER` | anderer Datenordner |
 | `--set-api=on` / `off` | schaltet die API in den Einstellungen um und beendet sich (vom Installer genutzt) |
+| `--quit` | beendet ein laufendes CaseHUD sauber (vom Installer genutzt) |
 
 ### Roadmap
 
@@ -368,7 +373,8 @@ No cloud, no account, no telemetry. This is everything CaseHUD does on the netwo
 | Feature | Target | Default | When |
 |---|---|---|---|
 | Update notice | `api.github.com` (latest release version) | on, can be switched off | at start, then daily |
-| Community gallery / library | `raw.githubusercontent.com/kewe87/casehud-library` | on demand only | when you open or refresh the gallery or the light presets |
+| Install update | `github.com/kewe87/CaseHUD/releases` (signed checksums + setup) | on click only | when you choose "Install now" (or a program asks for it over the API) |
+| Community gallery / library | `raw.githubusercontent.com/kewe87/CaseHUD-Library` | on demand only | when you open or refresh the gallery or the light presets |
 | Firmware check | download page on `lian-li.com` (page is only read) | off | once per start, only if enabled; the manufacturer sees your IP address |
 | AWTRIX search | UDP 4210/4211 and HTTP in the local network | on demand only | when you search for clocks |
 | Local API and MCP | `127.0.0.1` only, token protected | off | only when enabled (Settings -> Interfaces) |
@@ -386,11 +392,15 @@ See also [SECURITY.md](SECURITY.md).
   **Left behind:** the data folder, `C:\ProgramData\CaseHUD` (only holds the optional `sensors.json` of the SMBus bridge;
   read-only for normal users), the PawnIO driver (independent, may be used by other software; remove it separately under
   Apps) and the group membership. Permanent writes to devices, such as the fans' start image, stay in the device.
-- **Updating:** run the new setup over the old install.
+- **Updating:** when CaseHUD reports a new version, "Install now" installs it: CaseHUD downloads the setup from GitHub,
+  checks the signature of the checksums and the setup's hash and starts it (Windows asks for administrator rights).
+  CaseHUD starts again afterwards, autostart stays as it was. The portable ZIP does not update itself; you can also
+  run the new setup over the old install.
 
 **GUI command line (`CaseHUD.exe`):** `--demo` (simulated LCDs and sensors), `--minimized` (start in the tray),
 `--background` (like `--minimized`; if CaseHUD already runs, exit silently), `--no-tray` (no tray icon), `--port N`
-(GUI port on 127.0.0.1, default random), `--data FOLDER`, `--set-api=on|off` (switch the API, then exit; used by the installer).
+(GUI port on 127.0.0.1, default random), `--data FOLDER`, `--set-api=on|off` (switch the API, then exit; used by the installer), `--quit` (close a running CaseHUD cleanly;
+used by the installer).
 
 ### Build
 

@@ -36,9 +36,12 @@
 
 <div id="update-banner" class="update-banner" hidden>
   <span class="dot"></span><span id="update-text"></span>
-  <a id="update-link" class="button primary" target="_blank" rel="noopener" data-i18n="upd.open"></a>
+  <button id="update-notes-btn" class="button" data-i18n="upd.notes" aria-expanded="false" aria-controls="update-notes"></button>
+  <button id="update-install" class="button primary" data-i18n="upd.install" hidden></button>
+  <a id="update-link" class="button" target="_blank" rel="noopener" data-i18n="upd.open"></a>
   <button id="update-close" class="icon-btn" data-i18n-aria="btn.close" aria-label="Close">✕</button>
 </div>
+<pre id="update-notes" class="update-notes" hidden></pre>
 <main>
   <!-- Displays -->
   <section id="tab-displays" class="tab active">

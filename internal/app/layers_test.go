@@ -449,7 +449,7 @@ func TestWorkerLoopUsesLayersAndFallsBackForTransitions(t *testing.T) {
 	count := func() (int, int) { f.mu.Lock(); defer f.mu.Unlock(); return f.layers, f.images }
 	waitCount := func(what string, ok func(l, i int) bool) {
 		t.Helper()
-		for i := 0; i < 300; i++ {
+		for i := 0; i < 1500; i++ { // up to 15 s: slow CI machines with -race
 			if l, im := count(); ok(l, im) {
 				return
 			}

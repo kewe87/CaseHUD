@@ -435,6 +435,7 @@ body:not(.expert-mode) .expert { display: none !important; }
 .update-banner { display: flex; align-items: center; gap: var(--s3); padding: var(--s2) var(--s5); background: linear-gradient(90deg, rgba(34,211,238,.14), rgba(167,139,250,.14)); border-bottom: 1px solid var(--border); font-weight: 600; }
 .update-banner .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); flex: none; }
 .update-banner #update-text { flex: 1; }
+.update-notes { margin: 0; padding: var(--s3) var(--s5); max-height: 40vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: .9em; background: var(--surface, transparent); border-bottom: 1px solid var(--border); }
 
 /* ---------- scenes, automation, rotation ---------- */
 .part { margin-top: var(--s6); }

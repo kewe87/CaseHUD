@@ -1625,16 +1625,49 @@ $("#btn-aw-search").addEventListener("click", async () => {
 });
 
 let updateDismissed = "";
+let updatePoll = null;
 function renderUpdate() {
   const u = state.update;
-  const show = u && u.version !== updateDismissed;
+  const su = state.selfUpdate || {};
+  const busy = su.state === "downloading" || su.state === "starting";
+  const show = !!u && (u.version !== updateDismissed || busy || su.state === "error");
   $("#update-banner").hidden = !show;
-  if (show) {
-    $("#update-text").textContent = t("upd.text", { v: "v" + u.version });
-    $("#update-link").href = u.url || state.releasesUrl;
-  }
+  if (!show) { $("#update-notes").hidden = true; return; }
+  const v = "v" + (su.version || u.version);
+  let text = t("upd.text", { v: "v" + u.version });
+  if (su.state === "downloading") {
+    const p = su.total > 0 ? Math.floor(su.done * 100 / su.total) + " %" : Math.round(su.done / 1048576) + " MB";
+    text = t("upd.downloading", { v, p });
+  } else if (su.state === "starting") text = t("upd.starting", { v });
+  else if (su.state === "error") text = t("upd.error", { e: su.error || "?" });
+  $("#update-text").textContent = text;
+  $("#update-link").href = u.url || state.releasesUrl;
+  const inst = $("#update-install");
+  inst.hidden = !su.installable;
+  inst.disabled = busy;
+  inst.textContent = t(su.state === "error" ? "upd.retry" : "upd.install");
+  $("#update-notes-btn").hidden = !u.notes;
+  $("#update-notes").textContent = u.notes || "";
+  if (!u.notes) $("#update-notes").hidden = true;
+  $("#update-notes-btn").setAttribute("aria-expanded", String(!$("#update-notes").hidden));
+  // Follow the progress more closely than the 5 s state poll.
+  if (busy && !updatePoll) {
+    updatePoll = setInterval(() => {
+      api("GET", "/api/state").then((s) => { state.selfUpdate = s.selfUpdate; state.update = s.update; renderUpdate(); }).catch(() => {});
+    }, 1000);
+  } else if (!busy && updatePoll) { clearInterval(updatePoll); updatePoll = null; }
 }
 $("#update-close").addEventListener("click", () => { updateDismissed = state.update ? state.update.version : ""; renderUpdate(); });
+$("#update-notes-btn").addEventListener("click", () => { $("#update-notes").hidden = !$("#update-notes").hidden; renderUpdate(); });
+$("#update-install").addEventListener("click", async () => {
+  const u = state.update;
+  if (!u || !confirm(t("upd.confirm", { v: "v" + u.version }))) return;
+  try {
+    await api("POST", "/api/update/install");
+    state.selfUpdate = Object.assign({}, state.selfUpdate, { state: "downloading", version: u.version, done: 0, total: -1, error: "" });
+    renderUpdate();
+  } catch (e) { toast(e.message, true); }
+});
 // All advanced settings go through one endpoint and apply immediately.
 async function saveSettings() {
   const st0 = state.settings || {};
@@ -2034,6 +2067,7 @@ setInterval(() => {
     state = s;
     if (!changed) state.panels = keepConfigs; // local edits may be newer
     renderStatus();
+    renderUpdate();
     if (changed) renderAll();
   }).catch(() => {});
 }, 5000);

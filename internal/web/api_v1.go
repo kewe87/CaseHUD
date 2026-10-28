@@ -198,6 +198,9 @@ func (s *Server) apiV1() http.Handler {
 	m.HandleFunc("POST /api/v1/community/{id}/import", s.v1CommunityImport)
 	m.HandleFunc("PATCH /api/v1/awtrix", s.v1PatchAwtrix)
 	s.lightingRoutesV1(m)
+	m.HandleFunc("GET /api/v1/update", s.v1Update)
+	m.HandleFunc("POST /api/v1/update/check", s.v1UpdateCheck)
+	m.HandleFunc("POST /api/v1/update/install", s.v1UpdateInstall)
 	m.HandleFunc("POST /api/v1/quit", s.v1Quit)
 	m.HandleFunc("POST /api/v1/gui/open", s.v1GUIOpen)
 	m.HandleFunc("/api/v1/", func(w http.ResponseWriter, r *http.Request) {

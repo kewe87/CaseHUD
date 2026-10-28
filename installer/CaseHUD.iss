@@ -114,6 +114,9 @@ Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile
 ; Optional: /API=1 switches the API for other programs on (default off), as the original user.
 Filename: "{app}\CaseHUD.exe"; Parameters: "--set-api=on"; Check: APIRequested; Flags: runhidden waituntilterminated runasoriginaluser skipifdoesntexist
 Filename: "{app}\CaseHUD.exe"; Description: "{cm:Launch}"; Flags: nowait postinstall skipifsilent runasoriginaluser
+; Self-update (CaseHUD starts this setup with /RELAUNCH=window|tray|hidden):
+; start CaseHUD again the way it ran before, as the original user.
+Filename: "{app}\CaseHUD.exe"; Parameters: "{code:RelaunchArgs}"; Check: RelaunchRequested; Flags: nowait runasoriginaluser skipifdoesntexist
 
 [UninstallRun]
 ; Best effort: removes the Run entry of the uninstalling account. Another user's entry
@@ -130,6 +133,27 @@ function QuotedUser(Param: String): String;
 begin
   Result := ExpandConstant('{username}');
   StringChangeEx(Result, '''', '''''', True);
+end;
+
+function RelaunchRequested: Boolean;
+var
+  r: String;
+begin
+  r := ExpandConstant('{param:RELAUNCH|}');
+  Result := (r = 'window') or (r = 'tray') or (r = 'hidden');
+end;
+
+function RelaunchArgs(Param: String): String;
+var
+  r: String;
+begin
+  r := ExpandConstant('{param:RELAUNCH|}');
+  if r = 'tray' then
+    Result := '--minimized'
+  else if r = 'hidden' then
+    Result := '--background --no-tray'
+  else
+    Result := '';
 end;
 
 function APIRequested: Boolean;
@@ -167,16 +191,30 @@ begin
   Result := (attr = $FFFFFFFF) or ((attr and $400) = 0);
 end;
 
-// Stop the running app and service so their files can be replaced.
+// Stop the running app and service so their files can be replaced. CaseHUD
+// is first asked to quit cleanly (it switches displays and lights off the way
+// the user chose), as the user it runs as; it holds the mutex CaseHUD.Running
+// until it has exited. Only if it is still there after 20 s, or is a version
+// without --quit, it is ended hard.
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
-  rc: Integer;
+  rc, i: Integer;
 begin
   if not ClearReparsePoint(ExpandConstant('{commonappdata}\CaseHUD')) or
      not ClearReparsePoint(ExpandConstant('{app}')) then
   begin
     Result := 'A link (junction or symbolic link) sits where CaseHUD must be installed and could not be removed. Remove it and run setup again.';
     Exit;
+  end;
+  if FileExists(ExpandConstant('{app}\CaseHUD.exe')) then
+  begin
+    ExecAsOriginalUser(ExpandConstant('{app}\CaseHUD.exe'), '--quit', '', SW_HIDE, ewWaitUntilTerminated, rc);
+    for i := 1 to 80 do
+    begin
+      if not CheckForMutexes('CaseHUD.Running') then
+        Break;
+      Sleep(250);
+    end;
   end;
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM CaseHUD.exe', '', SW_HIDE, ewWaitUntilTerminated, rc);
   Exec(ExpandConstant('{sys}\sc.exe'), 'stop CaseHUDSensors', '', SW_HIDE, ewWaitUntilTerminated, rc);

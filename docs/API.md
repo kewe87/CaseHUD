@@ -144,7 +144,7 @@ Every error has the same shape:
 | 403 | `api_disabled` | the API is switched off in the settings (no `api.json` exists) |
 | 404 | `not_found` | unknown endpoint, panel, design, scene or community design |
 | 405 | `method_not_allowed` | the path exists but not with this method (`Allow` header lists the right ones) |
-| 409 | `conflict` | the request cannot be done in the current state (scene activation, see below) |
+| 409 | `conflict` | the request cannot be done in the current state (scene activation, update, see below) |
 | 413 | `payload_too_large` | the request body is larger than 1 MiB |
 | 500 | `internal` | unexpected failure |
 | 502 | `bad_gateway` | the community gallery could not be reached |
@@ -549,6 +549,65 @@ alone. Switching the TL fan controller backend (`tl`), device `settings` and
 confirmations in the CaseHUD window (the disclaimer, and the lighting notice);
 without them `enabled: true` is answered with `409 ack_required`.
 
+### `GET /api/v1/update`
+The self-update state (since 1.0.2):
+
+```json
+{
+  "current": "1.0.2",
+  "available": { "version": "1.0.3", "url": "https://github.com/kewe87/CaseHUD/releases/tag/v1.0.3", "notes": "..." },
+  "installable": true,
+  "state": "idle",
+  "done": 0,
+  "total": 0
+}
+```
+
+- `available`: the newer release found by the update check, or `null`.
+  `notes` are the release notes as plain text (control and invisible
+  formatting characters removed, at most 8000 characters).
+- `installable`: `true` when this copy was installed with the setup and can
+  update itself. The portable ZIP and development builds cannot.
+- `state`: `idle`, `downloading` (`done`/`total` in bytes, `total` is `-1`
+  while unknown), `starting` (the setup runs and waits for the administrator
+  prompt) or `error` (`error` holds the reason; a new attempt is possible).
+  `version` names the release being installed.
+
+### `POST /api/v1/update/check`
+Checks GitHub for a newer release right away (at most once a minute; more
+calls return the last result) and answers with the update state.
+`409 conflict` when the update check is switched off in the settings.
+
+### `POST /api/v1/update/install`
+Downloads and installs the newer release named in `available`. Optional body:
+
+```json
+{ "relaunch": "tray" }
+```
+
+`relaunch` says how CaseHUD comes back after the update: `window`, `tray`
+(default) or `hidden` (`--background --no-tray`; only allowed, and the
+default, when CaseHUD runs with `--no-tray`). Answers `202` with the update state; poll `GET /api/v1/update`
+(about once a second) to follow `state`. Errors: `400 bad_request` (invalid
+`relaunch`), `409 conflict` (no newer version known, copy not installable, an
+update already running, or the last attempt is less than two minutes ago).
+
+What happens:
+
+1. CaseHUD downloads `SHA256SUMS.txt` and `SHA256SUMS.txt.sig` of that release
+   from `github.com/kewe87/CaseHUD/releases` and checks the signature with the
+   key built into CaseHUD. Nothing else is downloaded if it does not match.
+2. It downloads the setup and checks its SHA-256 against the signed line.
+   Only GitHub hosts are accepted, also for redirects.
+3. It starts the setup silently. Windows asks the user for administrator
+   rights (UAC); there is no way around that prompt. The setup closes CaseHUD
+   (`CaseHUD.exe --quit`), installs, keeps the autostart choice and starts
+   CaseHUD again as the signed-in user.
+
+The API goes away while the setup runs. A client waits until `api.json` is
+written again (new port and token) and reconnects. If the user declines the
+prompt, CaseHUD keeps running and `state` becomes `error`.
+
 ### `POST /api/v1/quit`
 Answers `202 {"status":"quitting"}`, then shuts CaseHUD down cleanly (the same
 path as tray *Quit*; `api.json` is removed).
@@ -634,8 +693,13 @@ Tasks: `autostart` (start with Windows, in the tray), `fps` (let the user read
 FPS data: adds them to *Performance Log Users*), `desktopicon` (off unless
 named). List the tasks you want; leaving one out turns it off.
 
-To update: download the newer setup, run `POST /api/v1/quit` so the running
-instance exits, then run the new setup with the options above. Each release
+To update: since 1.0.2 an installed CaseHUD updates itself on request
+(`POST /api/v1/update/install`, see above). Otherwise: download the newer
+setup, run `POST /api/v1/quit` so the running instance exits, then run the new
+setup with the options above. `CaseHUD.exe --quit` does the same as
+`POST /api/v1/quit` from the command line (it also works with the API
+switched off). It reaches the instance of the default data folder; one
+started with `--data` is ended by the setup without the clean shutdown. Each release
 also carries `SHA256SUMS.txt` in `sha256sum` format (`<hex digest>  <file name>`
 per line, LF line endings); verify the download against it before running it.
 

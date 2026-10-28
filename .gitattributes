@@ -5,3 +5,5 @@
 *.sh text eol=lf
 *.rules text eol=lf
 *.service text eol=lf
+# Signed release files: byte-exact, the signature covers them.
+internal/update/testdata/* -text

@@ -1,5 +1,5 @@
 // Package community reads the community design gallery: an index.json with
-// design JSON files next to it, by default in the casehud-library GitHub
+// design JSON files next to it, by default in the CaseHUD-Library GitHub
 // repository. Previews are rendered locally, so the gallery needs no images.
 package community
 
@@ -18,7 +18,7 @@ import (
 )
 
 // DefaultIndexURL is the gallery shipped with CaseHUD.
-const DefaultIndexURL = "https://raw.githubusercontent.com/kewe87/casehud-library/main/index.json"
+const DefaultIndexURL = "https://raw.githubusercontent.com/kewe87/CaseHUD-Library/main/index.json"
 
 // Entry is one design in the gallery.
 type Entry struct {

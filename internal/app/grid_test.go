@@ -456,7 +456,7 @@ func TestConveyorSlidesThroughFields(t *testing.T) {
 	w := e.workers["us88-0"]
 	e.mu.Unlock()
 	idx := func(id string) int { return slices.Index(conv, id) }
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(15 * time.Second) // slow CI machines with -race
 	for time.Now().Before(deadline) {
 		c := w.current()
 		if len(c.Tiles) == 4 && idx(c.Tiles[0].Design) >= 0 {

@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Die Galerie in CaseHUD liest ihre Designs aus dem Repo [kewe87/casehud-library](https://github.com/kewe87/casehud-library) (CC BY 4.0). Reiche dein Design hier ein, es wird dort aufgenommen. Vorschaubilder sind nicht nötig, CaseHUD rendert sie selbst. / The gallery in CaseHUD reads its designs from [kewe87/casehud-library](https://github.com/kewe87/casehud-library) (CC BY 4.0). Submit your design here and it will be added there. No preview images needed, CaseHUD renders them itself.
+        Die Galerie in CaseHUD liest ihre Designs aus dem Repo [kewe87/CaseHUD-Library](https://github.com/kewe87/CaseHUD-Library) (CC BY 4.0). Reiche dein Design hier ein, es wird dort aufgenommen. Vorschaubilder sind nicht nötig, CaseHUD rendert sie selbst. / The gallery in CaseHUD reads its designs from [kewe87/CaseHUD-Library](https://github.com/kewe87/CaseHUD-Library) (CC BY 4.0). Submit your design here and it will be added there. No preview images needed, CaseHUD renders them itself.
 
         Export: Designs, Design wählen, als JSON exportieren. / Export: Designs, pick a design, export as JSON.
   - type: input

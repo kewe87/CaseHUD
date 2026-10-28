@@ -1,5 +1,5 @@
-// Package update checks GitHub for a newer CaseHUD release. It only reads
-// the public releases API; nothing is downloaded or installed.
+// Package update checks GitHub for a newer CaseHUD release and, on request,
+// downloads its setup, verifies it against the signed checksums and starts it.
 package update
 
 import (
@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // Repo is where releases are published.
@@ -23,11 +24,18 @@ const ReleasesURL = "https://github.com/" + Repo + "/releases"
 type Release struct {
 	Version string `json:"version"`
 	URL     string `json:"url"`
+	Notes   string `json:"notes,omitempty"` // release notes as plain text
 }
+
+// latestURL is overridable in tests only.
+var latestURL = "https://api.github.com/repos/" + Repo + "/releases/latest"
+
+// maxNotes caps the release notes shown in the window.
+const maxNotes = 8000
 
 // Latest fetches the latest release.
 func Latest(ctx context.Context) (Release, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.github.com/repos/"+Repo+"/releases/latest", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", latestURL, nil)
 	if err != nil {
 		return Release{}, err
 	}
@@ -45,6 +53,7 @@ func Latest(ctx context.Context) (Release, error) {
 	var r struct {
 		TagName string `json:"tag_name"`
 		HTMLURL string `json:"html_url"`
+		Body    string `json:"body"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&r); err != nil {
 		return Release{}, err
@@ -53,7 +62,31 @@ func Latest(ctx context.Context) (Release, error) {
 	if !strings.HasPrefix(link, "https://github.com/kewe87/") {
 		link = "" // never hand the GUI a link to somewhere else
 	}
-	return Release{Version: strings.TrimPrefix(r.TagName, "v"), URL: link}, nil
+	return Release{Version: strings.TrimPrefix(r.TagName, "v"), URL: link, Notes: cleanNotes(r.Body)}, nil
+}
+
+// cleanNotes keeps the notes printable: no control or invisible formatting
+// characters (bidi overrides, zero width, tag characters), and at most
+// maxNotes runes. The notes also go to API clients.
+func cleanNotes(s string) string {
+	var b strings.Builder
+	n := 0
+	for _, r := range s {
+		if n >= maxNotes {
+			b.WriteString(" …")
+			break
+		}
+		switch {
+		case r == '\n' || r == '\t':
+		case r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0):
+			continue
+		case unicode.Is(unicode.Cf, r), unicode.Is(unicode.Co, r), r == unicode.ReplacementChar:
+			continue
+		}
+		b.WriteRune(r)
+		n++
+	}
+	return strings.TrimSpace(b.String())
 }
 
 // Newer reports whether version a is newer than b ("1.2.0" > "1.1.9").

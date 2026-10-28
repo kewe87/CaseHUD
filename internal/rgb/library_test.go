@@ -61,10 +61,18 @@ func TestLoadLibrarySizeLimit(t *testing.T) {
 	}
 }
 
-// The real library, if checked out next to this repository.
+// The real library, if checked out next to this repository (the test runs
+// in internal/rgb, so that is three levels up).
 func TestLoadRealLibrary(t *testing.T) {
-	dir := filepath.Join("..", "casehud-designs")
-	if _, err := os.Stat(filepath.Join(dir, "components.json")); err != nil {
+	var dir string
+	for _, name := range []string{"casehud-library", "casehud-designs"} {
+		d := filepath.Join("..", "..", "..", name)
+		if _, err := os.Stat(filepath.Join(d, "components.json")); err == nil {
+			dir = d
+			break
+		}
+	}
+	if dir == "" {
 		t.Skip("library not present")
 	}
 	n, err := LoadLibrary(dir)

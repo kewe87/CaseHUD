@@ -74,8 +74,12 @@ type Server struct {
 	eventClients atomic.Int32
 	liveClients  atomic.Int32 // open /api/live streams
 
-	updMu  sync.Mutex
-	update *update.Release // newer release, if any
+	updMu   sync.Mutex
+	update  *update.Release // newer release, if any
+	selfUpd selfUpdate
+	// NoTray: the app runs without a tray icon (--no-tray); an update asked
+	// for through the API then brings it back the same way.
+	NoTray bool
 	ln     net.Listener
 
 	galleryOnce sync.Once
@@ -250,6 +254,13 @@ func (s *Server) Handler() http.Handler {
 	api.HandleFunc("GET /api/media/{name}", s.getMedia)
 	api.HandleFunc("DELETE /api/media/{name}", s.deleteMedia)
 	api.HandleFunc("PUT /api/settings", s.putSettings)
+	api.HandleFunc("POST /api/update/install", func(w http.ResponseWriter, r *http.Request) {
+		if err := s.startSelfUpdate(RelaunchWindow); err != nil {
+			fail(w, http.StatusConflict, err)
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+	})
 	api.HandleFunc("GET /api/community", s.communityList)
 	api.HandleFunc("GET /api/community/{id}/preview", s.communityPreview)
 	api.HandleFunc("POST /api/community/{id}/import", s.communityImport)
@@ -374,6 +385,7 @@ func (s *Server) state(w http.ResponseWriter, r *http.Request) {
 		"settings":       e.Settings(),
 		"devices":        e.Devices(),
 		"update":         s.availableUpdate(),
+		"selfUpdate":     s.updateStatus(),
 		"releasesUrl":    update.ReleasesURL,
 		"mcpCommand":     mcpCommand(),
 		"backgrounds":    lcd.BackgroundEffects,
@@ -580,6 +592,7 @@ func sensorSourceName(url string) string {
 // RunUpdateChecks checks for a newer release now and then daily, while the
 // check is enabled. Development builds are never nagged.
 func (s *Server) RunUpdateChecks(ctx context.Context) {
+	CleanUpdates()
 	if update.IsDev(s.Version) {
 		return
 	}

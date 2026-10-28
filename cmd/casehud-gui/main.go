@@ -38,7 +38,12 @@ func main() {
 	port := flag.Int("port", 0, "GUI port on 127.0.0.1 (0 = random)")
 	dataDir := flag.String("data", app.DefaultDir(), "data folder (config, designs, media)")
 	setAPI := flag.String("set-api", "", "switch the API for other programs on or off in the settings, then exit (used by the installer)")
+	quit := flag.Bool("quit", false, "ask a running CaseHUD to quit cleanly, then exit (used by the installer)")
 	flag.Parse()
+	if *quit {
+		quitRunning(*dataDir)
+		return
+	}
 	if v, given, err := parseOnOff(*setAPI); err != nil {
 		quitErr(err)
 	} else if given {
@@ -80,6 +85,9 @@ func main() {
 		}
 	}
 
+	if !*demo {
+		holdRunning()
+	}
 	// Opened only now: a second start that hands over to the running
 	// instance must not empty that instance's log.
 	logFile, err := os.OpenFile(filepath.Join(store.Dir, "casehud.log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
@@ -102,7 +110,7 @@ func main() {
 		}
 	}()
 
-	srv := &web.Server{Engine: engine, Version: version}
+	srv := &web.Server{Engine: engine, Version: version, NoTray: *noTray}
 	guiURL, err := srv.Listen(*port)
 	if err != nil {
 		fatal(err)
@@ -183,6 +191,26 @@ func showExisting(guiURL, dataDir string) bool {
 	}
 	resp.Body.Close()
 	return resp.StatusCode < 300
+}
+
+// quitRunning asks the instance of dataDir to quit, the same way as the
+// tray's Quit, and returns at once (the setup waits for the process itself).
+func quitRunning(dataDir string) {
+	b, err := os.ReadFile(filepath.Join(dataDir, "instance.url"))
+	if err != nil {
+		return
+	}
+	guiURL := strings.TrimSpace(string(b))
+	i := strings.Index(guiURL, "/?t=")
+	if i < 0 {
+		return
+	}
+	c := http.Client{Timeout: 2 * time.Second}
+	req, _ := http.NewRequest("POST", guiURL[:i]+"/api/quit", nil)
+	req.Header.Set("X-Token", guiURL[i+4:])
+	if resp, err := c.Do(req); err == nil {
+		resp.Body.Close()
+	}
 }
 
 // instanceRunning pings a running instance without showing its window.
