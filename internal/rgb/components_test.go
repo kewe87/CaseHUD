@@ -56,7 +56,7 @@ func TestComponentMM(t *testing.T) {
 	if len(mm) != 26 || mm[0].X < 7 || mm[0].X > 9 || mm[0].Y < 113 || mm[13].Y > 8 {
 		t.Fatalf("mm %v %v", mm[0], mm[13])
 	}
-	s, _ := LookupComponent("strip-47")
+	s := lineStrip("test-strip", "Strip", 47)
 	if s.LEDsMM() != nil {
 		t.Fatal("unknown size gave positions")
 	}

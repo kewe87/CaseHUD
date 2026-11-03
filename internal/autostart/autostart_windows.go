@@ -3,6 +3,7 @@
 package autostart
 
 import (
+	"errors"
 	"os"
 
 	"golang.org/x/sys/windows/registry"
@@ -33,7 +34,7 @@ func Set(on bool) error {
 	}
 	defer k.Close()
 	if !on {
-		if err := k.DeleteValue(valueName); err != nil && err != registry.ErrNotExist {
+		if err := k.DeleteValue(valueName); err != nil && !errors.Is(err, registry.ErrNotExist) {
 			return err
 		}
 		return nil

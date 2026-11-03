@@ -183,7 +183,7 @@ func (s *Server) Handler() http.Handler {
 				return
 			}
 		} else {
-			s.Engine.Identify("")
+			_ = s.Engine.Identify("")
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})

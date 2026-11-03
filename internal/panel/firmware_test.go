@@ -10,7 +10,7 @@ func TestCleanFirmware(t *testing.T) {
 		"":                       "",
 		" v1.0 ":                 "v1.0",
 		"v1\x1b[2J\n.0\x00":      "v1[2J.0",
-		"‮v2":                    "v2",
+		"\u202ev2":               "v2",
 		strings.Repeat("x", 500): strings.Repeat("x", firmwareMax),
 	} {
 		if got := CleanFirmware(in); got != want {

@@ -63,7 +63,7 @@ func openWindow(guiURL string) {
 		if w == nil {
 			// No WebView2 runtime: fall back to the default browser.
 			log.Println("WebView2 unavailable, opening browser")
-			exec.Command("rundll32", "url.dll,FileProtocolHandler", guiURL).Start()
+			_ = exec.Command("rundll32", "url.dll,FileProtocolHandler", guiURL).Start()
 			fallbacks.Add(1)
 			winMu.Lock()
 			opening = false

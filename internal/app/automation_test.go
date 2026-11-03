@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -229,7 +230,7 @@ func TestAutomationRenameScene(t *testing.T) {
 	if st := e.AutomationStatus(); st.Scene != "Zocken" {
 		t.Fatalf("%+v", st)
 	}
-	if err := e.RenameScene("none", "x"); err != ErrNoScene {
+	if err := e.RenameScene("none", "x"); !errors.Is(err, ErrNoScene) {
 		t.Fatalf("%v", err)
 	}
 }
@@ -247,7 +248,7 @@ func TestAutomationHoldsRotation(t *testing.T) {
 	f.set(true, "x")
 	e.automate(f.advance(0))
 	e.automate(f.advance(time.Second))
-	if err := e.ActivateScene("Normal", true); err != ErrGamingHold {
+	if err := e.ActivateScene("Normal", true); !errors.Is(err, ErrGamingHold) {
 		t.Fatalf("ActivateScene: %v", err)
 	}
 	ss := e.Scenes()
@@ -372,7 +373,7 @@ func TestActivateSceneOutsideRotation(t *testing.T) {
 	if err := e.ActivateScene("Solo", true); err != nil {
 		t.Fatalf("excluded scene: %v", err)
 	}
-	if err := e.ActivateScene("Nope", true); err != ErrNoScene {
+	if err := e.ActivateScene("Nope", true); !errors.Is(err, ErrNoScene) {
 		t.Fatalf("%v", err)
 	}
 }

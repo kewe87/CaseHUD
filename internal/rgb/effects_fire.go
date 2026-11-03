@@ -18,7 +18,7 @@ func fireEffect() EffectInfo {
 		},
 		New: func(p Params) (Effect, error) {
 			return &fire{speed: p.Float("speed"), height: p.Float("height"), flame: p.Color("color"), tip: p.Color("tip"),
-				rnd: rand.New(rand.NewPCG(1, 2))}, nil
+				rnd: rand.New(rand.NewPCG(1, 2))}, nil //nolint:gosec // visual noise, fixed seed on purpose
 		},
 	}
 }

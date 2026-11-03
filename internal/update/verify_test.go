@@ -75,11 +75,11 @@ func TestValidVersion(t *testing.T) {
 }
 
 func TestCleanNotes(t *testing.T) {
-	in := "## Neu\r\n- a‮b\x1b[31m​c\tok"
+	in := "## Neu\r\n- a\u202eb\x1b[31m\u200bc\tok"
 	if got := cleanNotes(in); got != "## Neu\n- ab[31mc\tok" {
 		t.Errorf("%q", got)
 	}
-	if got := cleanNotes("x󠁁⁠؜￹y"); got != "xy" {
+	if got := cleanNotes("x\U000e0041\u2060\u061c\ufff9y"); got != "xy" {
 		t.Errorf("invisible characters kept: %q", got)
 	}
 	if n := len([]rune(cleanNotes(strings.Repeat("ä", maxNotes+50)))); n != maxNotes+2 {

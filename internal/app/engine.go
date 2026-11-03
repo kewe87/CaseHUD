@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -45,14 +46,16 @@ type Engine struct {
 	aw            awtrixState
 	awWake        chan struct{}
 	rot           rotationState
-	auto          autoState     // under mu
-	saveMu        sync.Mutex    // serialises config writes
-	setMu         sync.Mutex    // serialises SetPanelConfig end to end; taken before mu, never while holding mu or a worker lock
-	idleOff       bool          // screens are off for the screen saver (under mu)
-	outputStarted bool          // device output was started (under mu; see disclaimer.go)
-	tlp           tlpState      // start image of the TL LCD fans (see tlpersist.go)
-	dv            devVideoState // videos encoded for the displays (devvideo.go)
-	conf          confState     // other programs on the same devices (conflicts.go)
+	auto          autoState       // under mu
+	saveMu        sync.Mutex      // serialises config writes
+	presetMu      sync.Mutex      // guards the file of the user's lighting presets (lightpresets.go)
+	presetCache   []sourcedPreset // all lighting presets, nil = read again (presetMu)
+	setMu         sync.Mutex      // serialises SetPanelConfig end to end; taken before mu, never while holding mu or a worker lock
+	idleOff       bool            // screens are off for the screen saver (under mu)
+	outputStarted bool            // device output was started (under mu; see disclaimer.go)
+	tlp           tlpState        // start image of the TL LCD fans (see tlpersist.go)
+	dv            devVideoState   // videos encoded for the displays (devvideo.go)
+	conf          confState       // other programs on the same devices (conflicts.go)
 
 	// Now is the clock for leases and the like; nil = time.Now (tests set it).
 	Now        func() time.Time
@@ -60,6 +63,7 @@ type Engine struct {
 	asleepNow  bool                         // what the workers were last told: idleOff || powerOff (under mu)
 	sleepMu    sync.Mutex                   // held across computing and telling the workers, so they end up matching asleepNow; taken before mu
 	rotMu      sync.Mutex                   // serialises read-modify-write of the rotation settings
+	autoMu     sync.Mutex                   // one automate at a time (the rotation loop; tests also call it directly); taken before mu
 	awCfgMu    sync.Mutex                   // same for the AWTRIX device list
 	gamingFn   func(time.Time) GamingStatus // tests: replaces Gaming for the automation
 	gamingHint gamingHint                   // external "a game is running" report (under mu)
@@ -836,6 +840,9 @@ type worker struct {
 	e     *Engine
 	p     panel.Panel
 	round bool
+	// transDur overrides transitionDuration (tests); zero means the default.
+	// Under mu: a test may change it while the worker runs.
+	transDur time.Duration
 
 	mu          sync.Mutex
 	cancel      context.CancelFunc
@@ -1112,7 +1119,7 @@ func (w *worker) sleepBacklight(v int) {
 	if s, ok := w.p.(panel.SleepByFrame); ok && s.SleepByFrame() {
 		return
 	}
-	w.p.SetBrightness(v)
+	_ = w.p.SetBrightness(v)
 }
 
 func (w *worker) run(ctx context.Context, c PanelConfig) {
@@ -1192,7 +1199,6 @@ func (w *worker) run(ctx context.Context, c PanelConfig) {
 				if last == nil && lastLayer != nil {
 					last = lastLayer() // the picture a transition starts from
 				}
-				lastLayer = nil
 				w.applyDevice(req.c)
 				sz = w.sizeFor(req.c.Rotation)
 				if last != nil && last.Bounds().Size() != sz {
@@ -1213,7 +1219,10 @@ func (w *worker) run(ctx context.Context, c PanelConfig) {
 			var img *image.RGBA
 			img, wait = src.frame(now.Sub(start))
 			if trans.old != nil {
-				if p := float64(now.Sub(trans.start)) / float64(transitionDuration); p >= 1 {
+				w.mu.Lock()
+				td := cmp.Or(w.transDur, transitionDuration)
+				w.mu.Unlock()
+				if p := float64(now.Sub(trans.start)) / float64(td); p >= 1 {
 					trans.old = nil
 				} else {
 					img, wait = blend(trans.effect, easeInOut(p), trans.old, img), transFrame
@@ -1304,7 +1313,7 @@ func (s *SafeProvider) Run(ctx context.Context, interval time.Duration) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
-		s.Refresh()
+		_ = s.Refresh()
 		select {
 		case <-ctx.Done():
 			return
@@ -1333,7 +1342,7 @@ func (s *SafeProvider) Swap(p metrics.Provider) {
 		m.SetGameIgnore(s.ignore)
 	}
 	s.mu.Unlock()
-	s.Refresh()
+	_ = s.Refresh()
 }
 
 // PresentMonStatus is the FPS backend state ("running", "missing",
@@ -1498,7 +1507,7 @@ func (e *Engine) startSettingsCache(cfg Config) {
 				timer = nil
 				mu.Unlock()
 				if e.ctx.Err() == nil {
-					e.persist()
+					_ = e.persist()
 				}
 			})
 		}

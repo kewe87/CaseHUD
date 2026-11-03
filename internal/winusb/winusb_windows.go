@@ -7,6 +7,7 @@ package winusb
 // so no per-device interface GUID is needed.
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -87,7 +88,7 @@ func (d *winDevice) Write(ep byte, buf []byte, timeoutMS int) (int, error) {
 	var n uint32
 	r, _, e := procWritePipe.Call(d.h, uintptr(ep), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)), uintptr(unsafe.Pointer(&n)), 0)
 	if r == 0 {
-		if e == windows.ERROR_SEM_TIMEOUT || e == windows.ERROR_TIMEOUT {
+		if errors.Is(e, windows.ERROR_SEM_TIMEOUT) || errors.Is(e, windows.ERROR_TIMEOUT) {
 			return int(n), ErrTimeout
 		}
 		return int(n), e
@@ -104,7 +105,7 @@ func (d *winDevice) Read(ep byte, buf []byte, timeoutMS int) (int, error) {
 	var n uint32
 	r, _, e := procReadPipe.Call(d.h, uintptr(ep), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)), uintptr(unsafe.Pointer(&n)), 0)
 	if r == 0 {
-		if e == windows.ERROR_SEM_TIMEOUT || e == windows.ERROR_TIMEOUT {
+		if errors.Is(e, windows.ERROR_SEM_TIMEOUT) || errors.Is(e, windows.ERROR_TIMEOUT) {
 			return 0, ErrTimeout
 		}
 		return 0, e

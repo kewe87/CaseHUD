@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	leds "github.com/kewe87/casehud/internal/rgb"
@@ -18,9 +19,9 @@ import (
 const libPart = `{"format":1,"id":"lib-test-fan","vendor":"V","model":"Fan","category":"fan","dimensions_mm":{"w":120,"h":120},
  "leds":{"count":2,"positions_mm":[[10,10],[100,100]]}}`
 
-func libraryEngine(t *testing.T) (*Engine, *int) {
+func libraryEngine(t *testing.T) (*Engine, *atomic.Int32) {
 	t.Helper()
-	hits := new(int)
+	hits := new(atomic.Int32)
 	files := map[string]string{
 		"/lib/components.json":   `{"version":1,"components":[{"id":"lib-test-fan","file":"components/f.json"},{"id":"fan-tl-26","file":"components/f.json"}]}`,
 		"/lib/components/f.json": libPart,
@@ -29,7 +30,7 @@ func libraryEngine(t *testing.T) (*Engine, *int) {
 		"/lib/l/f.json":          `{"format":1,"id":"future","name":{"en":"Future"},"effect":"quantum","params":{}}`,
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		*hits++
+		hits.Add(1)
 		if b, ok := files[r.URL.Path]; ok {
 			io.WriteString(w, b)
 			return
@@ -50,11 +51,11 @@ func libraryEngine(t *testing.T) (*Engine, *int) {
 
 func TestLibraryNoNetworkUntilAsked(t *testing.T) {
 	e, hits := libraryEngine(t)
-	_ = e.LightingPresets()
+	_ = e.LightingPresetList()
 	_ = e.LibraryStatus()
 	e.Lighting()
-	if *hits != 0 {
-		t.Fatalf("%d requests before the user asked", *hits)
+	if hits.Load() != 0 {
+		t.Fatalf("%d requests before the user asked", hits.Load())
 	}
 }
 
@@ -69,7 +70,12 @@ func TestLibraryRefreshFeedsComponentsAndPresets(t *testing.T) {
 	if c, _ := leds.LookupComponent("fan-tl-26"); c.Label == "" || len(c.LEDs) != 26 {
 		t.Fatalf("built-in component replaced: %+v", c)
 	}
-	ps := e.LightingPresets()
+	var ps []LightingPresetView
+	for _, p := range e.LightingPresetList() {
+		if p.Source == PresetLibrary {
+			ps = append(ps, p)
+		}
+	}
 	if len(ps) != 1 || ps[0].ID != "mete" {
 		t.Fatalf("presets (unknown effects must not be offered): %+v", ps)
 	}

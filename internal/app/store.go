@@ -158,6 +158,9 @@ type Config struct {
 	// TLRestImages is the same record for the stored picture the fans show
 	// when CaseHUD is not running.
 	TLRestImages map[string]string `json:"tl_rest_images,omitempty"`
+	// BootImages is the same record for the boot picture of the 8.8" bar
+	// (written while the start image setting is on).
+	BootImages map[string]string `json:"boot_images,omitempty"`
 	// TLSerialOn assigns a serial number to TL LCD fans that have none (off
 	// by default). TLSerialOff is the old opt-out flag; TLSerialMigrated
 	// records that it has been turned into TLSerialOn (see migrateTLSerial).
@@ -173,11 +176,8 @@ type Config struct {
 
 // DefaultPanelConfig picks a sensible design for a new panel.
 func DefaultPanelConfig(round bool) PanelConfig {
-	d := "water-cooling"
-	if round {
-		d = "cpu-gpu"
-	}
-	return PanelConfig{Mode: "design", Design: d, Brightness: 80}
+	// CPU and GPU based, so it works on any PC (no coolant or pump sensor needed).
+	return PanelConfig{Mode: "design", Design: "cpu-gpu", Brightness: 80}
 }
 
 // IsWide reports whether a panel is a landscape bar (about 2:1 or wider), as
@@ -191,10 +191,10 @@ func IsBar(w, h int) bool { return IsWide(w, h) || IsWide(h, w) }
 func defaultConfigFor(sz image.Point, round bool) PanelConfig {
 	c := DefaultPanelConfig(round)
 	if IsBar(sz.X, sz.Y) {
-		// Four squares side by side, like the Dashboard on the pump head.
-		c.Design = "water-wide"
-		if t, ok := GridTemplateByID("overview", "clean"); ok {
-			c.Grid, c.Tiles = t.Grid, t.Tiles
+		// Four squares side by side from CPU, GPU and power readings only.
+		c.Grid = "4"
+		for _, f := range []string{"card:cpu", "card:gpu", "card:power", "combo:system"} {
+			c.Tiles = append(c.Tiles, Tile{Mode: "design", Design: templateDesign(f, "clean")})
 		}
 	}
 	return c

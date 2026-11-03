@@ -159,7 +159,7 @@ func (e *Engine) ActivateScene(name string, persist bool) error {
 			if i := slices.IndexFunc(e.cfg.Rotation.Scenes, func(s Scene) bool { return s.Name == name }); i >= 0 {
 				for id, c := range e.cfg.Rotation.Scenes[i].Panels {
 					if w := e.workers[id]; w != nil {
-						changes = append(changes, change{w, c.Clone()})
+						changes = append(changes, change{w, e.mounted(id, c.Clone())})
 					}
 				}
 				e.rot.shown, e.rot.lastStep = name, e.Clock()
@@ -193,7 +193,7 @@ func (e *Engine) showSceneNow(name string) error {
 	}
 	for id, c := range e.cfg.Rotation.Scenes[i].Panels {
 		if w := e.workers[id]; w != nil {
-			changes = append(changes, change{w, c.Clone()})
+			changes = append(changes, change{w, e.mounted(id, c.Clone())})
 		}
 	}
 	if e.rot.active {

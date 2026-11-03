@@ -107,9 +107,10 @@ func RegisterComponent(c Component) error {
 	return nil
 }
 
-// builtinComponents covers the hardware of the reference setup.
+// builtinComponents are the parts the program needs itself (the TL fan model
+// of the sync helper). All other parts come from the community library.
 func builtinComponents() []Component {
-	return []Component{tlFan(), lineStrip("strip-47", "Front strip (47 LEDs)", 47)}
+	return []Component{tlFan()}
 }
 
 // tlFan models a 120 mm fan with two light bars, one along the bottom and one

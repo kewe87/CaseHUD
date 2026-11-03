@@ -911,12 +911,6 @@ func (r *Renderer) drawCentered(img *image.RGBA, f font.Face, cx, baseline float
 	r.drawString(img, f, cx-float64(measure(f, s))/2, baseline, strings.TrimSpace(s), c)
 }
 
-func mix(a, b color.RGBA, t float64) color.RGBA {
-	t = clamp01(t)
-	l := func(x, y uint8) uint8 { return uint8(float64(x) + (float64(y)-float64(x))*t) }
-	return color.RGBA{l(a.R, b.R), l(a.G, b.G), l(a.B, b.B), 255}
-}
-
 func blendPixel(img *image.RGBA, x, y int, c color.RGBA, a float64) {
 	if !(image.Point{x, y}.In(img.Rect)) || a <= 0 {
 		return

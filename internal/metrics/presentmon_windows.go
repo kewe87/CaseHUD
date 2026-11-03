@@ -79,7 +79,7 @@ func (p *pmProc) ensure(stats *pmStats) {
 	procjob.Assign(cmd.Process) // dies with CaseHUD, even on a crash
 	p.running, p.state = true, "running"
 	go func() {
-		stats.consume(bufio.NewReaderSize(out, 64<<10))
+		_ = stats.consume(bufio.NewReaderSize(out, 64<<10))
 		cmd.Wait()
 		p.mu.Lock()
 		defer p.mu.Unlock()
@@ -115,7 +115,7 @@ func (l *limitWriter) Write(b []byte) (int, error) {
 			s = s[:l.n]
 		}
 		l.n -= len(s)
-		l.w.WriteString(s)
+		_, _ = l.w.WriteString(s)
 	}
 	return len(b), nil
 }

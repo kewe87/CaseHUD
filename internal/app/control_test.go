@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"image"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -129,10 +130,19 @@ func TestWidePanelDefaults(t *testing.T) {
 	if !IsWide(1920, 480) || IsWide(480, 480) || IsWide(400, 400) {
 		t.Fatal("IsWide")
 	}
-	if c := defaultConfigFor(image.Pt(1920, 480), false); c.Design != "water-wide" {
-		t.Fatalf("wide default: %q", c.Design)
+	if c := defaultConfigFor(image.Pt(1920, 480), false); len(c.Tiles) != 4 || c.Grid != "4" {
+		t.Fatalf("wide default: %+v", c)
+	} else {
+		for _, tl := range c.Tiles {
+			if strings.Contains(tl.Design, "coolant") || strings.Contains(tl.Design, "loop") || strings.Contains(tl.Design, "water") {
+				t.Errorf("wide default tile needs a coolant sensor: %q", tl.Design)
+			}
+			if _, ok := builtinDesigns()[tl.Design]; !ok {
+				t.Errorf("wide default tile design %q does not exist", tl.Design)
+			}
+		}
 	}
-	if c := defaultConfigFor(image.Pt(480, 480), false); c.Design != "water-cooling" {
+	if c := defaultConfigFor(image.Pt(480, 480), false); c.Design != "cpu-gpu" {
 		t.Fatalf("square default: %q", c.Design)
 	}
 	for set, want := range map[string]string{"clean": "water-wide", "neon": "neon-wide", "retro": "retro-wide", "cyberpunk": "cyber-wide"} {

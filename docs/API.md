@@ -549,6 +549,35 @@ alone. Switching the TL fan controller backend (`tl`), device `settings` and
 confirmations in the CaseHUD window (the disclaimer, and the lighting notice);
 without them `enabled: true` is answered with `409 ack_required`.
 
+`GET` also carries `preset` (since 1.0.3): the `id` of the preset whose effect and parameters match the current
+lighting exactly, `""` when none does. `status.lighting` carries the same `preset`.
+
+### `GET /api/v1/lighting/presets`
+
+Lighting presets (since 1.0.3): ready-made combinations of an effect and its parameters. Answers a list, each entry with
+`id`, `name` and `description` (objects keyed by language, `de`/`en`), `effect`, `params`, `palette` (up to six
+`#rrggbb` colours for a preview), `tags`, `author`, `source` and `active`. CaseHUD ships no presets: the list is
+empty until the user downloads the community library or saves one. `source` is `"library"` (from the community
+library) or `"user"` (saved by the user; their `id` starts with `my-`). `active` is true for the preset that matches the current lighting
+(at most one). Only presets for effects the GUI offers are listed.
+
+### `POST /api/v1/lighting/presets/{id}/apply`
+
+Sets the effect and parameters of the preset; devices, zones, brightness and `enabled` stay as they are. Answers
+`{"lighting": <state as GET /api/v1/lighting>, "ignored": [...]}`; `ignored` lists preset parameters the effect does not
+know (they are left out). Unknown `id`: `404 not_found`.
+
+### `POST /api/v1/lighting/presets`
+
+Saves the current effect and parameters as a preset of the user's: body `{"name": "Evening"}` (1-40 printable
+characters). Saving under the name of an existing own preset replaces it; at most 50 own presets. Answers the stored
+preset (as in the list). Bad name or too many presets: `400 bad_request`.
+
+### `DELETE /api/v1/lighting/presets/{id}`
+
+Deletes one of the user's presets (`my-…`); answers `204`. Library presets cannot be deleted
+(`400 bad_request`); unknown `id`: `404 not_found`.
+
 ### `GET /api/v1/update`
 The self-update state (since 1.0.2):
 

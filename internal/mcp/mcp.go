@@ -8,6 +8,7 @@ package mcp
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -33,6 +34,25 @@ type response struct {
 type rpcError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+}
+
+// invalidParamsError marks a tool call whose arguments could not be read; it
+// becomes a JSON-RPC invalid-params error instead of a tool result.
+type invalidParamsError struct{ err error }
+
+func (e invalidParamsError) Error() string { return "invalid params: " + e.err.Error() }
+func (e invalidParamsError) Unwrap() error { return e.err }
+
+// ParseArgs decodes the arguments of a tool call into v. An empty argument
+// object is fine; malformed ones make the call fail with invalid params.
+func ParseArgs(args json.RawMessage, v any) error {
+	if len(args) == 0 {
+		return nil
+	}
+	if err := json.Unmarshal(args, v); err != nil {
+		return invalidParamsError{err}
+	}
+	return nil
 }
 
 // Content is one item of a tool result.
@@ -99,7 +119,11 @@ func (s *Server) handle(req request) (any, *rpcError) {
 		var p struct {
 			ProtocolVersion string `json:"protocolVersion"`
 		}
-		json.Unmarshal(req.Params, &p)
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return nil, &rpcError{-32602, "invalid params: " + err.Error()}
+			}
+		}
 		v := ProtocolVersion
 		switch p.ProtocolVersion {
 		case "2024-11-05", "2025-03-26", "2025-06-18":
@@ -129,6 +153,10 @@ func (s *Server) handle(req request) (any, *rpcError) {
 					p.Arguments = json.RawMessage("{}")
 				}
 				res, err := t.Handler(p.Arguments)
+				var bad invalidParamsError
+				if errors.As(err, &bad) {
+					return nil, &rpcError{-32602, bad.Error()}
+				}
 				if err != nil {
 					log.Printf("mcp: %s: %v", p.Name, err)
 					return ToolResult{Content: []Content{{Type: "text", Text: err.Error()}}, IsError: true}, nil

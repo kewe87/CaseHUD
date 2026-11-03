@@ -49,7 +49,7 @@ func openBrowser(u string) {
 	if runtime.GOOS == "darwin" {
 		cmd = "open"
 	}
-	exec.Command(cmd, u).Start()
+	_ = exec.Command(cmd, u).Start()
 }
 
 func showError(msg string) { fmt.Fprintln(os.Stderr, "error:", msg) }

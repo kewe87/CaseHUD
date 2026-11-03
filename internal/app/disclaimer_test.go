@@ -98,7 +98,7 @@ func TestNoDeviceOutputBeforeDisclaimer(t *testing.T) {
 func TestAcceptedStartOpensDevices(t *testing.T) {
 	n := countDiscovery(t)
 	dir := t.TempDir()
-	cfg := `{"disclaimer":{"version":2,"at":"2026-01-01T00:00:00Z"},"panels":{}}`
+	cfg := `{"disclaimer":{"version":3,"at":"2026-01-01T00:00:00Z"},"panels":{}}`
 	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}

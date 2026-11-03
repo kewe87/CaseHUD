@@ -152,7 +152,7 @@ func (d *winDevice) overlapped(timeoutMS int, start func(ov *windows.Overlapped,
 	defer windows.CloseHandle(ev)
 	ov := windows.Overlapped{HEvent: ev}
 	var n uint32
-	if err := start(&ov, &n); err != nil && err != windows.ERROR_IO_PENDING {
+	if err := start(&ov, &n); err != nil && !errors.Is(err, windows.ERROR_IO_PENDING) {
 		return 0, err
 	}
 	ev2, err := windows.WaitForSingleObject(ev, uint32(timeoutMS))

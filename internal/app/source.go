@@ -222,10 +222,9 @@ type designSource struct {
 	// A field of a grid is copied into the panel frame right away, so its
 	// frames may share one buffer: out holds the HUD plus icons and only the
 	// icon squares are restored and redrawn between HUD changes.
-	reuse      bool
-	out        *image.RGBA
-	outFromHUD *image.RGBA
-	hudNew     bool
+	reuse  bool
+	out    *image.RGBA
+	hudNew bool
 }
 
 // update samples the sensors and redraws the HUD when due.

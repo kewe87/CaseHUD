@@ -52,14 +52,15 @@ bisherigen Lösungen. Mehr Designs, mehr Sensoren, volle Kontrolle für dich, oh
 - **Ohne Streit mit Herstellersoftware:** Die Displays werden angesteuert, ohne Lüfter und Pumpe anzufassen.
   Erkennt CaseHUD Programme, die dieselben Displays oder LEDs ansteuern, fragt es, ob es sie beenden
   soll (nur auf Klick, nur bekannte Programme)
-- **Start- und Ruhebild der Lüfter-LCDs:** Nach der Zustimmung zum Haftungsausschluss schreibt CaseHUD einmalig sein Logo
-  als Start- und Ruhebild in jede UNI FAN TL LCD (**dauerhaft im Display**; standardmäßig an, abschaltbar unter
+- **Start- und Ruhebild der Lüfter-LCDs und Startbild des 8.8":** Nach der Zustimmung zum Haftungsausschluss schreibt CaseHUD einmalig sein Logo
+  als Start- und Ruhebild in jede UNI FAN TL LCD und als Startbild in den Universal Screen 8.8" (**dauerhaft im Display**; standardmäßig an, abschaltbar unter
   Einstellungen → Geräte). Eine Seriennummer für Displays ohne eine vergibt CaseHUD nur, wenn du es dort einschaltest
   (standardmäßig aus); vorhandene Seriennummern werden nie geändert
 - **Beleuchtung (optional, standardmäßig aus):** Tab „Beleuchtung“ für den UNI FAN TL Controller (Lüfter-LEDs),
   ARGB-Anschlüsse und Onboard-Licht von ASUS-Mainboards, RAM-Riegel (nur über die optionale SMBus-Brücke des
   Sensor-Dienstes, `docs/SMBUS-BRIDGE.md`) und den LED-Rahmen des Universal Screen 8.8". Es wird nichts gesendet,
   bis du die Beleuchtung einschaltest; Hinweise und Risiken (Flash-Verschleiß beim Controller) stehen im Tab
+  Licht-Presets: fertige aus der Community-Library oder eigene gespeicherte, auch über die API (`docs/API.md`)
 - **Firmware-Anzeige:** Die Firmware-Versionen der Geräte werden angezeigt; eine optionale Prüfung auf neuere
   Versionen (standardmäßig aus) liest nur die Download-Seite des Herstellers. CaseHUD installiert keine Firmware
 - **Läuft im Hintergrund** mit Tray-Icon, auf Wunsch mit Windows-Autostart
@@ -325,7 +326,7 @@ power in watts, total power, VRAM and GPU hotspot – each in dark and light. Al
 optional MCP interface (both off by default).
 
 **Permanent writes to devices.** After you accept the disclaimer, CaseHUD writes its logo once into each UNI FAN TL LCD
-as start and idle image (permanent, on by default, switchable under Settings → Devices). Assigning a serial number to
+as start and idle image and into the Universal Screen 8.8" as boot picture (permanent, on by default, switchable under Settings → Devices). Assigning a serial number to
 displays without one is optional and off by default; existing serial numbers are never changed.
 
 **Lighting (optional, off by default).** The "Beleuchtung" (lighting) tab drives the UNI FAN TL controller, ARGB headers
@@ -451,7 +452,7 @@ CaseHUD installiert einen Sensor-Dienst, der mit Systemrechten läuft, und den T
 
 Beleuchtung und experimentelle Geräte sind optional und standardmäßig ausgeschaltet.
 
-CaseHUD schreibt sein Logo einmalig als Start- und Ruhebild in unterstützte Lüfter-Displays und vergibt an Displays ohne Seriennummer eine Seriennummer. Beides sind dauerhafte Schreibvorgänge auf dem Gerät; Start- und Ruhebild und Seriennummer lassen sich unter Einstellungen → Geräte abschalten.
+CaseHUD schreibt sein Logo einmalig als Startbild in unterstützte Displays (in Lüfter-Displays zusätzlich als Ruhebild) und vergibt an Displays ohne Seriennummer eine Seriennummer. Beides sind dauerhafte Schreibvorgänge auf dem Gerät; Start- und Ruhebild und Seriennummer lassen sich unter Einstellungen → Geräte abschalten.
 
 ### English
 
@@ -467,4 +468,4 @@ CaseHUD installs a sensor service that runs with system rights and the PawnIO dr
 
 Lighting and experimental devices are optional and off by default.
 
-CaseHUD writes its logo once as the start and idle image of supported fan displays and assigns a serial number to displays that have none. Both are permanent writes to the device; both can be switched off under Settings → Devices.
+CaseHUD writes its logo once as the start image of supported displays (on fan displays also as the idle image) and assigns a serial number to displays that have none. Both are permanent writes to the device; both can be switched off under Settings → Devices.

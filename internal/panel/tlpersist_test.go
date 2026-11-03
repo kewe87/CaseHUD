@@ -128,7 +128,7 @@ func TestTLStartImageBounds(t *testing.T) {
 		t.Fatal("size limits not enforced")
 	}
 	p.closed = true
-	if err := p.WriteStartImage([]byte{1}); err != ErrClosed {
+	if err := p.WriteStartImage([]byte{1}); !errors.Is(err, ErrClosed) {
 		t.Fatalf("closed panel: %v", err)
 	}
 }

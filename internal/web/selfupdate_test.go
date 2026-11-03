@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -36,30 +37,30 @@ func TestStartSelfUpdateRules(t *testing.T) {
 	s, _ := testServer(t)
 	s.Version = "1.0.2"
 	s.selfUpd.instOnce.Do(func() { s.selfUpd.inst = true })
-	if err := s.startSelfUpdate(RelaunchTray); err != errNoUpdate {
+	if err := s.startSelfUpdate(RelaunchTray); !errors.Is(err, errNoUpdate) {
 		t.Fatalf("without a known update: %v", err)
 	}
 	for _, v := range []string{"1.0.1", "1.0.2", "1.0.3-beta", "1.0.3/x"} {
 		s.update = &update.Release{Version: v}
-		if err := s.startSelfUpdate(RelaunchTray); err != errNoUpdate {
+		if err := s.startSelfUpdate(RelaunchTray); !errors.Is(err, errNoUpdate) {
 			t.Errorf("version %s: %v", v, err)
 		}
 	}
 	s.update = &update.Release{Version: "1.0.3"}
 	s.selfUpd.phase = updStarting
-	if err := s.startSelfUpdate(RelaunchTray); err != errUpdateBusy {
+	if err := s.startSelfUpdate(RelaunchTray); !errors.Is(err, errUpdateBusy) {
 		t.Fatalf("while running: %v", err)
 	}
 	s.selfUpd.phase = updError
 	s.selfUpd.lastStart = time.Now()
-	if err := s.startSelfUpdate(RelaunchTray); err != errUpdateTooSoon {
+	if err := s.startSelfUpdate(RelaunchTray); !errors.Is(err, errUpdateTooSoon) {
 		t.Fatalf("right after a start: %v", err)
 	}
 	// Not installed (portable) always wins.
 	s2, _ := testServer(t)
 	s2.Version = "1.0.2"
 	s2.update = &update.Release{Version: "1.0.3"}
-	if err := s2.startSelfUpdate(RelaunchTray); err != errNotInstallable {
+	if err := s2.startSelfUpdate(RelaunchTray); !errors.Is(err, errNotInstallable) {
 		t.Fatalf("portable: %v", err)
 	}
 }

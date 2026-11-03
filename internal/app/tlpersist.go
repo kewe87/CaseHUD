@@ -13,6 +13,7 @@ import (
 	"image/draw"
 	"image/jpeg"
 	"log"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -28,6 +29,10 @@ import (
 // write), when the stored hash of that fan is missing or differs from the hash
 // of the current image, at most once per fan and app run, never before the
 // disclaimer was accepted and never while the setting is off.
+
+// bootPendingPrefix marks a boot picture write that was started and not
+// confirmed in the BootImages record.
+const bootPendingPrefix = "pending:"
 
 const (
 	tlStartSize = 400
@@ -159,9 +164,12 @@ func (e *Engine) RewriteStartImages(confirm bool) (int, error) {
 	for _, p := range ps {
 		if _, ok := p.(panel.StartImager); ok {
 			n++
+		} else if bi, ok := p.(panel.BootImager); ok && bi.HasBootImage() {
+			n++
 		}
 	}
 	if n > 0 {
+		log.Printf("start images: rewrite requested by user (%d device(s))", n)
 		go e.writeStartImages(ps, true)
 	}
 	return n, nil
@@ -203,12 +211,16 @@ func (e *Engine) writeStartImages(ps []panel.Panel, force bool) {
 	var jpg []byte
 	var hash string
 	for _, p := range ps {
+		if e.tlp.gen.Load() != gen || e.ctx.Err() != nil {
+			return // the panels were closed meanwhile
+		}
+		if bi, ok := p.(panel.BootImager); ok {
+			e.writeBootImage(bi, force)
+			continue
+		}
 		si, ok := p.(panel.StartImager)
 		if !ok {
 			continue
-		}
-		if e.tlp.gen.Load() != gen || e.ctx.Err() != nil {
-			return // the panels were closed meanwhile
 		}
 		key := si.SettingsKey()
 		if key == "" {
@@ -233,22 +245,72 @@ func (e *Engine) writeStartImages(ps []panel.Panel, force bool) {
 
 // writeOne writes one picture to one fan unless the record or the once-per-run
 // rule says it is done. kind "" is the start image (tl_start_images), "rest"
-// the stored picture shown when CaseHUD is not running (tl_rest_images).
+// the stored picture shown when CaseHUD is not running (tl_rest_images),
+// "boot" the boot picture of the 8.8" bar (boot_images).
 func (e *Engine) writeOne(p panel.Panel, key, hash string, jpg []byte, force bool, what, kind string, write func([]byte) error) {
 	triedKey := kind + "|" + key
 	e.mu.Lock()
 	have := e.cfg.TLStartImages[key]
-	if kind == "rest" {
+	switch kind {
+	case "rest":
 		have = e.cfg.TLRestImages[key]
+	case "boot":
+		have = e.cfg.BootImages[key]
 	}
 	e.mu.Unlock()
 	e.tlp.mu.Lock()
 	tried := e.tlp.tried[triedKey]
 	e.tlp.mu.Unlock()
-	if !force && (tried || have == hash) {
+	// A forced rewrite still skips a boot picture that is on record: the
+	// 8.8" write is permanent and only worth repeating for a changed picture.
+	if have == hash && (!force || kind == "boot") || !force && tried {
 		return
 	}
+	if kind == "boot" {
+		// A boot write that did not finish may have left the device hanging,
+		// and there is no way back. A pending marker (of any picture) stops
+		// the automatic path until the user rewrites explicitly (force) or a
+		// write succeeds; it is stored before the write so a crash or power
+		// loss mid-write is covered too.
+		if strings.HasPrefix(have, bootPendingPrefix) && !force {
+			log.Printf("warning: %s on %s: an earlier write did not finish (record %q); not writing again automatically, use the rewrite button after switching the display off and on", what, p.Name(), have)
+			e.tlp.mu.Lock()
+			if e.tlp.tried == nil {
+				e.tlp.tried = map[string]bool{}
+			}
+			e.tlp.tried[triedKey] = true // log once per run
+			e.tlp.mu.Unlock()
+			return
+		}
+		e.mu.Lock()
+		if e.cfg.BootImages == nil {
+			e.cfg.BootImages = map[string]string{}
+		}
+		e.cfg.BootImages[key] = bootPendingPrefix + hash
+		e.mu.Unlock()
+		if err := e.persist(); err != nil {
+			// Without the marker on disk the write must not go out.
+			log.Printf("%s on %s: not written, could not record it first: %v", what, p.Name(), err)
+			return
+		}
+	}
 	err := write(jpg)
+	if kind == "boot" && errors.Is(err, panel.ErrClosed) {
+		// Nothing was sent: take the marker back.
+		e.mu.Lock()
+		if e.cfg.BootImages[key] == bootPendingPrefix+hash {
+			if have == "" {
+				delete(e.cfg.BootImages, key)
+			} else {
+				e.cfg.BootImages[key] = have
+			}
+		}
+		e.mu.Unlock()
+		if perr := e.persist(); perr != nil {
+			log.Println(what+" record:", perr)
+		}
+		return
+	}
 	if errors.Is(err, panel.ErrClosed) {
 		return // nothing reached the fan; the next scan tries again
 	}
@@ -269,12 +331,18 @@ func (e *Engine) writeOne(p panel.Panel, key, hash string, jpg []byte, force boo
 		log.Printf("%s written to %s", what, p.Name())
 	}
 	e.mu.Lock()
-	if kind == "rest" {
+	switch kind {
+	case "rest":
 		if e.cfg.TLRestImages == nil {
 			e.cfg.TLRestImages = map[string]string{}
 		}
 		e.cfg.TLRestImages[key] = hash
-	} else {
+	case "boot":
+		if e.cfg.BootImages == nil {
+			e.cfg.BootImages = map[string]string{}
+		}
+		e.cfg.BootImages[key] = hash
+	default:
 		if e.cfg.TLStartImages == nil {
 			e.cfg.TLStartImages = map[string]string{}
 		}

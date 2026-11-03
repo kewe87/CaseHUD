@@ -411,7 +411,3 @@ func tileDesignOrder() []string {
 	}
 	return ids
 }
-
-// ringLabel is the label inside a ring. Labels are the same in every style;
-// long ones shrink to fit when drawn.
-func (r tileReading) ringLabel() string { return r.label }

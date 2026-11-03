@@ -2,7 +2,7 @@ package panel
 
 import (
 	"crypto/cipher"
-	"crypto/des"
+	"crypto/des" //nolint:gosec // device wire format, not a security choice
 	"encoding/binary"
 	"time"
 )
@@ -65,8 +65,8 @@ func (c usCommand) sealSL() []byte {
 	for i := usPlainLen; i < usBlockLen; i++ {
 		plain[i] = 8
 	}
-	blk, _ := des.NewCipher(usKey)
-	cipher.NewCBCEncrypter(blk, usKey).CryptBlocks(plain, plain)
+	blk, _ := des.NewCipher(usKey)                               //nolint:gosec // device wire format, not a security choice
+	cipher.NewCBCEncrypter(blk, usKey).CryptBlocks(plain, plain) //nolint:gosec // fixed IV is part of the device protocol
 	return plain
 }
 
@@ -87,8 +87,8 @@ func (c usCommand) seal() []byte {
 	for i := usPlainLen - 4; i < usPlainLen; i++ {
 		plain[i] = 4
 	}
-	blk, _ := des.NewCipher(usKey)
-	cipher.NewCBCEncrypter(blk, usKey).CryptBlocks(plain, plain)
+	blk, _ := des.NewCipher(usKey)                               //nolint:gosec // device wire format, not a security choice
+	cipher.NewCBCEncrypter(blk, usKey).CryptBlocks(plain, plain) //nolint:gosec // fixed IV is part of the device protocol
 	out := make([]byte, usBlockLen)
 	copy(out, plain)
 	out[510], out[511] = 0xA1, 0x1A

@@ -371,7 +371,7 @@ func (e *Engine) removeAwtrix(ctx context.Context, keep map[string]AwtrixDevice)
 	}
 	e.aw.mu.Unlock()
 	for _, j := range jobs {
-		awtrix.New(j.to.host).Remove(ctx, awtrixAppName(j.app), j.to.fw)
+		_ = awtrix.New(j.to.host).Remove(ctx, awtrixAppName(j.app), j.to.fw)
 		e.aw.mu.Lock()
 		delete(e.aw.pushed[j.dev], j.app)
 		if len(e.aw.pushed[j.dev]) == 0 {

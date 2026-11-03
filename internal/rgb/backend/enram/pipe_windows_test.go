@@ -1,6 +1,7 @@
 package enram
 
 import (
+	"errors"
 	"testing"
 
 	"golang.org/x/sys/windows"
@@ -39,7 +40,7 @@ func TestVerifyServerRejectsUserOwnedPipe(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer f.Close()
-	if err := verifyServer(f); err != ErrUntrusted {
+	if err := verifyServer(f); !errors.Is(err, ErrUntrusted) {
 		// Elevated runs create Administrators-owned pipes, which are accepted.
 		if err == nil && windows.GetCurrentProcessToken().IsElevated() {
 			t.Skip("test runs elevated: owner is Administrators")

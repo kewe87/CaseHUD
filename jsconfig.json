@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "checkJs": true,
+    "allowJs": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "files": [
+    "internal/web/static/i18n.js",
+    "internal/web/static/app.js",
+    "internal/web/static/disclaimer.js",
+    "internal/web/static/lighting.js",
+    "internal/web/static/devices.js",
+    "internal/web/static/tlstart.js",
+    "internal/web/static/conflicts.js"
+  ]
+}

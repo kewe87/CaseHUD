@@ -110,15 +110,9 @@ func (s *Server) clientTok() string {
 	return s.clientToken
 }
 
-// clientOK compares a presented token with the client token; false while the
-// API is off (the token is then empty).
-func (s *Server) clientOK(tok string) bool {
-	_, ok := s.clientAuth(tok)
-	return ok
-}
-
-// clientAuth is clientOK that also returns a channel which is closed when
-// this token is revoked (API switched off), so long requests can end.
+// clientAuth compares a presented token with the client token; false while
+// the API is off (the token is then empty). It also returns a channel which is
+// closed when this token is revoked (API switched off), so long requests can end.
 func (s *Server) clientAuth(tok string) (<-chan struct{}, bool) {
 	s.apiMu.RLock()
 	defer s.apiMu.RUnlock()

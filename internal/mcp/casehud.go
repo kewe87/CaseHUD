@@ -47,7 +47,7 @@ func (a *API) call(method, path string, body any, out any) ([]byte, error) {
 	}
 	resp, err := a.HTTP.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("CaseHUD is not reachable, is it running? (%v)", err)
+		return nil, fmt.Errorf("CaseHUD is not reachable, is it running? (%w)", err)
 	}
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
@@ -131,7 +131,9 @@ func NewCaseHUD(api *API, version string) *Server {
 			InputSchema: schema(map[string]any{"filter": str("Optional case-insensitive text to filter paths, e.g. \"temperature\" or \"gpu\".")}),
 			Handler: func(args json.RawMessage) (ToolResult, error) {
 				var p struct{ Filter string }
-				json.Unmarshal(args, &p)
+				if err := ParseArgs(args, &p); err != nil {
+					return ToolResult{}, err
+				}
 				if _, err := api.state(); err != nil {
 					return ToolResult{}, err
 				}
@@ -174,7 +176,9 @@ func NewCaseHUD(api *API, version string) *Server {
 			InputSchema: schema(map[string]any{"id": str("Design id from list_designs.")}, "id"),
 			Handler: func(args json.RawMessage) (ToolResult, error) {
 				var p struct{ ID string }
-				json.Unmarshal(args, &p)
+				if err := ParseArgs(args, &p); err != nil {
+					return ToolResult{}, err
+				}
 				if _, err := api.state(); err != nil {
 					return ToolResult{}, err
 				}
@@ -197,7 +201,9 @@ func NewCaseHUD(api *API, version string) *Server {
 					Design json.RawMessage
 					Theme  string
 				}
-				json.Unmarshal(args, &p)
+				if err := ParseArgs(args, &p); err != nil {
+					return ToolResult{}, err
+				}
 				if _, err := api.state(); err != nil {
 					return ToolResult{}, err
 				}
@@ -224,7 +230,9 @@ func NewCaseHUD(api *API, version string) *Server {
 					ID     string
 					Design json.RawMessage
 				}
-				json.Unmarshal(args, &p)
+				if err := ParseArgs(args, &p); err != nil {
+					return ToolResult{}, err
+				}
 				if _, err := api.state(); err != nil {
 					return ToolResult{}, err
 				}
@@ -248,7 +256,9 @@ func NewCaseHUD(api *API, version string) *Server {
 					DesignID  string `json:"design_id"`
 					Theme     string `json:"theme"`
 				}
-				json.Unmarshal(args, &p)
+				if err := ParseArgs(args, &p); err != nil {
+					return ToolResult{}, err
+				}
 				st, err := api.state()
 				if err != nil {
 					return ToolResult{}, err
@@ -258,7 +268,11 @@ func NewCaseHUD(api *API, version string) *Server {
 						continue
 					}
 					var cfg map[string]any
-					json.Unmarshal(ps.Config, &cfg)
+					if len(ps.Config) > 0 {
+						if err := json.Unmarshal(ps.Config, &cfg); err != nil {
+							return ToolResult{}, fmt.Errorf("the config of %s is not readable: %w", ps.Name, err)
+						}
+					}
 					if cfg == nil {
 						cfg = map[string]any{}
 					}

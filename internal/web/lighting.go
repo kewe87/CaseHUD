@@ -45,6 +45,12 @@ func (s *Server) lightingRoutes(api *http.ServeMux) {
 func (s *Server) lightingRoutesV1(m *http.ServeMux) {
 	m.HandleFunc("GET /api/v1/lighting", s.lightingGet)
 	m.HandleFunc("PATCH /api/v1/lighting", s.lightingPatchV1)
+	m.HandleFunc("GET /api/v1/lighting/presets", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, s.Engine.LightingPresetList())
+	})
+	m.HandleFunc("POST /api/v1/lighting/presets", s.lightingPresetSave)
+	m.HandleFunc("POST /api/v1/lighting/presets/{id}/apply", s.libraryApplyPreset)
+	m.HandleFunc("DELETE /api/v1/lighting/presets/{id}", s.lightingPresetDelete)
 }
 
 // lightingFail answers in the format of the path: the v1 error object under
@@ -56,6 +62,9 @@ func lightingFail(w http.ResponseWriter, r *http.Request, err error) {
 	}
 	if errors.Is(err, app.ErrAckRequired) {
 		status, code = http.StatusConflict, "ack_required"
+	}
+	if errors.Is(err, app.ErrPresetNotFound) {
+		status, code = http.StatusNotFound, "not_found"
 	}
 	if len(r.URL.Path) > 8 && r.URL.Path[:8] == "/api/v1/" {
 		if status == http.StatusInternalServerError {

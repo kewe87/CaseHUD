@@ -354,7 +354,7 @@ func (e *Engine) rotate(now time.Time) {
 		if target != nil {
 			for i, id := range order {
 				if c, ok := target.Panels[id]; ok {
-					changes = append(changes, change{e.workers[id], c, delayFor(i)})
+					changes = append(changes, change{e.workers[id], e.mounted(id, c), delayFor(i)})
 				}
 			}
 			e.rot.shown, e.rot.transient = target.Name, ""
@@ -395,6 +395,16 @@ func (e *Engine) rotate(now time.Time) {
 	for _, ch := range changes {
 		ch.w.switchTo(ch.c, effect, ch.delay)
 	}
+}
+
+// mounted returns c with the panel's own rotation. The rotation says how the
+// display is built in (it is sent to the device and decides the canvas size),
+// so a scene never changes it, whatever it was saved with. e.mu is held.
+func (e *Engine) mounted(id string, c PanelConfig) PanelConfig {
+	if live, ok := e.cfg.Panels[id]; ok {
+		c.Rotation = live.Rotation
+	}
+	return c
 }
 
 // validBackground reports whether bg names an effect or a media file.

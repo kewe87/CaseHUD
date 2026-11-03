@@ -377,7 +377,7 @@ func (l *Library) Refresh(ctx context.Context) (Summary, error) {
 		return Summary{}, firstErr
 	}
 	if b, err := json.Marshal(map[string]any{"updated": time.Now().UTC().Format(time.RFC3339)}); err == nil {
-		writeAtomic(filepath.Join(l.Dir, "meta.json"), b)
+		_ = writeAtomic(filepath.Join(l.Dir, "meta.json"), b)
 	}
 	s := l.status()
 	s.Warnings = warns

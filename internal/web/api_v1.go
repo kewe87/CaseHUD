@@ -368,8 +368,9 @@ type v1Status struct {
 		Devices []v1AwtrixInfo `json:"devices"`
 	} `json:"awtrix"`
 	Lighting struct {
-		Enabled bool `json:"enabled"`
-		Active  bool `json:"active"`
+		Enabled bool   `json:"enabled"`
+		Active  bool   `json:"active"`
+		Preset  string `json:"preset"` // ID of the matching lighting preset, "" when none
 	} `json:"lighting"`
 	// Conflicts names the programs of a fixed list that run and may use the
 	// same devices (image names only; closing them is GUI-only).
@@ -425,6 +426,7 @@ func (s *Server) v1Status() v1Status {
 	}
 	lb := e.LightingBrief()
 	st.Lighting.Enabled, st.Lighting.Active = lb.Enabled, lb.Active
+	st.Lighting.Preset = e.ActiveLightingPreset()
 	st.Conflicts = e.ConflictsRunning()
 	st.Panels = s.v1Panels()
 	return st

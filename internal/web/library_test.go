@@ -50,7 +50,7 @@ func TestLibraryOfflineKeepsWorking(t *testing.T) {
 	}
 	r2 := guiReq(t, ts, "POST", ts.URL+"/api/library/presets/nope/apply", "secret")
 	r2.Body.Close()
-	if r2.StatusCode != http.StatusBadRequest {
+	if r2.StatusCode != http.StatusNotFound {
 		t.Fatalf("unknown preset: %d", r2.StatusCode)
 	}
 }

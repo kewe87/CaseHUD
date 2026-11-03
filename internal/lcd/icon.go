@@ -36,16 +36,15 @@ const IconFrameInterval = 40 * time.Millisecond
 
 // iconState is the per-widget animation state.
 type iconState struct {
-	started  bool
-	last     time.Time
-	readAt   time.Time
-	val      float64
-	ok       bool
-	lvl      float64 // smoothed reading 0..1
-	phase    float64 // cycles, kept in [0,1)
-	buf      []uint8
-	t0       time.Time
-	staticAt float64
+	started bool
+	last    time.Time
+	readAt  time.Time
+	val     float64
+	ok      bool
+	lvl     float64 // smoothed reading 0..1
+	phase   float64 // cycles, kept in [0,1)
+	buf     []uint8
+	t0      time.Time
 }
 
 // HasIcons reports whether the layout has icon widgets.

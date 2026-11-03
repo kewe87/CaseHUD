@@ -121,7 +121,7 @@ func (e *Engine) startLighting() {
 	l.mu.Lock()
 	l.cfg = leds.DefaultConfig()
 	if lc.Engine != nil {
-		c, err := cleanLightingConfig(*lc.Engine, nil)
+		c, err := cleanLightingConfig(degradeUnknownParts(*lc.Engine), nil)
 		if err != nil {
 			log.Printf("lighting: stored configuration ignored: %v", err)
 			e.keepBadLightingConfig(*lc.Engine)
@@ -477,6 +477,9 @@ type LightingView struct {
 	Error      string      `json:"error,omitempty"`
 	Brightness int         `json:"brightness"`
 	Effect     string      `json:"effect"`
+	// Preset is the ID of the preset the current effect and parameters match
+	// ("" when none does; filled by Lighting only).
+	Preset string `json:"preset"`
 	// Shutdown: what happens to the LEDs on exit: "off", "keep", "device"
 	// ("color" when an older configuration holds a fixed colour).
 	Shutdown    string               `json:"shutdown"`
@@ -534,8 +537,10 @@ func (e *Engine) Lighting() LightingView {
 	enabled, tl := e.lightingFlags()
 	l := &e.light
 	l.mu.Lock()
-	defer l.mu.Unlock()
-	return e.lightingViewLocked(enabled, tl)
+	v := e.lightingViewLocked(enabled, tl)
+	l.mu.Unlock()
+	v.Preset = e.ActiveLightingPreset()
+	return v
 }
 
 func (e *Engine) lightingViewLocked(enabled, tl bool) LightingView {
@@ -857,6 +862,9 @@ func (e *Engine) PatchLighting(p LightingPatch) (LightingView, error) {
 			l.lifeMu.Unlock()
 		} else {
 			l.lifeMu.RUnlock()
+		}
+		if err == nil {
+			v.Preset = e.ActiveLightingPreset() // after the locks: it reads the config again
 		}
 		return v, err
 	}
@@ -1353,14 +1361,13 @@ func readTopology(tap *tlTap, query func(context.Context) ([]lianlitl.Topology, 
 			return nil, err
 		}
 	}
-	for _, t := range topos {
-		for _, f := range t.Fans {
+	if len(topos) > 0 { // one controller
+		for _, f := range topos[0].Fans {
 			if len(fans) >= maxKnownFans {
 				break
 			}
 			fans = append(fans, FanPos{Port: f.Port, Index: f.Index - 1, HasLCD: f.LCD})
 		}
-		break // one controller
 	}
 	return fans, nil
 }

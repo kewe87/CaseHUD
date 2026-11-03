@@ -181,7 +181,9 @@ func Parse(b []byte) (lcd.Layout, error) {
 		return l, fmt.Errorf("a design needs 1-%d widgets", maxWidgets)
 	}
 	var raw map[string]json.RawMessage
-	json.Unmarshal(b, &raw)
+	// b was just decoded into a Layout, so it is a valid JSON object and this
+	// cannot fail; raw only tells whether "panel" was present.
+	_ = json.Unmarshal(b, &raw)
 	if _, ok := raw["panel"]; !ok && l.Round {
 		l.Panel = "" // tiles get clipped on round screens, like the built-ins
 	}

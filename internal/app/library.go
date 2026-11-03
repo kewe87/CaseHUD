@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -81,6 +80,7 @@ func (e *Engine) RefreshLibrary(ctx context.Context) (community.Summary, error) 
 	if err != nil {
 		return community.Summary{}, err
 	}
+	defer e.invalidatePresets() // presets may have changed, even after a partial refresh
 	s, err := lib.Refresh(ctx)
 	if err != nil {
 		return lib.Status(), err
@@ -96,63 +96,4 @@ func (e *Engine) LibraryStatus() community.Summary {
 		return community.Summary{}
 	}
 	return lib.Status()
-}
-
-// LightingPresets lists the cached lighting presets that this build can run
-// (no network).
-func (e *Engine) LightingPresets() []community.Preset {
-	lib, err := e.Library()
-	if err != nil {
-		return []community.Preset{}
-	}
-	out := []community.Preset{}
-	for _, p := range lib.Presets() {
-		if _, ok := lightingEffect(p.Effect); ok && lightingIsFeatured(p.Effect) {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
-// ApplyLightingPreset sets the effect and its parameters from a cached
-// preset. Parameters the preset does not name get their defaults; names the
-// effect does not know are dropped (and returned). The result goes through
-// the same validation as every other change.
-func (e *Engine) ApplyLightingPreset(id string) (LightingView, []string, error) {
-	lib, err := e.Library()
-	if err != nil {
-		return LightingView{}, nil, lightErr("library not available")
-	}
-	p, ok := lib.PresetByID(id)
-	if !ok {
-		return LightingView{}, nil, lightErr("preset %q not found", id)
-	}
-	info, ok := lightingEffect(p.Effect)
-	if !ok {
-		return LightingView{}, nil, lightErr("preset %q needs the effect %q, which this version does not have", id, p.Effect)
-	}
-	params := map[string]any{}
-	for _, d := range info.Params {
-		params[d.Key] = d.Default
-	}
-	var dropped []string
-	known := map[string]bool{}
-	for _, d := range info.Params {
-		known[d.Key] = true
-	}
-	for k, v := range p.Params {
-		if !known[k] {
-			dropped = append(dropped, k)
-			continue
-		}
-		params[k] = v
-	}
-	if len(dropped) > 0 {
-		log.Printf("library: preset %s: parameters not supported by %s: %v", id, p.Effect, dropped)
-	}
-	v, err := e.PatchLighting(LightingPatch{Effect: &p.Effect, Params: params})
-	if err != nil {
-		return LightingView{}, dropped, fmt.Errorf("preset %q: %w", id, err)
-	}
-	return v, dropped, nil
 }

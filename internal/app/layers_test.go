@@ -259,10 +259,9 @@ func TestVideoOnTheDisplayMediaMode(t *testing.T) {
 	}
 	// rotated 180: another orientation, another file (not ready: the clip is decoded instead)
 	f.turn[180] = 3
-	if _, err := w.newSource(PanelConfig{Mode: "media", Media: "clip.mp4", Rotation: 180}); err == nil {
-		// the video is not seeded for this orientation; building the source starts an
-		// encode that fails (no ffmpeg here) or finds nothing to decode: both fine
-	}
+	// the video is not seeded for this orientation; building the source starts an
+	// encode that fails (no ffmpeg here) or finds nothing to decode: both fine
+	_, _ = w.newSource(PanelConfig{Mode: "media", Media: "clip.mp4", Rotation: 180})
 	// the option off: the clip path as before
 	w.e.mu.Lock()
 	w.e.cfg.NoDeviceVideo = true
@@ -438,6 +437,11 @@ func TestSettingsDeviceVideo(t *testing.T) {
 func TestWorkerLoopUsesLayersAndFallsBackForTransitions(t *testing.T) {
 	f := newLayerFake()
 	w := newLayerWorker(t, f)
+	// A transition that cannot run out by itself: with the real 600 ms a slow
+	// worker (-race, busy CI; blending 1920x480 takes a while) can finish it
+	// after fewer than 3 pictures. The test ends it once it has seen enough.
+	setTransDur := func(d time.Duration) { w.mu.Lock(); w.transDur = d; w.mu.Unlock() }
+	setTransDur(time.Hour)
 	id := plainDesign(t, w, false)
 	w.e.mu.Lock()
 	w.e.cfg.Panels["us88-0"] = PanelConfig{Mode: "design", Design: id, Brightness: 50}
@@ -449,7 +453,7 @@ func TestWorkerLoopUsesLayersAndFallsBackForTransitions(t *testing.T) {
 	count := func() (int, int) { f.mu.Lock(); defer f.mu.Unlock(); return f.layers, f.images }
 	waitCount := func(what string, ok func(l, i int) bool) {
 		t.Helper()
-		for i := 0; i < 1500; i++ { // up to 15 s: slow CI machines with -race
+		for i := 0; i < 4500; i++ { // up to 45 s: slow CI machines with -race
 			if l, im := count(); ok(l, im) {
 				return
 			}
@@ -466,5 +470,6 @@ func TestWorkerLoopUsesLayersAndFallsBackForTransitions(t *testing.T) {
 	l0, _ := count()
 	w.switchTo(PanelConfig{Mode: "design", Design: id, Brightness: 50, Theme: "light"}, "fade", 0)
 	waitCount("transition pictures", func(l, i int) bool { return i >= 3 })
+	setTransDur(time.Millisecond) // the next frame finishes the transition
 	waitCount("layers after the transition", func(l, i int) bool { return l > l0 })
 }

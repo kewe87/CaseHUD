@@ -68,7 +68,7 @@ func main() {
 		fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(store.Dir, "config.json")); err == nil {
-		web.RestrictFile(filepath.Join(store.Dir, "config.json"))
+		_ = web.RestrictFile(filepath.Join(store.Dir, "config.json"))
 	}
 
 	// Single instance: if one is running, ask it to show its window.
@@ -167,7 +167,7 @@ func writeRestricted(path, content string) {
 	if err := web.RestrictFile(path); err != nil {
 		log.Println("restrict", filepath.Base(path)+":", err)
 	}
-	os.WriteFile(path, []byte(content), 0o600)
+	_ = os.WriteFile(path, []byte(content), 0o600)
 }
 
 // showExisting pings a running instance; true if it answered.

@@ -99,18 +99,6 @@ func (s tileStyle) ringIconAt(r tileReading, target string) []lcd.Widget {
 	return nil
 }
 
-// mainIcon is the inline icon in front of the big number of r.
-func (s tileStyle) mainIcon(r tileReading) []lcd.Widget {
-	if sp, ok := iconSpecFor(r); ok {
-		target := "main"
-		if r.src == srcCoolant {
-			target = "label" // the temperature is not what the pump icon shows
-		}
-		return []lcd.Widget{s.inlineIcon(sp, target, 0)}
-	}
-	return nil
-}
-
 // wideRowIcons are the icons of the four squares of the wide bar designs
 // (CPU and GPU temperature, pump, system power).
 var wideRowIcons = [4]iconSpec{

@@ -34,7 +34,6 @@ var (
 	stCoolant  = rd("COOLANT", "water", srcCoolant, "°", 1, 20, 45, 38, 42)
 	stPump     = rd("PUMP RPM", "accent", srcPump, "none", 0, 0, 3500, 0, 0)
 	stRAMUsed  = auto(rd("RAM USED", "mem", srcRAMUsed, "GB", 0, 0, 64, 0, 0))
-	stRAMLoad  = rd("RAM LOAD", "mem", srcRAMLoad, "%", 0, 0, 100, 85, 95)
 )
 
 // comboDef describes a combined design: stats[0] is the main reading.
@@ -82,19 +81,6 @@ func comboDefs() []comboDef {
 		{id: "system", name: "System power", layout: "stack", stats: []tileReading{sysPower, gpuW, cpuW}},
 		{id: "fps-graph", name: "FPS + frametime graph", layout: "fps", stats: []tileReading{fps, frameG}},
 	}
-}
-
-// comboIDs lists the ids of the combined designs with the given layouts.
-func comboIDs(layouts ...string) []string {
-	var ids []string
-	for _, d := range comboDefs() {
-		for _, l := range layouts {
-			if d.layout == l {
-				ids = append(ids, d.id)
-			}
-		}
-	}
-	return ids
 }
 
 func comboID(s tileStyle, d comboDef) string {

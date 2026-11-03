@@ -1,8 +1,6 @@
 package app
 
 import (
-	_ "embed"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -21,8 +19,10 @@ const (
 	maxChainParts      = 16
 )
 
-//go:embed lighting_templates.json
-var lightingTemplatesJSON []byte
+// lightingTemplates are ready-made setups for known hardware. None ship with
+// the program (setups are personal and belong to the community library); the
+// GUI shows no template offer while the list is empty.
+var lightingTemplates []LightingTemplate
 
 // textMap holds a text per language ("de", "en").
 type textMap map[string]string
@@ -50,16 +50,7 @@ type LightingTemplate struct {
 	TLSync string `json:"tlSync,omitempty"`
 }
 
-func loadLightingTemplates() []LightingTemplate {
-	var f struct {
-		Version   int                `json:"version"`
-		Templates []LightingTemplate `json:"templates"`
-	}
-	if json.Unmarshal(lightingTemplatesJSON, &f) != nil || f.Version != 1 {
-		return nil
-	}
-	return f.Templates
-}
+func loadLightingTemplates() []LightingTemplate { return lightingTemplates }
 
 // ---------- LED count: set / chain ----------
 

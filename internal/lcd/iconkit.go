@@ -56,7 +56,6 @@ type iconCtx struct {
 	alphaMul float64
 	dx, dy   float64 // offset of the current pass
 	ox, oy   float64 // where the drawing starts inside the canvas (room for halos)
-	curCol   *color.RGBA
 }
 
 func (c *iconCtx) glowR() float64 { return max(1.5, c.nf*0.04) }

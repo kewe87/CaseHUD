@@ -1,6 +1,7 @@
 package hid
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -128,7 +129,7 @@ func Open(info DeviceInfo) (*Device, error) {
 	}
 	h, err := windows.CreateFile(p, windows.GENERIC_READ|windows.GENERIC_WRITE,
 		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_OVERLAPPED, 0)
-	if err == windows.ERROR_ACCESS_DENIED {
+	if errors.Is(err, windows.ERROR_ACCESS_DENIED) {
 		h, err = windows.CreateFile(p, 0,
 			windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_OVERLAPPED, 0)
 	}
@@ -184,7 +185,7 @@ func (d *Device) trace(dir string, data []byte, err error) {
 	}
 	src := fmt.Sprintf("hid %04x:%04x/%d", d.Info.VendorID, d.Info.ProductID, d.Info.Interface)
 	if err != nil {
-		if err != ErrTimeout || dir == "out" { // read timeouts are normal polling
+		if !errors.Is(err, ErrTimeout) || dir == "out" { // read timeouts are normal polling
 			diag.Error(src, fmt.Errorf("%s: %w", dir, err))
 		}
 		return
@@ -226,7 +227,7 @@ func (d *Device) ioRead(buf []byte, timeout time.Duration) (int, error) {
 }
 
 func (d *Device) finish(err error, ov *windows.Overlapped, done *uint32, timeout time.Duration) error {
-	if err != nil && err != windows.ERROR_IO_PENDING {
+	if err != nil && !errors.Is(err, windows.ERROR_IO_PENDING) {
 		return err
 	}
 	ev, _ := windows.WaitForSingleObject(ov.HEvent, uint32(timeout.Milliseconds()))

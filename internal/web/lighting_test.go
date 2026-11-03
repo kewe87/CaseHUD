@@ -141,3 +141,54 @@ func TestZoneSetupRoutesAreGUIOnly(t *testing.T) {
 		t.Fatalf("label missing: %+v", v.Devices)
 	}
 }
+
+func TestV1LightingPresets(t *testing.T) {
+	_, ts := testServer(t)
+	type preset struct {
+		ID      string            `json:"id"`
+		Name    map[string]string `json:"name"`
+		Effect  string            `json:"effect"`
+		Palette []string          `json:"palette"`
+		Source  string            `json:"source"`
+		Active  bool              `json:"active"`
+	}
+	var list []preset
+	wantStatus(t, v1(t, ts, "GET", "/api/v1/lighting/presets", "", &list), 200)
+	if list == nil || len(list) != 0 {
+		t.Fatalf("a fresh install must list no presets: %+v", list)
+	}
+	wantError(t, v1(t, ts, "POST", "/api/v1/lighting/presets/nope/apply", "", nil), 404, "not_found")
+
+	wantStatus(t, v1(t, ts, "PATCH", "/api/v1/lighting", `{"effect":"rainbow"}`, nil), 200)
+	var own preset
+	wantStatus(t, v1(t, ts, "POST", "/api/v1/lighting/presets", `{"name":"Couch"}`, &own), 200)
+	if own.ID != "my-couch" || own.Source != "user" || !own.Active || own.Effect != "rainbow" || own.Name["de"] != "Couch" {
+		t.Fatalf("saved: %+v", own)
+	}
+	wantStatus(t, v1(t, ts, "PATCH", "/api/v1/lighting", `{"effect":"solid"}`, nil), 200)
+	var applied struct {
+		Lighting struct {
+			Effect string `json:"effect"`
+			Preset string `json:"preset"`
+		} `json:"lighting"`
+		Ignored []string `json:"ignored"`
+	}
+	wantStatus(t, v1(t, ts, "POST", "/api/v1/lighting/presets/my-couch/apply", "", &applied), 200)
+	if applied.Lighting.Effect != "rainbow" || applied.Lighting.Preset != "my-couch" || applied.Ignored == nil {
+		t.Fatalf("apply: %+v", applied)
+	}
+	var st struct {
+		Lighting struct {
+			Preset string `json:"preset"`
+		} `json:"lighting"`
+	}
+	wantStatus(t, v1(t, ts, "GET", "/api/v1/status", "", &st), 200)
+	if st.Lighting.Preset != "my-couch" {
+		t.Fatalf("status preset %q", st.Lighting.Preset)
+	}
+	wantError(t, v1(t, ts, "POST", "/api/v1/lighting/presets", `{"name":""}`, nil), 400, "bad_request")
+	wantError(t, v1(t, ts, "POST", "/api/v1/lighting/presets", `{"name":"x","bogus":1}`, nil), 400, "bad_request")
+	wantError(t, v1(t, ts, "DELETE", "/api/v1/lighting/presets/rainbow-slow", "", nil), 400, "bad_request")
+	wantStatus(t, v1(t, ts, "DELETE", "/api/v1/lighting/presets/my-couch", "", nil), http.StatusNoContent)
+	wantError(t, v1(t, ts, "DELETE", "/api/v1/lighting/presets/my-couch", "", nil), 404, "not_found")
+}

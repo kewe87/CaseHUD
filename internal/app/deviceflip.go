@@ -62,7 +62,7 @@ func (e *Engine) applyDeviceFlip(panels []panel.Panel) {
 		on := e.cfg.DeviceFlip[p.ID()]
 		e.mu.Unlock()
 		if on {
-			f.SetDeviceFlip(true)
+			_ = f.SetDeviceFlip(true)
 		}
 	}
 }

@@ -218,7 +218,7 @@ func (c *Client) UploadIcons(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		fw.Write(IconGIF(id, 8))
+		_, _ = fw.Write(IconGIF(id, 8))
 		mw.Close()
 		if _, err := c.do(ctx, http.MethodPost, "/edit", nil, body.Bytes(), mw.FormDataContentType()); err != nil {
 			return err

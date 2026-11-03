@@ -420,7 +420,7 @@ func syncSegments(fans int) []leds.Segment {
 	w := min(0.18, slot*0.95)
 	h := min(0.28, w*float64(leds.CanvasWidth)/float64(leds.CanvasHeight))
 	for i := 0; i < fans; i++ {
-		segs = append(segs, leds.Segment{Name: fmt.Sprintf("TL-Lüfter %d", i+1), Shape: "component", Component: "fan-tl-26",
+		segs = append(segs, leds.Segment{Name: fmt.Sprintf("TL fan %d", i+1), Shape: "component", Component: "fan-tl-26",
 			Count: 26, X: 0.05 + float64(i)*slot + (slot-w)/2, Y: 0.36, W: w, H: h})
 	}
 	return segs

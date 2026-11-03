@@ -225,6 +225,10 @@
         <summary><span class="presets-title" data-i18n="light.presets"></span><small id="light-presets-count"></small></summary>
         <p class="sub" data-i18n="light.presets.sub"></p>
         <div id="light-presets-list" class="presets-list"></div>
+        <form class="presets-save" id="light-preset-save">
+          <input id="light-preset-name" type="text" maxlength="40" autocomplete="off" data-i18n-placeholder="light.preset.name" data-i18n-aria="light.preset.name">
+          <button type="submit" class="ghost" id="light-preset-save-btn" data-i18n="light.preset.save"></button>
+        </form>
         <div class="presets-foot">
           <button id="light-lib-refresh" class="ghost" data-i18n="light.lib.refresh"></button>
           <small id="light-lib-status" class="sub" role="status"></small>
@@ -474,6 +478,7 @@
     <div class="field" id="dr-theme-field">
       <span data-i18n="field.theme"></span>
       <div class="seg small" id="dr-theme"></div>
+      <p class="sub" id="dr-theme-hint" hidden></p>
     </div>
     <div class="field">
       <span><span data-i18n="field.brightness"></span> <b id="dr-bri-val"></b></span>

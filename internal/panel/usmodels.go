@@ -66,6 +66,7 @@ type usModel struct {
 	turn180              bool // understands the device-side 180 degree rotation (see SetDeviceFlip)
 	fixedFlip            bool // always turns by 180 degrees itself, no switch (8.8"; see devFlip)
 	exitImage            bool // Close can leave a picture (SetExitImage); 8.8" only
+	bootLogo             bool // keeps a boot picture written with the file command (us88boot.go); 8.8" only
 }
 
 func (m *usModel) landscape() image.Point {
@@ -121,7 +122,7 @@ var usModel88 = usModel{
 	brightMax: usMaxBacklight, maxJPEG: us88MaxJPEG, fps: us88FPS,
 	sendTurn: true, ackFrames: true, zlp: true,
 	version: usVersion88,
-	clock:   true, layers: true, video: true, fixedFlip: true, exitImage: true,
+	clock:   true, layers: true, video: true, fixedFlip: true, exitImage: true, bootLogo: true,
 }
 
 var usModel92 = usModel{
@@ -233,16 +234,13 @@ func lastNumber(s string) (int, bool) {
 // (everything before the last USB part) and the 0-based port on that hub.
 func usbChain(loc string) (hub string, port int, ok bool) {
 	parts := strings.Split(loc, "#")
-	for len(parts) > 0 {
-		last := parts[len(parts)-1]
-		if strings.HasPrefix(last, "USB(") && strings.HasSuffix(last, ")") {
-			n, err := strconv.Atoi(last[4 : len(last)-1])
-			if err != nil || n < 1 {
-				return "", 0, false
-			}
-			return strings.Join(parts[:len(parts)-1], "#"), n - 1, true
+	last := parts[len(parts)-1] // Split always returns at least one element
+	if strings.HasPrefix(last, "USB(") && strings.HasSuffix(last, ")") {
+		n, err := strconv.Atoi(last[4 : len(last)-1])
+		if err != nil || n < 1 {
+			return "", 0, false
 		}
-		return "", 0, false
+		return strings.Join(parts[:len(parts)-1], "#"), n - 1, true
 	}
 	return "", 0, false
 }

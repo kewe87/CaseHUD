@@ -825,6 +825,12 @@ button.sm { height: 32px; min-width: 32px; padding: 0 var(--s2); font-size: 18px
 .preset small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 .preset-sw { display: flex; gap: 4px; min-height: 14px; }
 .preset-sw i { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .25); }
+.preset-wrap { position: relative; display: flex; }
+.preset-wrap > .preset { flex: 1; min-width: 0; }
+.preset-wrap > .preset.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.preset-wrap > .preset-del { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; min-height: 0; padding: 0; font-size: 16px; line-height: 1; }
+.presets-save { display: flex; gap: var(--s2); flex-wrap: wrap; }
+.presets-save input { flex: 1 1 200px; min-width: 0; }
 .presets-foot { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
 .presets-foot small { flex: 1 1 220px; min-width: 0; }
 .sync { display: flex; flex-direction: column; gap: var(--s2); padding: var(--s3); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-2); }

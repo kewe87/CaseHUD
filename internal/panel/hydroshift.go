@@ -347,7 +347,7 @@ func (p *hydroShift) run() {
 		return
 	}
 	p.queryVersion()
-	p.write(hsPackets1(hsCmdStatus, nil))
+	_ = p.write(hsPackets1(hsCmdStatus, nil))
 	p.read(hsCmdStatus, 3*time.Second)
 	p.mu.Unlock()
 
@@ -364,7 +364,7 @@ func (p *hydroShift) run() {
 		p.report, watch = hsReport3, true
 	}
 	if p.bSet {
-		p.sendBrightness()
+		_ = p.sendBrightness()
 	}
 	p.ready = true
 	p.mu.Unlock()

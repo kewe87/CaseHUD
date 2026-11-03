@@ -22,6 +22,8 @@ func (s *Server) libraryRoutes(api *http.ServeMux) {
 	})
 	api.HandleFunc("POST /api/library/refresh", s.libraryRefresh)
 	api.HandleFunc("POST /api/library/presets/{id}/apply", s.libraryApplyPreset)
+	api.HandleFunc("POST /api/lighting/presets", s.lightingPresetSave)
+	api.HandleFunc("DELETE /api/lighting/presets/{id}", s.lightingPresetDelete)
 	api.HandleFunc("GET /api/diagnostics/trace", func(w http.ResponseWriter, r *http.Request) {
 		active, until := s.Engine.LightTraceStatus()
 		writeJSON(w, map[string]any{"active": active, "seconds": secondsLeft(until)})
@@ -53,7 +55,7 @@ func (s *Server) libraryView(sum community.Summary, fresh bool) map[string]any {
 	if fresh {
 		st.Warnings = sum.Warnings
 	}
-	return map[string]any{"status": st, "presets": s.Engine.LightingPresets()}
+	return map[string]any{"status": st, "presets": s.Engine.LightingPresetList()}
 }
 
 func (s *Server) libraryRefresh(w http.ResponseWriter, r *http.Request) {
@@ -78,7 +80,34 @@ func (s *Server) libraryApplyPreset(w http.ResponseWriter, r *http.Request) {
 		lightingFail(w, r, err)
 		return
 	}
+	if dropped == nil {
+		dropped = []string{}
+	}
 	writeJSON(w, map[string]any{"lighting": v, "ignored": dropped})
+}
+
+// lightingPresetSave stores the current lighting as one of the user's presets.
+func (s *Server) lightingPresetSave(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	p, err := s.Engine.SaveLightingPreset(req.Name)
+	if err != nil {
+		lightingFail(w, r, err)
+		return
+	}
+	writeJSON(w, p)
+}
+
+func (s *Server) lightingPresetDelete(w http.ResponseWriter, r *http.Request) {
+	if err := s.Engine.DeleteLightingPreset(r.PathValue("id")); err != nil {
+		lightingFail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) diagnosticsExport(w http.ResponseWriter, r *http.Request) {

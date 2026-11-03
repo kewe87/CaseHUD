@@ -29,7 +29,6 @@ type Background struct {
 
 	ang []uint16 // angle per pixel, 0..65535 = 0..360° (clockwise from 3 o'clock)
 	rad []uint16 // distance from the centre, 0..65535 = 0..half diagonal
-	pix []uint8  // reused output buffer
 }
 
 const lutBits = 10 // angle lookup resolution (1024 steps)

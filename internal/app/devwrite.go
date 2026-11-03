@@ -118,5 +118,5 @@ func (d *devWrites) close() {
 	}
 	d.mu.Unlock()
 	d.flushMu.Lock() // wait for a write in flight
-	d.flushMu.Unlock()
+	defer d.flushMu.Unlock()
 }

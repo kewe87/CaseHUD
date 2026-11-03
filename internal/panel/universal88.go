@@ -108,8 +108,6 @@ func (p *universal88) mdl() *usModel {
 	return p.m
 }
 
-func discoverUniversal88() ([]Panel, error) { return discoverUSB(&usModel88) }
-
 // discoverUSB opens every present device of the given models.
 func discoverUSB(models ...*usModel) ([]Panel, error) {
 	var ids []winusb.ID
@@ -199,7 +197,7 @@ func (p *universal88) connect() error {
 	// A frame whose size is a multiple of 512 bytes must end with a
 	// zero-length packet or the device keeps waiting for more data.
 	if p.mdl().zlp {
-		dev.ZeroLengthTerminate(us88EPOut)
+		_ = dev.ZeroLengthTerminate(us88EPOut)
 	}
 	if err := p.wake(); err != nil {
 		p.disconnect()
@@ -266,18 +264,30 @@ func (p *universal88) seal88(op usOp, args []byte) []byte {
 }
 
 func (p *universal88) write(data []byte) error {
+	_, err := p.writeTO(data, us88Timeout)
+	return err
+}
+
+// writeTO is write with its own per-call timeout (ms; the timeout is a pipe
+// policy that every Write call sets again, so the next call with
+// us88Timeout restores the normal value). It returns how many bytes went out
+// before an error.
+func (p *universal88) writeTO(data []byte, timeoutMS int) (sent int, err error) {
 	p.lastIO = time.Now()
 	for len(data) > 0 {
-		n, err := p.dev.Write(us88EPOut, data, us88Timeout)
+		n, err := p.dev.Write(us88EPOut, data, timeoutMS)
+		if n > 0 {
+			sent += n
+			data = data[min(n, len(data)):]
+		}
 		if err != nil {
-			return err
+			return sent, err
 		}
 		if n <= 0 {
-			return fmt.Errorf("%s: USB write made no progress", p.name)
+			return sent, fmt.Errorf("%s: USB write made no progress", p.name)
 		}
-		data = data[n:]
 	}
-	return nil
+	return sent, nil
 }
 
 // ack reads one 512-byte reply and drops anything queued behind it, so acks
@@ -302,7 +312,7 @@ func (p *universal88) ack() ([]byte, error) {
 			break
 		}
 	}
-	return buf[:n], nil
+	return buf[:n], nil //nolint:nilerr // the extra read only drains; its error does not matter
 }
 
 // issue sends one command block without data and returns the device's reply (nil
@@ -430,7 +440,7 @@ func (p *universal88) wakeBar() error {
 	if err := p.write(p.withData(usOpOverlay, usOverlay(m.short, m.long))); err != nil {
 		return err
 	}
-	p.ack() // acknowledged like a picture; a missing ack is not fatal here
+	_, _ = p.ack() // acknowledged like a picture; a missing ack is not fatal here
 	return p.setBacklight(false)
 }
 
@@ -600,18 +610,21 @@ func (p *universal88) present(rgba *image.RGBA) error {
 }
 
 // orient turns a canvas into the device's portrait frame (see present).
-func (p *universal88) orient(rgba *image.RGBA) *image.RGBA {
+func (p *universal88) orient(rgba *image.RGBA) *image.RGBA { return p.orientFor(rgba, p.rotation) }
+
+// orientFor is orient for a given rotation.
+func (p *universal88) orientFor(rgba *image.RGBA, rotation int) *image.RGBA {
 	if p.mdl().square {
 		return rgba // fan screens turn the picture themselves
 	}
 	if rgba.Rect.Dx() == p.mdl().short {
-		rot := p.rotation
+		rot := rotation
 		if rot == 90 && p.devFlip() {
 			rot = 270 // the device turns it by 180 degrees
 		}
 		return us88Upright(rgba, rot)
 	}
-	return us88Rotate(rgba, p.rotation == 180 && !p.devFlip())
+	return us88Rotate(rgba, rotation == 180 && !p.devFlip())
 }
 
 // query sends a command block and waits for its answer; unlike issue a
@@ -623,13 +636,9 @@ func (p *universal88) query(op usOp) ([]byte, error) {
 	return p.ack()
 }
 
-// transfer writes one JPEG frame and reads its acknowledgement. err is a write
-// failure; a frame that went out without an acknowledgement has acked == false.
-func (p *universal88) transfer(jpg []byte) (r []byte, acked bool, err error) {
-	return p.transferOp(usOpPicture, jpg)
-}
-
-// transferOp is transfer for any command that carries data (picture, overlay).
+// transferOp writes one command that carries data (picture, overlay) and reads
+// its acknowledgement. err is a write failure; a frame that went out without
+// an acknowledgement has acked == false.
 func (p *universal88) transferOp(op usOp, data []byte) (r []byte, acked bool, err error) {
 	if err := p.write(p.withData(op, data)); err != nil {
 		return nil, false, err
@@ -702,7 +711,7 @@ func (p *universal88) sendData(op usOp, data []byte) error {
 		p.disconnect()
 		if cerr := p.connect(); cerr != nil {
 			p.backoff()
-			return fmt.Errorf("%s: %w (reopen: %v)", p.name, err, cerr)
+			return fmt.Errorf("%s: %w (reopen: %w)", p.name, err, cerr)
 		}
 		if r, acked, err = p.transferOp(op, data); err != nil {
 			p.recover()
@@ -731,7 +740,7 @@ func (p *universal88) sendData(op usOp, data []byte) error {
 			time.Sleep(us88BufGap)
 		}
 	}
-	return nil
+	return nil //nolint:nilerr // a timed-out queue query only ends the wait
 }
 
 func (p *universal88) SetBrightness(percent int) error {
@@ -858,7 +867,7 @@ func (p *universal88) Close() error {
 		switch m.init {
 		case usInitFlex:
 			if p.write(p.withData(usOpOverlay, usOverlay(m.short, m.short))) == nil {
-				p.ack()
+				_, _ = p.ack()
 				time.Sleep(usFlexHandOverGap)
 				if p.write(p.seal(usOpHandOver, nil)) == nil {
 					time.Sleep(usFlexHandOverGap)
@@ -898,9 +907,9 @@ func (p *universal88) showExit() {
 	if err != nil || p.write(p.picture(jpg)) != nil {
 		return
 	}
-	p.ack()
+	_, _ = p.ack()
 	if p.write(p.withData(usOpOverlay, usOverlay(m.short, m.long))) == nil {
-		p.ack()
+		_, _ = p.ack()
 	}
 }
 
@@ -935,7 +944,7 @@ func (p *universal88) wakeSL() error {
 		return err
 	}
 	if !isNew {
-		p.issue(usOpFPS, []byte{120})
+		_, _ = p.issue(usOpFPS, []byte{120})
 	}
 	r, _ := p.issue(usOpInfo, nil) // informational only
 	p.noteFirmware(r)
@@ -960,7 +969,7 @@ func (p *universal88) wakeFlex() error {
 	if err := p.write(p.withData(usOpOverlay, usOverlay(m.short, m.short))); err != nil {
 		return err
 	}
-	p.ack()
+	_, _ = p.ack()
 	if err := p.sendRotation(true); err != nil {
 		return err
 	}

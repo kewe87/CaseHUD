@@ -61,6 +61,6 @@ func reorder(cols []color.RGBA, order string) {
 				out[j] = c.B
 			}
 		}
-		cols[i] = color.RGBA{out[0], out[1], out[2], 255}
+		cols[i] = color.RGBA{out[0], out[1], out[2], 255} //nolint:gosec // out is [3]uint8
 	}
 }

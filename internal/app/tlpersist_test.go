@@ -50,7 +50,7 @@ func startEngine(t *testing.T, accepted bool) *Engine {
 	dir := t.TempDir()
 	cfg := `{"panels":{}}`
 	if accepted {
-		cfg = `{"disclaimer":{"version":2},"tl_serial_migrated":true,"panels":{}}`
+		cfg = `{"disclaimer":{"version":3},"tl_serial_migrated":true,"panels":{}}`
 	}
 	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)

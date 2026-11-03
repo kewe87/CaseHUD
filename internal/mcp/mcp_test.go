@@ -46,3 +46,41 @@ func TestNewAPI(t *testing.T) {
 		t.Fatal("invalid instance URL accepted")
 	}
 }
+
+func TestInvalidParams(t *testing.T) {
+	s := &Server{Name: "t", Version: "1", Tools: []Tool{{
+		Name: "args", InputSchema: map[string]any{"type": "object"},
+		Handler: func(a json.RawMessage) (ToolResult, error) {
+			var p struct{ N int }
+			if err := ParseArgs(a, &p); err != nil {
+				return ToolResult{}, err
+			}
+			return Text("ok"), nil
+		},
+	}}}
+	in := strings.Join([]string{
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"args","arguments":{"N":"x"}}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"args","arguments":{"N":2}}}`,
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"args"}}`,
+		`{"jsonrpc":"2.0","id":4,"method":"initialize","params":[1]}`,
+	}, "\n")
+	var out bytes.Buffer
+	if err := s.Serve(strings.NewReader(in), &out); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("want 4 responses, got %d:\n%s", len(lines), out.String())
+	}
+	if !strings.Contains(lines[0], `-32602`) || strings.Contains(lines[0], `"result"`) {
+		t.Errorf("bad arguments should be an invalid-params error: %s", lines[0])
+	}
+	for _, l := range lines[1:3] {
+		if !strings.Contains(l, `"ok"`) {
+			t.Errorf("valid or missing arguments should succeed: %s", l)
+		}
+	}
+	if !strings.Contains(lines[3], `-32602`) {
+		t.Errorf("malformed initialize params: %s", lines[3])
+	}
+}

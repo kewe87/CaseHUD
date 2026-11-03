@@ -16,6 +16,9 @@ const STRINGS = {
     "rot.bar": "Hochkant montiertes Display: 90° = rechte Kante oben, 270° = linke Kante oben. Die Felder stehen dann übereinander und bleiben lesbar.",
     "kind.cpu": "CPU-Last", "kind.gpu": "GPU-Last", "kind.cpu-temp": "CPU-Temperatur", "kind.gpu-temp": "GPU-Temperatur", "kind.coolant": "Kühlmittel", "kind.pump": "Pumpe",
     "kind.power": "GPU-Leistung", "kind.fps": "FPS", "kind.ram": "RAM", "kind.vram": "VRAM", "kind.clock": "Uhr",
+    "kind.cpu-lt": "CPU Last + Temperatur", "kind.gpu-lt": "GPU Last + Temperatur", "kind.coolant-pump": "Kühlmittel + Pumpe", "kind.power-split": "GPU + CPU Leistung",
+    "kind.vram-gb": "VRAM belegt / gesamt", "kind.mem": "RAM + VRAM", "kind.lat-cpu": "Latenz + CPU-Leistung", "kind.gpu-clock": "GPU-Takt + Hotspot", "kind.cpu-clock": "CPU-Takt + Leistung",
+    "kind.fps-ft": "FPS + Frametime", "kind.gpu-full": "GPU Last, Temperatur, Leistung", "kind.system": "System-Leistung", "kind.fps-graph": "FPS + Frametime-Verlauf",
     "size.card": "groß", "size.half": "klein", "size.w640": "breit", "size.w960": "extra breit", "size.h640": "hoch", "size.h960": "extra hoch",
     "tab.displays": "Displays", "tab.scenes": "Szenen", "tab.designs": "Designs", "tab.media": "Medien", "tab.settings": "Einstellungen",
     "status.title": "Status – Klick für Details",
@@ -32,6 +35,8 @@ const STRINGS = {
     "ph.name": "z. B. Front oben", "btn.identify": "Identifizieren", "btn.identifyAll": "Alle identifizieren",
     "identify.done": "Nummern werden auf den Displays angezeigt", "field.brightness": "Helligkeit", "field.rotation": "Drehung",
     "field.theme": "Farbschema", "theme.dark": "Dunkel", "theme.light": "Hell",
+    "theme.hint.layout": "Die Felder des Layouts haben ein eigenes Farbschema und folgen dem Schalter nicht. Ändere es im Layout (Tab Designs) oder stelle die Felder dort auf „Wie Display“.",
+    "theme.hint.held": "Gerade steuern Rotation oder Automatik die Displays. Dein Farbschema ist gespeichert und erscheint, sobald sie enden.",
     "media.none": "Noch keine Medien. ", "media.addLink": "Bild, GIF oder Video hinzufügen",
     "btn.applyAll": "Auf alle {n} Displays übernehmen", "applied.all": "Auf alle Displays übernommen", "applied.one": "Auf „{name}“ übernommen",
     "designs.view.designs": "Designs", "designs.view.layouts": "Layouts",
@@ -205,7 +210,7 @@ const STRINGS = {
     "disc.p4": "CaseHUD ist kein offizielles Produkt von Lian Li oder anderen Herstellern und steht in keiner Verbindung zu ihnen. Marken und Produktnamen gehören ihren jeweiligen Inhabern.",
     "disc.p5": "CaseHUD installiert einen Sensor-Dienst, der mit Systemrechten läuft, und den Treiber PawnIO zum Auslesen von Sensoren.",
     "disc.p6": "Beleuchtung und experimentelle Geräte sind optional und standardmäßig ausgeschaltet.",
-    "disc.p7": "CaseHUD schreibt sein Logo einmalig als Start- und Ruhebild in unterstützte Lüfter-Displays und vergibt an Displays ohne Seriennummer eine Seriennummer. Beides sind dauerhafte Schreibvorgänge auf dem Gerät; Start- und Ruhebild und Seriennummer lassen sich unter Einstellungen → Geräte abschalten.",
+    "disc.p7": "CaseHUD schreibt sein Logo einmalig als Startbild in unterstützte Displays (in Lüfter-Displays zusätzlich als Ruhebild) und vergibt an Displays ohne Seriennummer eine Seriennummer. Beides sind dauerhafte Schreibvorgänge auf dem Gerät; Start- und Ruhebild und Seriennummer lassen sich unter Einstellungen → Geräte abschalten.",
     "priv.title": "Datenschutz",
     "priv.text": "CaseHUD sendet <b>keine Daten</b> – keine Telemetrie, kein Konto, keine Cloud. Alle Sensorwerte bleiben auf deinem PC. Ins Internet geht CaseHUD nur für den <b>Update-Check</b> bei GitHub (abschaltbar) und wenn du die <b>Community-Galerie</b> öffnest oder die <b>Bauteil- und Vorlagen-Bibliothek</b> aktualisierst. Dabei werden nur öffentliche Dateien abgerufen.",
     "set.autostart": "Mit Windows starten", "set.autostart.sub": "Startet minimiert im Tray, die Displays laufen sofort",
@@ -266,6 +271,9 @@ const STRINGS = {
     "rot.bar": "Display mounted upright: 90° = right edge up, 270° = left edge up. The cells are then stacked and stay readable.",
     "kind.cpu": "CPU load", "kind.gpu": "GPU load", "kind.cpu-temp": "CPU temperature", "kind.gpu-temp": "GPU temperature", "kind.coolant": "Coolant", "kind.pump": "Pump",
     "kind.power": "GPU power", "kind.fps": "FPS", "kind.ram": "RAM", "kind.vram": "VRAM", "kind.clock": "Clock",
+    "kind.cpu-lt": "CPU load + temperature", "kind.gpu-lt": "GPU load + temperature", "kind.coolant-pump": "Coolant + pump", "kind.power-split": "GPU + CPU power",
+    "kind.vram-gb": "VRAM used / total", "kind.mem": "RAM + VRAM", "kind.lat-cpu": "Latency + CPU power", "kind.gpu-clock": "GPU clock + hotspot", "kind.cpu-clock": "CPU clock + power",
+    "kind.fps-ft": "FPS + frametime", "kind.gpu-full": "GPU load, temperature, power", "kind.system": "System power", "kind.fps-graph": "FPS + frametime graph",
     "size.card": "large", "size.half": "small", "size.w640": "wide", "size.w960": "extra wide", "size.h640": "tall", "size.h960": "extra tall",
     "tab.displays": "Displays", "tab.scenes": "Scenes", "tab.designs": "Designs", "tab.media": "Media", "tab.settings": "Settings",
     "status.title": "Status – click for details",
@@ -282,6 +290,8 @@ const STRINGS = {
     "ph.name": "e.g. Front top", "btn.identify": "Identify", "btn.identifyAll": "Identify all",
     "identify.done": "Numbers are shown on the displays", "field.brightness": "Brightness", "field.rotation": "Rotation",
     "field.theme": "Color scheme", "theme.dark": "Dark", "theme.light": "Light",
+    "theme.hint.layout": "The layout's cells have their own color scheme and ignore this switch. Change it in the layout (Designs tab) or set the cells there to \"As display\".",
+    "theme.hint.held": "Rotation or automation is currently in control of the displays. Your color scheme is saved and shows up once they end.",
     "media.none": "No media yet. ", "media.addLink": "Add an image, GIF or video",
     "btn.applyAll": "Apply to all {n} displays", "applied.all": "Applied to all displays", "applied.one": "Applied to “{name}”",
     "designs.view.designs": "Designs", "designs.view.layouts": "Layouts",
@@ -455,7 +465,7 @@ const STRINGS = {
     "disc.p4": "CaseHUD is not an official product of Lian Li or any other manufacturer and is not affiliated with them. Trademarks and product names belong to their respective owners.",
     "disc.p5": "CaseHUD installs a sensor service that runs with system rights and the PawnIO driver for reading sensors.",
     "disc.p6": "Lighting and experimental devices are optional and off by default.",
-    "disc.p7": "CaseHUD writes its logo once as the start and idle image of supported fan displays and assigns a serial number to displays that have none. Both are permanent writes to the device; both can be switched off under Settings → Devices.",
+    "disc.p7": "CaseHUD writes its logo once as the start image of supported displays (on fan displays also as the idle image) and assigns a serial number to displays that have none. Both are permanent writes to the device; both can be switched off under Settings → Devices.",
     "priv.title": "Privacy",
     "priv.text": "CaseHUD sends <b>no data</b> – no telemetry, no account, no cloud. All sensor values stay on your PC. CaseHUD only goes online for the <b>update check</b> on GitHub (can be turned off) and when you open the <b>community gallery</b> or update the <b>parts and presets library</b>. Only public files are fetched.",
     "set.autostart": "Start with Windows", "set.autostart.sub": "Starts minimised in the tray, displays run right away",
@@ -489,7 +499,7 @@ const STRINGS = {
     "design.cyber-cpu-gpu": "CPU + GPU (temperature)", "design.cyber-cpu-gpu-load": "CPU + GPU (load)", "design.cyber-power": "Power (W)", "design.cyber-power-total": "Total power", "design.cyber-vram": "Video memory (VRAM)", "design.cyber-gpu-hotspot": "GPU hotspot", "design.cyber-cpu": "CPU", "design.cyber-gpu": "GPU", "design.cyber-loop": "Water loop", "design.cyber-gaming": "Gaming (FPS)", 
     "design.power": "Power (W)", "design.power-total": "Total power", "design.vram": "Video memory (VRAM)", "design.gpu-hotspot": "GPU hotspot", "design.neon-power": "Power (W)", "design.neon-power-total": "Total power", "design.neon-vram": "Video memory (VRAM)", "design.neon-gpu-hotspot": "GPU hotspot", "design.retro-power": "Power (W)", "design.retro-power-total": "Total power", "design.retro-vram": "Video memory (VRAM)", "design.retro-gpu-hotspot": "GPU hotspot", "design.neon-cpu-gpu": "CPU + GPU (temperature)", "design.neon-cpu-gpu-load": "CPU + GPU (load)", "design.neon-cpu": "CPU", "design.neon-gpu": "GPU", "design.neon-loop": "Water loop", "design.neon-gaming": "Gaming (FPS)",
     "design.retro-cpu-gpu": "CPU + GPU (temperature)", "design.retro-cpu-gpu-load": "CPU + GPU (load)", "design.retro-cpu": "CPU", "design.retro-gpu": "GPU", "design.retro-loop": "Water loop", "design.retro-gaming": "Gaming (FPS)",
-    "menu.fanset": "Style for all fans", "f.invert": "Lower is worse (e.g. FPS, pump)", "f.segments": "Segments (0 = solid)", "f.ticks": "Scale marks", "ed.scanlines": "Scanlines (CRT look)", "design.gaming": "Gaming (FPS)",
+    "menu.fanset": "Style for all fans", "f.invert": "Lower is worse (e.g. FPS, pump)", "f.segments": "Segments (0 = solid)", "f.ticks": "Scale marks", "ed.scanlines": "Scanlines (CRT look)",
     "field.scheme": "Color scheme",
     "field.content": "Content",
     "display.n": "Display {n}",
@@ -512,14 +522,17 @@ function t(key, vars) {
   return s;
 }
 
+/** @type {(sel: string) => any[]} */
+const allOf = (sel) => [...document.querySelectorAll(sel)];
+
 function applyI18n() {
   document.documentElement.lang = LANG;
-  for (const e of document.querySelectorAll("[data-i18n]")) e.textContent = t(e.dataset.i18n);
-  for (const e of document.querySelectorAll("[data-i18n-html]")) e.innerHTML = t(e.dataset.i18nHtml);
-  for (const e of document.querySelectorAll("[data-i18n-title]")) { e.title = t(e.dataset.i18nTitle); if (e.hasAttribute("aria-label")) e.setAttribute("aria-label", e.title); }
-  for (const e of document.querySelectorAll("[data-i18n-aria]")) e.setAttribute("aria-label", t(e.dataset.i18nAria));
-  for (const e of document.querySelectorAll("[data-i18n-placeholder]")) e.placeholder = t(e.dataset.i18nPlaceholder);
-  for (const b of document.querySelectorAll("[data-lang]")) b.classList.toggle("active", b.dataset.lang === LANG);
+  for (const e of allOf("[data-i18n]")) e.textContent = t(e.dataset.i18n);
+  for (const e of allOf("[data-i18n-html]")) e.innerHTML = t(e.dataset.i18nHtml);
+  for (const e of allOf("[data-i18n-title]")) { e.title = t(e.dataset.i18nTitle); if (e.hasAttribute("aria-label")) e.setAttribute("aria-label", e.title); }
+  for (const e of allOf("[data-i18n-aria]")) e.setAttribute("aria-label", t(e.dataset.i18nAria));
+  for (const e of allOf("[data-i18n-placeholder]")) e.placeholder = t(e.dataset.i18nPlaceholder);
+  for (const b of allOf("[data-lang]")) b.classList.toggle("active", b.dataset.lang === LANG);
 }
 
 function setLang(l) {

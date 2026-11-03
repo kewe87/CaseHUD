@@ -84,18 +84,17 @@ func TestHydroShiftBodyBounds(t *testing.T) {
 // hsFake plays the pump head: it answers requests and records everything
 // written.
 type hsFake struct {
-	writes   [][]byte
-	queue    [][]byte
-	version  string // 7th CSV field; "" = no answer to the version query
-	avail    byte   // value of the 0x17 answer
-	noAvail  bool
-	resetOK  bool
-	pump     int
-	coolant  byte
-	frac     byte
-	hasTemp  byte
-	closed   bool
-	reportOf byte // layout used for 0x17 answers
+	writes  [][]byte
+	queue   [][]byte
+	version string // 7th CSV field; "" = no answer to the version query
+	avail   byte   // value of the 0x17 answer
+	noAvail bool
+	resetOK bool
+	pump    int
+	coolant byte
+	frac    byte
+	hasTemp byte
+	closed  bool
 }
 
 func (f *hsFake) Write(b []byte) (int, error) {

@@ -240,7 +240,7 @@ func (p *universal88) leaveLayers() error {
 			p.recover() // the handle is stale: reopen with the next frame
 			return fmt.Errorf("%s: %w", p.name, err)
 		}
-		p.ack()
+		_, _ = p.ack()
 		p.lay.ovOn = false
 	}
 	p.lay.invalidate()

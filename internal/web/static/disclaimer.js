@@ -33,6 +33,7 @@ applyI18n();
 
 // notice shows the shared dialog and resolves true (ok) or false (cancel).
 // With locked set, Esc does nothing: the first-start dialog has to be answered.
+/** @param {{ title: string, sub: string, paras: string[], ok: string, cancel: string, locked?: boolean }} o */
 function notice({ title, sub, paras, ok, cancel, locked }) {
   const dlg = $("#notice");
   return new Promise((resolve) => {

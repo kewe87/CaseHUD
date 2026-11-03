@@ -11,7 +11,7 @@ import (
 // DisclaimerVersion is the version of the disclaimer text (installer/disclaimer-*.txt,
 // README, first-start dialog). Raise it when the text changes in substance:
 // everyone is asked again and CaseHUD sends nothing to a device until they agree.
-const DisclaimerVersion = 2
+const DisclaimerVersion = 3
 
 // ErrAckRequired is returned when a switch needs a one-time confirmation first.
 var ErrAckRequired = errors.New("confirmation required")

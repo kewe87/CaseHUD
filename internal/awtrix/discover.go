@@ -163,7 +163,7 @@ func broadcast(ctx context.Context, nets []*net.IPNet, add func(ip, name string)
 			}
 		}
 	}()
-	go func() { <-ctx.Done(); conn.SetReadDeadline(time.Now()) }()
+	go func() { <-ctx.Done(); _ = conn.SetReadDeadline(time.Now()) }()
 	buf := make([]byte, 256)
 	for {
 		n, from, err := conn.ReadFromUDP(buf)

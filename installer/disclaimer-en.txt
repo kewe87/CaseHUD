@@ -12,4 +12,4 @@ CaseHUD installs a sensor service that runs with system rights and the PawnIO dr
 
 Lighting and experimental devices are optional and off by default.
 
-CaseHUD writes its logo once as the start and idle image of supported fan displays and assigns a serial number to displays that have none. Both are permanent writes to the device; both can be switched off under Settings → Devices.
+CaseHUD writes its logo once as the start image of supported displays (on fan displays also as the idle image) and assigns a serial number to displays that have none. Both are permanent writes to the device; both can be switched off under Settings → Devices.

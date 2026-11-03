@@ -12,4 +12,4 @@ CaseHUD installiert einen Sensor-Dienst, der mit Systemrechten läuft, und den T
 
 Beleuchtung und experimentelle Geräte sind optional und standardmäßig ausgeschaltet.
 
-CaseHUD schreibt sein Logo einmalig als Start- und Ruhebild in unterstützte Lüfter-Displays und vergibt an Displays ohne Seriennummer eine Seriennummer. Beides sind dauerhafte Schreibvorgänge auf dem Gerät; Start- und Ruhebild und Seriennummer lassen sich unter Einstellungen → Geräte abschalten.
+CaseHUD schreibt sein Logo einmalig als Startbild in unterstützte Displays (in Lüfter-Displays zusätzlich als Ruhebild) und vergibt an Displays ohne Seriennummer eine Seriennummer. Beides sind dauerhafte Schreibvorgänge auf dem Gerät; Start- und Ruhebild und Seriennummer lassen sich unter Einstellungen → Geräte abschalten.

@@ -51,8 +51,8 @@ Object.assign(STRINGS.de, {
   "light.zone.led1": "1 LED", "light.unplaced": "Noch nicht auf der Fläche platziert",
   "light.unplaced.sub": "Der Effekt behandelt diese Zonen als eine gemeinsame Linie in der Mitte.",
   "light.reset": "Beleuchtungs-Einstellungen waren ungültig und wurden zurückgesetzt (Sicherung: {file}).",
-  "light.presets": "Vorlagen", "light.presets.sub": "Fertige Effekte aus der Community-Bibliothek. Ein Klick stellt Effekt und Einstellungen ein; Geräte und Layouts bleiben, wie sie sind.",
-  "light.presets.none": "Keine Vorlagen vorhanden. Mit „Library aktualisieren“ lädt CaseHUD sie von GitHub.", "light.presets.count": "{n} Stück",
+  "light.presets": "Vorlagen", "light.presets.sub": "Vorlagen aus der Community-Bibliothek und deine eigenen. Ein Klick stellt Effekt und Einstellungen ein; Geräte und Layouts bleiben, wie sie sind.",
+  "light.presets.none": "Noch keine Vorlagen. „Library aktualisieren“ lädt die Community-Vorlagen von GitHub, oder speichere deine aktuelle Beleuchtung als Vorlage.", "light.presets.count": "{n} Stück",
   "light.lib.refresh": "Library aktualisieren", "light.lib.loading": "Lade …",
   "light.lib.status": "Stand: {when} · {c} Bauteile · {p} Vorlagen",
   "light.lib.never": "Noch nicht geladen. CaseHUD holt dafür öffentliche Dateien von GitHub und sendet nichts dorthin. Ohne Verbindung läuft alles mit den eingebauten Bauteilen.",
@@ -60,6 +60,9 @@ Object.assign(STRINGS.de, {
   "light.lib.warn": "{n} Eintrag/Einträge der Bibliothek wurden übersprungen.",
   "light.preset.applied": "Vorlage „{n}“ eingestellt.", "light.preset.ignored": "{k} Einstellung(en) der Vorlage kennt der Effekt nicht und wurde(n) ausgelassen.",
   "light.preset.apply": "Vorlage {n} anwenden",
+  "light.preset.save": "Als Vorlage speichern", "light.preset.name": "Name der Vorlage", "light.preset.saved": "Vorlage „{n}“ gespeichert.",
+  "light.preset.delete": "Vorlage {n} löschen", "light.preset.confirmDelete": "Eigene Vorlage „{n}“ löschen?", "light.preset.deleted": "Vorlage „{n}“ gelöscht.",
+  "light.preset.src.library": "Bibliothek", "light.preset.src.user": "Eigene",
   "light.sync": "Mit Mainboard synchronisieren", "light.sync.note": "Die Einstellung bleibt nach dem Beenden von CaseHUD bestehen.",
   "light.sync.else": "Ohne Synchronisation", "light.sync.passive": "Nicht ansteuern (nur lesen)", "light.sync.canvas": "CaseHUD-Effekte", "light.sync.hardware": "Effekte des Controllers",
   "light.flash.confirm": "Der Lüfter-Controller speichert jede Beleuchtungs-Änderung dauerhaft in seinem Flash-Speicher. Häufige Änderungen verschleißen ihn. Empfohlen: „Mit Mainboard synchronisieren“.",
@@ -127,8 +130,8 @@ Object.assign(STRINGS.en, {
   "light.zone.led1": "1 LED", "light.unplaced": "Not placed on the canvas yet",
   "light.unplaced.sub": "The effect treats these zones as one shared line in the middle.",
   "light.reset": "The lighting settings were invalid and have been reset (backup: {file}).",
-  "light.presets": "Presets", "light.presets.sub": "Ready-made effects from the community library. One click sets the effect and its settings; devices and layouts stay as they are.",
-  "light.presets.none": "No presets yet. \"Update library\" fetches them from GitHub.", "light.presets.count": "{n} items",
+  "light.presets": "Presets", "light.presets.sub": "Presets from the community library and your own. One click sets the effect and its settings; devices and layouts stay as they are.",
+  "light.presets.none": "No presets yet. \"Update library\" fetches the community presets from GitHub, or save your current lighting as a preset.", "light.presets.count": "{n} items",
   "light.lib.refresh": "Update library", "light.lib.loading": "Loading …",
   "light.lib.status": "As of: {when} · {c} parts · {p} presets",
   "light.lib.never": "Not loaded yet. CaseHUD fetches public files from GitHub and sends nothing there. Offline, everything runs with the built-in parts.",
@@ -136,6 +139,9 @@ Object.assign(STRINGS.en, {
   "light.lib.warn": "{n} library entries were skipped.",
   "light.preset.applied": "Preset \"{n}\" applied.", "light.preset.ignored": "{k} preset setting(s) are unknown to the effect and were left out.",
   "light.preset.apply": "Apply preset {n}",
+  "light.preset.save": "Save as preset", "light.preset.name": "Preset name", "light.preset.saved": "Preset \"{n}\" saved.",
+  "light.preset.delete": "Delete preset {n}", "light.preset.confirmDelete": "Delete your preset \"{n}\"?", "light.preset.deleted": "Preset \"{n}\" deleted.",
+  "light.preset.src.library": "Library", "light.preset.src.user": "Mine",
   "light.sync": "Sync with motherboard", "light.sync.note": "The setting stays in place after you quit CaseHUD.",
   "light.sync.else": "Without sync", "light.sync.passive": "Do not drive (read only)", "light.sync.canvas": "CaseHUD effects", "light.sync.hardware": "Controller effects",
   "light.flash.confirm": "The fan controller stores every lighting change permanently in its flash memory. Frequent changes wear it out. Recommended: \"Sync with motherboard\".",
@@ -173,7 +179,7 @@ Object.assign(STRINGS.de, {
   "setup.seg.parallel": "parallel (Splitter)", "setup.seg.leds": "{n} LEDs",
   "setup.seg.note": "Parallel geschaltete Bauteile bekommen dasselbe Signal ab LED 1; die kürzeren zeigen nur die ersten LEDs davon.",
   "setup.hint.title": "Keine LED-Anzahl gesetzt",
-  "setup.hint.text": "Die ARGB-Anschlüsse deines Mainboards können nicht melden, wie viele LEDs dranhängen – bis du es einstellst, leuchtet dort nichts. Wende eine Vorlage an oder ermittle die LED-Anzahl pro Anschluss.",
+  "setup.hint.text": "Die ARGB-Anschlüsse deines Mainboards können nicht melden, wie viele LEDs dranhängen – bis du es einstellst, leuchtet dort nichts. Ermittle die LED-Anzahl pro Anschluss.",
   "setup.tpl.title": "Vorlage anwenden", "setup.tpl.sub": "Fertige Einstellungen für bekannte Hardware. Setzt LED-Anzahl und Layout der gelisteten Zonen; Effekt und Helligkeit bleiben.",
   "setup.tpl.btn": "Vorlage anwenden", "setup.tpl.sync": "Der Lüfter-Controller folgt danach dem Anschluss ARGB 1.",
   "setup.tpl.confirm": "Die Vorlage „{n}“ setzt LED-Anzahl und Layout dieser Zonen neu. Bestehende Layouts dieser Zonen werden ersetzt. Fortfahren?",
@@ -200,7 +206,7 @@ Object.assign(STRINGS.en, {
   "setup.seg.parallel": "parallel (splitter)", "setup.seg.leds": "{n} LEDs",
   "setup.seg.note": "Parts wired in parallel get the same signal from LED 1; the shorter ones show only the first LEDs of it.",
   "setup.hint.title": "No LED count set",
-  "setup.hint.text": "The ARGB headers of your mainboard cannot report how many LEDs are attached - until you set it, nothing lights there. Apply a template or find the LED count per header.",
+  "setup.hint.text": "The ARGB headers of your mainboard cannot report how many LEDs are attached - until you set it, nothing lights there. Find the LED count per header.",
   "setup.tpl.title": "Apply a template", "setup.tpl.sub": "Ready-made settings for known hardware. Sets LED count and layout of the listed zones; effect and brightness stay.",
   "setup.tpl.btn": "Apply template", "setup.tpl.sync": "The fan controller then follows header ARGB 1.",
   "setup.tpl.confirm": "The template \"{n}\" sets LED count and layout of these zones anew. Existing layouts of these zones are replaced. Continue?",
@@ -211,7 +217,9 @@ Object.assign(STRINGS.en, {
 applyI18n();
 
 let lv = null; // last state from /api/lighting
-let lightCalibPos = {}; // "device/zone" -> marker position
+/** @type {() => any} */
+const focused = () => document.activeElement;
+const lightCalibPos = {}; // "device/zone" -> marker position
 const LIGHT_COLORS = ["#22d3ee", "#a78bfa", "#3ddc84", "#fab005", "#f43f5e", "#38bdf8", "#f472b6", "#fb923c"];
 const lightActive = () => $("#tab-light").classList.contains("active");
 
@@ -305,7 +313,7 @@ function lightParam(p, value, send, soon) {
 const flashModes = ["hardware", "canvas"];
 const hasFlashGate = (d) => (d.settings || []).some((p) => p.key === "allowFlashWrites");
 async function setTlMode(d, mode) {
-  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  if (focused() && focused().blur) focused().blur();
   if (hasFlashGate(d)) {
     const flash = flashModes.includes(mode);
     if (flash && !d.settingValues.allowFlashWrites) {
@@ -318,7 +326,7 @@ async function setTlMode(d, mode) {
 }
 
 async function setAllowFlash(d, on) {
-  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  if (focused() && focused().blur) focused().blur();
   if (on && !confirm(t("light.flash.confirm"))) { renderLight(); return; }
   return lightPatch({ devices: { [d.id]: { settings: { allowFlashWrites: on } } } });
 }
@@ -725,7 +733,7 @@ function renderLight() {
     e.featured ? lightLabel("fx", e.name, e.label) : t("light.more", { n: lightLabel("fx", e.name, e.label) }))));
   const info = lv.effects.find((e) => e.name === lv.effect);
   const box = $("#light-params");
-  if (!(document.activeElement && box.contains(document.activeElement) && ["range", "color", "text", "select-one"].includes(document.activeElement.type))) {
+  if (!(document.activeElement && box.contains(document.activeElement) && ["range", "color", "text", "select-one"].includes(focused().type))) {
     box.replaceChildren(...((info && info.params) || []).map((p) => lightParam(p, (lv.params || {})[p.key],
       (v) => lightPatch({ params: { [p.key]: v } }), (v) => lightPatchSoon({ params: v }))));
   }
@@ -733,7 +741,7 @@ function renderLight() {
 
   // devices
   const list = $("#light-devices");
-  const busy = devQueued() || document.activeElement && list.contains(document.activeElement) && ["number", "text", "range", "color", "select-one"].includes(document.activeElement.type);
+  const busy = devQueued() || document.activeElement && list.contains(document.activeElement) && ["number", "text", "range", "color", "select-one"].includes(focused().type);
   if (!busy) {
     const open = new Set($$("#light-devices details[open]").map((d) => d.closest(".dev").dataset.id));
     list.replaceChildren(...setupCards(), ...(lv.devices.length ? lv.devices.map((d, i) => {
@@ -771,6 +779,7 @@ function renderLight() {
   $("#light-tl").checked = lv.tl;
   refreshDiagTrace();
   renderLibrary();
+  if (libState) renderLibrary();
 }
 
 function refreshLightChip() {
@@ -786,7 +795,7 @@ function refreshLightChip() {
 // ---------- Presets from the library ----------
 // Opening the presets shows the saved copy; only "Update library" (or the
 // first opening, when there is no copy yet) goes online.
-let libState = null, libBusy = false;
+let libState = null, libBusy = false, presetBusy = false;
 const libText = (m) => (m && (m[LANG] || m.en || m.de)) || "";
 
 function renderLibrary() {
@@ -801,16 +810,25 @@ function renderLibrary() {
   err.hidden = !(libState.error || warns);
   err.textContent = libState.error ? t("light.lib.error", { e: libState.error }) : warns ? t("light.lib.warn", { n: warns }) : "";
   const on = lv && lv.enabled && lv.active;
+  const active = lv ? lv.preset || "" : "";
   $("#light-presets-list").replaceChildren(...(ps.length ? ps.map((p) => {
     const name = libText(p.name);
     const fx = lightLabel("fx", p.effect, p.effect);
+    const src = t("light.preset.src." + (p.source || "library"));
     const card = el("button", { type: "button", class: "preset", title: libText(p.description), "aria-label": t("light.preset.apply", { n: name }),
-      onclick: () => applyPreset(p) },
+      "aria-pressed": String(p.id === active), onclick: () => applyPreset(p) },
       el("span", { class: "preset-sw" }, ...(p.palette || []).slice(0, 6).map((c) => el("i", { style: { background: c } }))),
-      el("b", {}, name), el("small", {}, fx + ((p.tags || []).length ? " · " + p.tags.join(", ") : "")));
+      el("b", {}, name), el("small", {}, [src, fx, ...(p.tags || [])].join(" · ")));
     if (!on) card.classList.add("dim");
-    return card;
+    if (p.id === active) card.classList.add("active");
+    const wrap = el("div", { class: "preset-wrap" }, card);
+    if (p.source === "user") {
+      wrap.append(el("button", { type: "button", class: "ghost preset-del", title: t("light.preset.delete", { n: name }),
+        "aria-label": t("light.preset.delete", { n: name }), onclick: () => deletePreset(p) }, "×"));
+    }
+    return wrap;
   }) : [el("div", { class: "empty-note" }, t("light.presets.none"))]));
+  $("#light-preset-save-btn").disabled = presetBusy || !lv;
 }
 
 async function loadLibrary() {
@@ -821,13 +839,15 @@ async function loadLibrary() {
 async function refreshLibrary() {
   if (libBusy) return;
   libBusy = true; renderLibrary();
-  try { libState = await api("POST", "/api/library/refresh"); }
-  catch (e) {
-    // A failed download still answers with the saved copy.
-    libState = { ...(libState || {}), error: e.message };
-    try { const c = await api("GET", "/api/library"); libState = { ...c, error: e.message }; } catch { /* keep the old */ }
-  }
-  libBusy = false; renderLibrary();
+  try {
+    try { libState = await api("POST", "/api/library/refresh"); }
+    catch (e) {
+      // A failed download still answers with the saved copy.
+      libState = { ...(libState || {}), error: e.message };
+      try { const c = await api("GET", "/api/library"); libState = { ...c, error: e.message }; } catch { /* keep the old */ }
+    }
+  } finally { libBusy = false; }
+  renderLibrary();
 }
 
 async function applyPreset(p) {
@@ -839,6 +859,40 @@ async function applyPreset(p) {
     toast(t("light.preset.applied", { n: libText(p.name) }) + (ign ? " " + t("light.preset.ignored", { k: ign }) : ""));
   } catch (e) { toast(e.message, true); }
 }
+
+async function savePreset(ev) {
+  ev.preventDefault();
+  const input = $("#light-preset-name");
+  const name = input.value.trim();
+  if (!name) { input.focus(); return; }
+  if (presetBusy) return;
+  presetBusy = true; renderLibrary();
+  try {
+    const p = await api("POST", "/api/lighting/presets", { name });
+    input.value = "";
+    toast(t("light.preset.saved", { n: libText(p.name) }));
+  } catch (e) { toast(e.message, true); }
+  finally { presetBusy = false; }
+  await reloadPresets();
+}
+
+async function deletePreset(p) {
+  const name = libText(p.name);
+  if (presetBusy || !confirm(t("light.preset.confirmDelete", { n: name }))) return;
+  presetBusy = true;
+  try { await api("DELETE", `/api/lighting/presets/${encodeURIComponent(p.id)}`); toast(t("light.preset.deleted", { n: name })); }
+  catch (e) { toast(e.message, true); }
+  finally { presetBusy = false; }
+  await reloadPresets();
+}
+
+// reloadPresets refreshes the list and the lighting state (its active preset).
+async function reloadPresets() {
+  try { lv = await api("GET", "/api/lighting"); lightSig = JSON.stringify(lv); renderLight(); } catch { /* keep the old */ }
+  await loadLibrary();
+}
+
+$("#light-preset-save").addEventListener("submit", savePreset);
 
 $("#light-lib-refresh").addEventListener("click", refreshLibrary);
 $("#light-presets").addEventListener("toggle", async (e) => {

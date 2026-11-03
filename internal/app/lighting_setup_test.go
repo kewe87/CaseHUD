@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/kewe87/casehud/internal/rgb/backend/enram"
 	"math"
+	"os"
 	"strings"
 	"testing"
 
@@ -35,7 +36,7 @@ func TestLightingSetupNeedsLighting(t *testing.T) {
 	if _, err := e.LightingZoneSetup("demo:board", "argb1", 5, nil, false); err == nil {
 		t.Fatal("zone setup while lighting is off")
 	}
-	if _, err := e.ApplyLightingTemplate("asus-x870e-o11-dynamic-evo", "de"); err == nil {
+	if _, err := e.ApplyLightingTemplate("test-board-template", "de"); err == nil {
 		t.Fatal("template while lighting is off")
 	}
 	if len(e.LightingTemplates()) != 0 || e.Lighting().Calibrating != nil {
@@ -44,6 +45,37 @@ func TestLightingSetupNeedsLighting(t *testing.T) {
 	e.saveLighting()
 	if cfg, _ := e.Store.LoadConfig(); cfg.Lighting.Engine != nil && len(cfg.Lighting.Engine.Devices) != 0 {
 		t.Fatalf("configuration written: %+v", cfg.Lighting.Engine.Devices)
+	}
+}
+
+func TestUnknownPartDegradesOnlyWhenStored(t *testing.T) {
+	seg := leds.Segment{Name: "Strip", Shape: "component", Component: "gone-part", Count: 47, X: 0.1, Y: 0.5, W: 0.8}
+	cfg := leds.Config{Devices: map[string]leds.DeviceConfig{"demo:board": {Zones: map[string]leds.ZoneConfig{"argb2": {Segments: []leds.Segment{seg}}}}}}
+	// GUI/API input: rejected
+	if _, err := cleanLightingConfig(cfg, nil); err == nil {
+		t.Fatal("unknown part accepted from input")
+	}
+	if _, err := cleanSegments([]leds.Segment{seg}); err == nil {
+		t.Fatal("unknown part accepted by cleanSegments")
+	}
+	// stored configuration: degrades to a line of the stored count
+	got, err := cleanLightingConfig(degradeUnknownParts(cfg), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := got.Devices["demo:board"].Zones["argb2"].Segments[0]
+	if s.Shape != "line" || s.Component != "" || s.Count != 47 {
+		t.Fatalf("degrade: %+v", s)
+	}
+	if cfg.Devices["demo:board"].Zones["argb2"].Segments[0].Shape != "component" {
+		t.Fatal("input was modified")
+	}
+	// no stored count or an odd id: still an error
+	for _, bad := range []leds.Segment{{Shape: "component", Component: "gone-part"}, {Shape: "component", Component: "../x", Count: 5}} {
+		c := leds.Config{Devices: map[string]leds.DeviceConfig{"d": {Zones: map[string]leds.ZoneConfig{"z": {Segments: []leds.Segment{bad}}}}}}
+		if _, err := cleanLightingConfig(degradeUnknownParts(c), nil); err == nil {
+			t.Fatalf("accepted %+v", bad)
+		}
 	}
 }
 
@@ -112,6 +144,7 @@ func TestLightingZoneParts(t *testing.T) {
 		t.Fatalf("chain: %+v", z)
 	}
 	// parallel branches: the longest part counts
+	leds.RegisterComponent(leds.Component{Name: "strip-47", Label: "Strip", Width: 47, Height: 1, LEDs: make([]leds.Point, 47)})
 	leds.RegisterComponent(leds.Component{Name: "test-short", Label: "Short", Width: 8, Height: 1, LEDs: make([]leds.Point, 8)})
 	v, err = e.LightingZoneSetup("demo:board", "argb2", 0, []string{"strip-47", "test-short", "fan-tl-26"}, true)
 	if err != nil {
@@ -146,21 +179,47 @@ func TestLightingZoneParts(t *testing.T) {
 	}
 }
 
+// useTestTemplate installs the template fixture (none ship with the program).
+func useTestTemplate(t *testing.T) {
+	t.Helper()
+	raw, err := os.ReadFile("testdata/lighting_template.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var f struct {
+		Templates []LightingTemplate `json:"templates"`
+	}
+	if err := json.Unmarshal(raw, &f); err != nil || len(f.Templates) == 0 {
+		t.Fatalf("fixture: %v", err)
+	}
+	for name, n := range map[string]int{"test-part-18": 18, "test-part-11": 11, "test-part-8": 8, "test-strip-47": 47} {
+		if _, ok := leds.LookupComponent(name); !ok {
+			leds.RegisterComponent(leds.Component{Name: name, Label: name, Width: n, Height: 1, LEDs: make([]leds.Point, n)})
+		}
+	}
+	old := lightingTemplates
+	lightingTemplates = f.Templates
+	t.Cleanup(func() { lightingTemplates = old })
+}
+
+func TestNoTemplatesShip(t *testing.T) {
+	if len(loadLightingTemplates()) != 0 {
+		t.Fatal("no lighting template may ship with the program")
+	}
+	if list := enableDemoLighting(t).LightingTemplates(); len(list) != 0 {
+		t.Fatalf("template offered: %+v", list)
+	}
+}
+
 func TestLightingTemplates(t *testing.T) {
+	useTestTemplate(t)
 	tpls := loadLightingTemplates()
-	if len(tpls) == 0 || tpls[0].ID != "asus-x870e-o11-dynamic-evo" {
-		t.Fatalf("embedded templates: %+v", tpls)
+	if len(tpls) == 0 || tpls[0].ID != "test-board-template" {
+		t.Fatalf("fixture templates: %+v", tpls)
 	}
 	byZone := map[string]LightingTemplateZone{}
 	for _, z := range tpls[0].Zones {
 		byZone[z.Zone] = z
-	}
-	// the library parts are registered with their LED counts
-	for name, n := range map[string]int{"core-distro-plate-o11-dynamic-evo-apex-vpp": 18, "core-geforce-rtx-5080-zotac-solid-amp": 11,
-		"apex-1-cpu-block-am5-argb": 8, "o11-dynamic-evo-argb-strip": 47} {
-		if _, ok := leds.LookupComponent(name); !ok {
-			leds.RegisterComponent(leds.Component{Name: name, Label: name, Width: n, Height: 1, LEDs: make([]leds.Point, n)})
-		}
 	}
 	if byZone["argb1"].leds() != 78 || byZone["argb2"].leds() != 47 || byZone["argb3"].leds() != 18 || byZone["ch4"].leds() != 9 || byZone["ring"].leds() != 60 {
 		t.Fatalf("LED counts: %d %d %d %d %d", byZone["argb1"].leds(), byZone["argb2"].leds(), byZone["argb3"].leds(), byZone["ch4"].leds(), byZone["ring"].leds())
@@ -186,9 +245,10 @@ func TestLightingTemplates(t *testing.T) {
 }
 
 func TestApplyTemplateOnDemo(t *testing.T) {
+	useTestTemplate(t)
 	e := enableDemoLighting(t)
 	list := e.LightingTemplates()
-	if len(list) != 1 || list[0].ID != "asus-x870e-o11-dynamic-evo" || !list[0].TLSync {
+	if len(list) != 1 || list[0].ID != "test-board-template" || !list[0].TLSync {
 		t.Fatalf("matching templates: %+v", list)
 	}
 	for _, z := range list[0].Zones {
@@ -199,7 +259,7 @@ func TestApplyTemplateOnDemo(t *testing.T) {
 	if _, err := e.ApplyLightingTemplate("nope", "de"); err == nil {
 		t.Fatal("unknown template")
 	}
-	res, err := e.ApplyLightingTemplate("asus-x870e-o11-dynamic-evo", "de")
+	res, err := e.ApplyLightingTemplate("test-board-template", "de")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -297,8 +357,9 @@ func TestZoneLabels(t *testing.T) {
 }
 
 func TestTemplateSetsNames(t *testing.T) {
+	useTestTemplate(t)
 	e := enableDemoLighting(t)
-	res, err := e.ApplyLightingTemplate("asus-x870e-o11-dynamic-evo", "en")
+	res, err := e.ApplyLightingTemplate("test-board-template", "en")
 	if err != nil {
 		t.Fatal(err)
 	}

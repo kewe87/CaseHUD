@@ -270,6 +270,10 @@ func sameExe(a, b string) bool {
 // automate evaluates the rules and switches the displays when due. It runs
 // from the rotation loop, before the rotation.
 func (e *Engine) automate(now time.Time) {
+	// The gaming status is read before mu is taken: serialise whole calls, or a
+	// call that read an old status could "let go" of a rule a newer call took.
+	e.autoMu.Lock()
+	defer e.autoMu.Unlock()
 	var g GamingStatus
 	if e.gamingFn != nil {
 		g = e.gamingFn(now)
@@ -372,7 +376,7 @@ func (e *Engine) automate(now time.Time) {
 		} else if i := slices.IndexFunc(scenes, func(s Scene) bool { return s.Name == r.Scene }); i >= 0 {
 			for k, id := range order {
 				if c, ok := scenes[i].Panels[id]; ok && e.workers[id] != nil {
-					changes = append(changes, change{e.workers[id], c.Clone(), delayFor(k)})
+					changes = append(changes, change{e.workers[id], e.mounted(id, c.Clone()), delayFor(k)})
 				}
 			}
 		}
@@ -404,7 +408,7 @@ func (e *Engine) ApplyScene(name string) error {
 	}
 	panels := map[string]PanelConfig{}
 	for id, c := range e.cfg.Rotation.Scenes[i].Panels {
-		panels[id] = c.Clone()
+		panels[id] = e.mounted(id, c.Clone())
 	}
 	e.mu.Unlock()
 	var first error

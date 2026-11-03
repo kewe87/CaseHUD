@@ -284,9 +284,7 @@ func (e *Engine) SetEffect(name string, params Params) error {
 // Effects lists the available effects.
 func (e *Engine) Effects() []EffectInfo {
 	out := make([]EffectInfo, 0, len(e.effects))
-	for _, info := range e.opt.Effects {
-		out = append(out, info)
-	}
+	out = append(out, e.opt.Effects...)
 	return out
 }
 

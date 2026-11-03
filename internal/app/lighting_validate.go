@@ -191,6 +191,37 @@ func finite01(vs ...float64) bool {
 	return true
 }
 
+// partIDRe is the shape of a part id (library file names).
+var partIDRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
+
+// degradeUnknownParts is for configurations read from disk only: a part that
+// is no longer known (removed from the program or the library) becomes a
+// plain line of the stored count, so a stored layout keeps working. Input
+// from the GUI or API never goes through here and is rejected as before.
+func degradeUnknownParts(in leds.Config) leds.Config {
+	devs := make(map[string]leds.DeviceConfig, len(in.Devices))
+	for id, d := range in.Devices {
+		zones := make(map[string]leds.ZoneConfig, len(d.Zones))
+		for zid, z := range d.Zones {
+			segs := append([]leds.Segment(nil), z.Segments...)
+			for i, s := range segs {
+				if s.Shape != "component" {
+					continue
+				}
+				if _, ok := leds.LookupComponent(s.Component); !ok && s.Count >= 1 && s.Count <= maxSegmentLEDs && partIDRe.MatchString(s.Component) {
+					segs[i].Shape, segs[i].Component = "line", ""
+				}
+			}
+			z.Segments = segs
+			zones[zid] = z
+		}
+		d.Zones = zones
+		devs[id] = d
+	}
+	in.Devices = devs
+	return in
+}
+
 // cleanSegments checks a zone layout: shapes from the list, components that
 // exist, geometry inside the canvas, LED counts bounded.
 func cleanSegments(segs []leds.Segment) ([]leds.Segment, error) {
