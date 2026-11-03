@@ -103,7 +103,7 @@ func TestLightingRejectsBadInput(t *testing.T) {
 		return patchDev("demo:board", "argb1", LightingZonePatch{Segments: &[]leds.Segment{s}})
 	}
 	bad := []LightingPatch{
-		{Effect: ptr("screen")},
+		{Effect: ptr("video")},
 		{Effect: ptr("../../x")},
 		{Brightness: ptr(101)},
 		{Brightness: ptr(-1)},
@@ -170,7 +170,7 @@ func TestCleanLightingConfigLimits(t *testing.T) {
 
 func TestLightingBadStoredConfigStaysOff(t *testing.T) {
 	dir := t.TempDir()
-	cfg := `{"lighting":{"enabled":true,"engine":{"version":1,"effect":"screen"}},"panels":{}}`
+	cfg := `{"lighting":{"enabled":true,"engine":{"version":1,"effect":"no-such-effect"}},"panels":{}}`
 	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -338,7 +338,7 @@ func TestLightingStateNeverWaitsForDeviceIO(t *testing.T) {
 
 func TestLightingBadStoredConfigIsBackedUp(t *testing.T) {
 	dir := t.TempDir()
-	cfg := `{"lighting":{"enabled":true,"engine":{"version":1,"effect":"screen"}},"panels":{}}`
+	cfg := `{"lighting":{"enabled":true,"engine":{"version":1,"effect":"no-such-effect"}},"panels":{}}`
 	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -351,15 +351,15 @@ func TestLightingBadStoredConfigIsBackedUp(t *testing.T) {
 		t.Fatalf("no reset hint: %+v", v)
 	}
 	b, err := os.ReadFile(v.ConfigBackup)
-	if err != nil || !strings.Contains(string(b), `"screen"`) {
+	if err != nil || !strings.Contains(string(b), `"no-such-effect"`) {
 		t.Fatalf("backup: %v %s", err, b)
 	}
 	e.Stop() // saves the defaults over the stored settings
 	b, _ = os.ReadFile(filepath.Join(dir, "config.json"))
-	if strings.Contains(string(b), `"screen"`) {
+	if strings.Contains(string(b), `"no-such-effect"`) {
 		t.Fatal("the bad settings are still in config.json")
 	}
-	if b, err = os.ReadFile(v.ConfigBackup); err != nil || !strings.Contains(string(b), `"screen"`) {
+	if b, err = os.ReadFile(v.ConfigBackup); err != nil || !strings.Contains(string(b), `"no-such-effect"`) {
 		t.Fatal("backup lost")
 	}
 }

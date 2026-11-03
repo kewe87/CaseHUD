@@ -57,6 +57,7 @@ func (s *Server) lightingRoutesV1(m *http.ServeMux) {
 // /api/v1/, plain text for the GUI.
 func lightingFail(w http.ResponseWriter, r *http.Request, err error) {
 	status, code := http.StatusInternalServerError, "internal"
+	persistFailed := errors.Is(err, app.ErrPersist)
 	if errors.Is(err, app.ErrLighting) {
 		status, code = http.StatusBadRequest, "bad_request"
 	}
@@ -70,6 +71,9 @@ func lightingFail(w http.ResponseWriter, r *http.Request, err error) {
 		if status == http.StatusInternalServerError {
 			log.Printf("lighting: %v", err)
 			err = errors.New("device I/O error")
+			if persistFailed {
+				err = errors.New("the configuration could not be written to disk")
+			}
 		}
 		apiFail(w, status, code, err.Error())
 		return
@@ -77,6 +81,9 @@ func lightingFail(w http.ResponseWriter, r *http.Request, err error) {
 	if status == http.StatusInternalServerError {
 		log.Printf("lighting: %v", err) // device paths stay out of the answer
 		err = errors.New("device I/O error")
+		if persistFailed {
+			err = errors.New("the configuration could not be written to disk; the change stays active until the program restarts")
+		}
 	}
 	fail(w, status, err)
 }

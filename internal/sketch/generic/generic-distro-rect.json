@@ -1,0 +1,164 @@
+{
+ "format": 1,
+ "id": "generic-distro-rect",
+ "vendor": "Generic",
+ "model": "Distribution plate (rectangular)",
+ "category": "distro-plate",
+ "dimensions_mm": {
+  "w": 90,
+  "h": 260,
+  "d": 25,
+  "approximate": true
+ },
+ "outline": {
+  "front": [
+   {
+    "type": "rect",
+    "x": 0,
+    "y": 0,
+    "w": 90,
+    "h": 260,
+    "r": 6,
+    "role": "body"
+   },
+   {
+    "type": "rect",
+    "x": 6,
+    "y": 6,
+    "w": 78,
+    "h": 248,
+    "r": 4,
+    "role": "lit"
+   }
+  ],
+  "side": [
+   {
+    "type": "rect",
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 25,
+    "r": 2,
+    "role": "body"
+   }
+  ],
+  "approximate": true
+ },
+ "leds": {
+  "count": 24,
+  "positions_mm": [
+   [
+    6.0,
+    6.0
+   ],
+   [
+    33.167,
+    6.0
+   ],
+   [
+    60.333,
+    6.0
+   ],
+   [
+    84.0,
+    9.5
+   ],
+   [
+    84.0,
+    36.667
+   ],
+   [
+    84.0,
+    63.833
+   ],
+   [
+    84.0,
+    91.0
+   ],
+   [
+    84.0,
+    118.167
+   ],
+   [
+    84.0,
+    145.333
+   ],
+   [
+    84.0,
+    172.5
+   ],
+   [
+    84.0,
+    199.667
+   ],
+   [
+    84.0,
+    226.833
+   ],
+   [
+    84.0,
+    254.0
+   ],
+   [
+    56.833,
+    254.0
+   ],
+   [
+    29.667,
+    254.0
+   ],
+   [
+    6.0,
+    250.5
+   ],
+   [
+    6.0,
+    223.333
+   ],
+   [
+    6.0,
+    196.167
+   ],
+   [
+    6.0,
+    169.0
+   ],
+   [
+    6.0,
+    141.833
+   ],
+   [
+    6.0,
+    114.667
+   ],
+   [
+    6.0,
+    87.5
+   ],
+   [
+    6.0,
+    60.333
+   ],
+   [
+    6.0,
+    33.167
+   ]
+  ],
+  "approximate": true,
+  "generator": {
+   "kind": "rect",
+   "inset": 6,
+   "min": 4,
+   "max": 128,
+   "default": 24
+  }
+ },
+ "connection": {
+  "type": "argb-header"
+ },
+ "verified_by": [
+  "community"
+ ],
+ "sources": [],
+ "notes": "Rectangular plate 90 x 260 x 25 mm with an LED frame, from the top left corner clockwise."
+}

@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -105,6 +106,64 @@ func TestStateAndPanelConfig(t *testing.T) {
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Errorf("put %s: status %d, want 400", bad, resp.StatusCode)
 		}
+	}
+}
+
+func TestPatchPanelKeepsOtherFields(t *testing.T) {
+	_, ts := testServer(t)
+	do := func(method, path, body string) (*http.Response, []byte) {
+		req, _ := http.NewRequest(method, ts.URL+path, strings.NewReader(body))
+		req.Header.Set("X-Token", "secret")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp, b
+	}
+	var st struct {
+		Panels []app.PanelState `json:"panels"`
+	}
+	_, b := do("GET", "/api/state", "")
+	json.Unmarshal(b, &st)
+	id := st.Panels[0].ID
+	if r, _ := do("PUT", "/api/panels/"+id, `{"mode":"design","design":"clock","brightness":40,"name":"Front"}`); r.StatusCode != http.StatusNoContent {
+		t.Fatalf("put status %d", r.StatusCode)
+	}
+	// Changed elsewhere meanwhile: the patch of a stale page must not undo it.
+	if r, _ := do("PUT", "/api/panels/"+id, `{"mode":"design","design":"clock","brightness":40,"name":"Front","theme":"light"}`); r.StatusCode != http.StatusNoContent {
+		t.Fatalf("put status %d", r.StatusCode)
+	}
+	r, b := do("PATCH", "/api/panels/"+id, `{"brightness":70}`)
+	if r.StatusCode != http.StatusOK {
+		t.Fatalf("patch status %d: %s", r.StatusCode, b)
+	}
+	var c app.PanelConfig
+	json.Unmarshal(b, &c)
+	if c.Brightness != 70 || c.Theme != "light" || c.Name != "Front" || c.Design != "clock" {
+		t.Fatalf("patched config %+v", c)
+	}
+	// A field set to "" is cleared, not skipped.
+	_, b = do("PATCH", "/api/panels/"+id, `{"theme":"","name":""}`)
+	c = app.PanelConfig{}
+	json.Unmarshal(b, &c)
+	if c.Theme != "" || c.Name != "" || c.Brightness != 70 {
+		t.Fatalf("cleared config %+v", c)
+	}
+	if r, _ := do("PATCH", "/api/panels/"+id, `{"design":"nonexistent"}`); r.StatusCode != http.StatusBadRequest {
+		t.Errorf("bad design: status %d", r.StatusCode)
+	}
+	if r, _ := do("PATCH", "/api/panels/"+id, `{"bogus":1}`); r.StatusCode != http.StatusBadRequest {
+		t.Errorf("unknown field: status %d", r.StatusCode)
+	}
+	if r, _ := do("PATCH", "/api/panels/nope", `{"brightness":1}`); r.StatusCode != http.StatusNotFound {
+		t.Errorf("unknown panel: status %d", r.StatusCode)
+	}
+	_, b = do("GET", "/api/state", "")
+	json.Unmarshal(b, &st)
+	if got := st.Panels[0].Config; got.Brightness != 70 || got.Design != "clock" {
+		t.Fatalf("stored config %+v", got)
 	}
 }
 

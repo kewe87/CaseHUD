@@ -9,6 +9,7 @@ import (
 
 	"github.com/kewe87/casehud/internal/community"
 	leds "github.com/kewe87/casehud/internal/rgb"
+	"github.com/kewe87/casehud/internal/sketch"
 )
 
 // builtinComponentNames are the components the LED module ships with; the
@@ -26,6 +27,9 @@ type libraryState struct {
 	once sync.Once
 	lib  *community.Library
 	err  error
+
+	catMu sync.Mutex
+	cat   *sketch.Catalog // parts and cases for the case sketch (library_catalog.go)
 }
 
 // Library returns the client for the component, case and lighting preset
@@ -45,6 +49,7 @@ func (e *Engine) Library() (*community.Library, error) {
 // loadLibraryComponents registers the cached library parts with the LED
 // module. It reads local files only.
 func (e *Engine) loadLibraryComponents() {
+	e.invalidateSketchCatalog()
 	lib, err := e.Library()
 	if err != nil {
 		return

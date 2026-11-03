@@ -152,6 +152,8 @@ func TestParsePresetRejects(t *testing.T) {
 		"param":   `{"format":1,"id":"a","name":{"en":"x"},"effect":"solid","params":{"bad key":1}}`,
 		"object":  `{"format":1,"id":"a","name":{"en":"x"},"effect":"solid","params":{"k":{"a":1}}}`,
 		"path":    `{"format":1,"id":"a","name":{"en":"x"},"effect":"solid","params":{},"path":{"mode":"x"}}`,
+		"screen":  `{"format":1,"id":"a","name":{"en":"x"},"effect":"screen","params":{}}`,
+		"audio":   `{"format":1,"id":"a","name":{"en":"x"},"effect":"audio","params":{}}`,
 		"noname":  `{"format":1,"id":"a","name":{},"effect":"solid","params":{}}`,
 		"control": "{\"format\":1,\"id\":\"a\",\"name\":{\"en\":\"x\"},\"effect\":\"solid\",\"params\":{\"k\":\"a\u0001\"}}",
 	} {

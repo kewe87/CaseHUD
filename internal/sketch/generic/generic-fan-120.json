@@ -1,0 +1,145 @@
+{
+ "format": 1,
+ "id": "generic-fan-120",
+ "vendor": "Generic",
+ "model": "Fan 120 mm, LED ring",
+ "category": "fan",
+ "dimensions_mm": {
+  "w": 120,
+  "h": 120,
+  "d": 25,
+  "approximate": true
+ },
+ "outline": {
+  "front": [
+   {
+    "type": "rect",
+    "x": 0,
+    "y": 0,
+    "w": 120,
+    "h": 120,
+    "r": 6,
+    "role": "body"
+   },
+   {
+    "type": "circle",
+    "cx": 60.0,
+    "cy": 60.0,
+    "r": 56.0,
+    "role": "frame"
+   },
+   {
+    "type": "ring",
+    "cx": 60.0,
+    "cy": 60.0,
+    "r_outer": 47,
+    "r_inner": 41,
+    "role": "lit"
+   },
+   {
+    "type": "circle",
+    "cx": 60.0,
+    "cy": 60.0,
+    "r": 20.400000000000002,
+    "role": "body"
+   }
+  ],
+  "side": [
+   {
+    "type": "rect",
+    "x": 0,
+    "y": 0,
+    "w": 120,
+    "h": 25,
+    "r": 2,
+    "role": "body"
+   }
+  ],
+  "approximate": true
+ },
+ "leds": {
+  "count": 16,
+  "positions_mm": [
+   [
+    60.0,
+    16.0
+   ],
+   [
+    76.838,
+    19.349
+   ],
+   [
+    91.113,
+    28.887
+   ],
+   [
+    100.651,
+    43.162
+   ],
+   [
+    104.0,
+    60.0
+   ],
+   [
+    100.651,
+    76.838
+   ],
+   [
+    91.113,
+    91.113
+   ],
+   [
+    76.838,
+    100.651
+   ],
+   [
+    60.0,
+    104.0
+   ],
+   [
+    43.162,
+    100.651
+   ],
+   [
+    28.887,
+    91.113
+   ],
+   [
+    19.349,
+    76.838
+   ],
+   [
+    16.0,
+    60.0
+   ],
+   [
+    19.349,
+    43.162
+   ],
+   [
+    28.887,
+    28.887
+   ],
+   [
+    43.162,
+    19.349
+   ]
+  ],
+  "approximate": true,
+  "generator": {
+   "kind": "ring",
+   "radius": 44,
+   "min": 4,
+   "max": 64,
+   "default": 16
+  }
+ },
+ "connection": {
+  "type": "argb-header"
+ },
+ "verified_by": [
+  "community"
+ ],
+ "sources": [],
+ "notes": "Standard 120 mm frame (120 x 120 x 25 mm, 105 mm hole pitch). LED ring, first LED at the top, clockwise."
+}

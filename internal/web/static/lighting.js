@@ -31,6 +31,14 @@ Object.assign(STRINGS.de, {
   "light.fx.sensor": "Temperatur", "light.fx.cycle": "Farbwechsel", "light.fx.meteor": "Meteor", "light.fx.fill": "Füllen",
   "light.fx.burst": "Füllen und verblassen", "light.fx.shuttle": "Pendel", "light.fx.bounce": "Springen", "light.fx.stack": "Stapeln",
   "light.fx.sparkle": "Funkeln", "light.fx.stripes": "Streifen", "light.fx.sand": "Sanduhr", "light.fx.spark": "Funke",
+  "light.fx.screen": "Bildschirm-Ambilight", "light.fx.audio": "Audio-Visualizer",
+  "light.p.display": "Bildschirm (0 = Hauptbildschirm)", "light.p.area": "Bereich", "light.p.saturation": "Sättigung (%)",
+  "light.p.fps": "Aufnahmerate (Bilder/s)", "light.p.bands": "Bänder", "light.p.sensitivity": "Empfindlichkeit (%)",
+  "light.p.decay": "Abklingen", "light.p.rainbow": "Regenbogenfarben",
+  "light.pv.area.edges": "Ränder (Ambilight)", "light.pv.area.full": "Ganzes Bild",
+  "light.pv.mode.spectrum": "Spektrum", "light.pv.mode.pulse": "Puls",
+  "light.capture.note.screen": "Liest den Bildschirminhalt, solange der Effekt läuft. Nichts wird gespeichert oder gesendet.",
+  "light.capture.note.audio": "Liest die Audioausgabe, solange der Effekt läuft. Nichts wird gespeichert oder gesendet.",
   "light.fx.meet": "Treffen und mischen", "light.fx.rainbow-gaps": "Regenbogen mit Lücken",
   "light.p.speed": "Geschwindigkeit", "light.p.scale": "Breite", "light.p.vertical": "Senkrecht", "light.p.color": "Farbe",
   "light.p.useAccent": "Akzentfarbe des Designs", "light.p.period": "Dauer (s)", "light.p.background": "Hintergrund", "light.p.width": "Breite",
@@ -110,6 +118,14 @@ Object.assign(STRINGS.en, {
   "light.fx.sensor": "Temperature", "light.fx.cycle": "Color cycle", "light.fx.meteor": "Meteor", "light.fx.fill": "Color fill",
   "light.fx.burst": "Fill and fade", "light.fx.shuttle": "Shuttle", "light.fx.bounce": "Bounce", "light.fx.stack": "Stack",
   "light.fx.sparkle": "Sparkle", "light.fx.stripes": "Stripes", "light.fx.sand": "Sand glass", "light.fx.spark": "Spark",
+  "light.fx.screen": "Screen ambilight", "light.fx.audio": "Audio visualizer",
+  "light.p.display": "Display (0 = primary)", "light.p.area": "Area", "light.p.saturation": "Saturation (%)",
+  "light.p.fps": "Capture rate (frames/s)", "light.p.bands": "Bands", "light.p.sensitivity": "Sensitivity (%)",
+  "light.p.decay": "Decay", "light.p.rainbow": "Rainbow colors",
+  "light.pv.area.edges": "Edges (ambilight)", "light.pv.area.full": "Whole picture",
+  "light.pv.mode.spectrum": "Spectrum", "light.pv.mode.pulse": "Pulse",
+  "light.capture.note.screen": "Reads the screen while the effect runs. Nothing is stored or sent.",
+  "light.capture.note.audio": "Reads the audio output while the effect runs. Nothing is stored or sent.",
   "light.fx.meet": "Meet and mix", "light.fx.rainbow-gaps": "Rainbow with gaps",
   "light.p.speed": "Speed", "light.p.scale": "Width", "light.p.vertical": "Vertical", "light.p.color": "Color",
   "light.p.useAccent": "Design accent color", "light.p.period": "Period (s)", "light.p.background": "Background", "light.p.width": "Width",
@@ -237,9 +253,34 @@ async function lightPatch(body) {
   } catch (e) {
     toast(e.message, true);
     await loadLight(); // show what is really set
+    // loadLight keeps the DOM when the state is unchanged, and the focus guards
+    // keep the touched control as the user left it: redraw it explicitly.
+    forceRender = true;
+    try { renderLight(); } finally { forceRender = false; }
   }
 }
-const lightPatchSoon = debounce(lightPatch, 160);
+let forceRender = false;
+
+// Changes of several controls inside one debounce window are merged field by
+// field, so the first of two quick changes is not dropped.
+const mergePatch = (a, b) => {
+  const out = { ...a };
+  for (const [k, v] of Object.entries(b)) {
+    const o = out[k];
+    out[k] = o && v && typeof o === "object" && typeof v === "object" && !Array.isArray(v) ? mergePatch(o, v) : v;
+  }
+  return out;
+};
+let soonPatch = null, soonTimer = 0;
+function lightPatchSoon(body) {
+  soonPatch = soonPatch ? mergePatch(soonPatch, body) : body;
+  clearTimeout(soonTimer);
+  soonTimer = setTimeout(() => {
+    const b = soonPatch;
+    soonPatch = null;
+    lightPatch(b);
+  }, 160);
+}
 
 // Controllers like the TL fan hub store every command in flash memory: their
 // settings are collected and sent one second after the last change, never per
@@ -282,7 +323,8 @@ function lightParam(p, value, send, soon) {
   const head = el("span", { class: "lp-name" }, label);
   if (p.type === "number") {
     const lo = p.min ?? 0, hi = p.max > lo ? p.max : lo + 100;
-    const step = hi - lo <= 20 ? 0.1 : 1;
+    const whole = [lo, hi, p.default ?? 0].every(Number.isInteger);
+    const step = whole || hi - lo > 20 ? 1 : 0.1;
     const val = el("span", { class: "lp-val" });
     const show = (v) => (val.textContent = String(Math.round(v * 100) / 100));
     ctl = el("input", { type: "range", id, min: lo, max: hi, step, value: value ?? p.default });
@@ -298,7 +340,7 @@ function lightParam(p, value, send, soon) {
   if (p.type === "enum" && (p.values || []).length) {
     ctl = el("select", { id, onchange: (e) => send(e.target.value) },
       ...(p.values.includes(value) ? [] : [el("option", { value: value ?? "" }, value || "–")]),
-      ...p.values.map((v) => el("option", { value: v, selected: v === value }, v)));
+      ...p.values.map((v) => el("option", { value: v, selected: v === value }, lightLabel("pv", p.key + "." + v, v))));
     return el("div", { class: "lp" }, el("label", { for: id, class: "lp-head" }, head), ctl);
   }
   ctl = el("input", { type: "text", id, value: value ?? "", maxlength: 200 });
@@ -733,15 +775,16 @@ function renderLight() {
     e.featured ? lightLabel("fx", e.name, e.label) : t("light.more", { n: lightLabel("fx", e.name, e.label) }))));
   const info = lv.effects.find((e) => e.name === lv.effect);
   const box = $("#light-params");
-  if (!(document.activeElement && box.contains(document.activeElement) && ["range", "color", "text", "select-one"].includes(focused().type))) {
+  if (!(document.activeElement && box.contains(document.activeElement) && ["range", "color", "text", "select-one", "checkbox"].includes(focused().type)) || forceRender) {
     box.replaceChildren(...((info && info.params) || []).map((p) => lightParam(p, (lv.params || {})[p.key],
       (v) => lightPatch({ params: { [p.key]: v } }), (v) => lightPatchSoon({ params: v }))));
+    if (info && info.capture) box.prepend(el("p", { class: "dev-note capture-note" }, lightLabel("capture", "note." + info.name, "")));
   }
   $("#light-params-head").hidden = !(info && info.params.length);
 
   // devices
   const list = $("#light-devices");
-  const busy = devQueued() || document.activeElement && list.contains(document.activeElement) && ["number", "text", "range", "color", "select-one"].includes(focused().type);
+  const busy = !forceRender && (devQueued() || document.activeElement && list.contains(document.activeElement) && ["number", "text", "range", "color", "select-one"].includes(focused().type));
   if (!busy) {
     const open = new Set($$("#light-devices details[open]").map((d) => d.closest(".dev").dataset.id));
     list.replaceChildren(...setupCards(), ...(lv.devices.length ? lv.devices.map((d, i) => {
@@ -803,7 +846,7 @@ function renderLibrary() {
   const st = libState.status || {}, ps = libState.presets || [];
   $("#light-presets-count").textContent = ps.length ? t("light.presets.count", { n: ps.length }) : "";
   $("#light-lib-status").textContent = libBusy ? t("light.lib.loading")
-    : st.cached ? t("light.lib.status", { when: new Date(st.updated).toLocaleString(LANG), c: st.components, p: st.presets }) : t("light.lib.never");
+    : st.cached ? t("light.lib.status", { when: new Date(st.updated).toLocaleString(LANG === "de" ? "de-DE" : "en-GB"), c: st.components, p: st.presets }) : t("light.lib.never");
   $("#light-lib-refresh").disabled = libBusy;
   const err = $("#light-lib-error");
   const warns = (st.warnings || []).length;
@@ -958,9 +1001,11 @@ $("#light-brightness").addEventListener("input", (e) => {
   lightPatchSoon({ brightness: Number(e.target.value) });
 });
 $("#light-exit").addEventListener("change", (e) => lightPatch({ shutdown: e.target.value }));
-$("#light-effect").addEventListener("change", (e) => {
+$("#light-effect").addEventListener("change", async (e) => {
   const name = e.target.value;
   const info = lv && lv.effects.find((x) => x.name === name);
+  // Screen and audio need a one-time confirmation; declined: back to the running effect.
+  if (info && info.capture && !(await ensureAck("capture"))) { e.target.value = lv.effect; return; }
   const body = { effect: name };
   // Temperature starts with the CPU temperature, 40 to 85 degrees, blue to red.
   if (name === "sensor" && info && !((lv.params || {}).sensor) && lv.effect !== "sensor") {

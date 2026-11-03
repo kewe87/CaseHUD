@@ -70,6 +70,7 @@ function toast(msg, isError) {
   const tEl = $("#toast");
   tEl.textContent = msg;
   tEl.className = "toast" + (isError ? " error" : "");
+  tEl.setAttribute("aria-live", isError ? "assertive" : "polite");
   tEl.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (tEl.hidden = true), isError ? 6000 : 2200);
@@ -85,23 +86,44 @@ const setRangeFill = (r) => r.style.setProperty("--p", `${((r.value - r.min) / (
 // ---------- state ----------
 let state = { panels: [], designs: [], media: [], fanSets: {} };
 
-// A fresh state must not undo a save that is still on its way: panels with a
-// pending entry in panelQueue keep the config the user just chose.
-function keepPendingConfigs(old) {
-  for (const p of state.panels) {
-    const o = panelQueue[p.id] && old.find((x) => x.id === p.id);
+// A display's configuration comes from the server, except while the user's own
+// change is on its way (queued, in flight, or waiting for the slider to settle)
+// or was saved while the request for this state was out: that answer may still
+// show the old setup. Such a panel keeps its local config until the next state.
+function panelBusy(id) { return !!panelQueue[id] || id in settleTimers; }
+function seqSnapshot() { return { ...panelSeq }; }
+function keepLocalConfigs(fresh, old, seq) {
+  for (const p of fresh.panels) {
+    if (!panelBusy(p.id) && (panelSeq[p.id] || 0) === (seq[p.id] || 0)) continue;
+    const o = old.find((x) => x.id === p.id);
     if (o) p.config = o.config;
   }
 }
+// Equal as data: key order and empty values (the server leaves them out) do not count.
+function canon(v) {
+  if (Array.isArray(v)) return v.map(canon);
+  if (v && typeof v === "object") {
+    const o = {};
+    for (const k of Object.keys(v).sort()) { const x = canon(v[k]); if (x !== "" && x !== false && x !== 0 && x != null && !(Array.isArray(x) && !x.length)) o[k] = x; }
+    return o;
+  }
+  return v;
+}
+const sameJSON = (a, b) => JSON.stringify(canon(a)) === JSON.stringify(canon(b));
 let refreshSeq = 0;
+let langPending = 0; // language switches whose PUT has not answered yet
+let langGen = 0; // counts language switches and their answers: a state requested before one is out of date
 async function refresh() {
   const old = state.panels || [];
   const seq = ++refreshSeq;
+  const saves = seqSnapshot();
+  const lg = langGen;
   const fresh = await api("GET", "/api/state");
   if (seq !== refreshSeq) return; // a newer refresh is on its way; drop the stale answer
+  keepLocalConfigs(fresh, old, saves);
   state = fresh;
-  keepPendingConfigs(old);
-  if (state.language && state.language !== LANG) setLang(state.language);
+  // The page's choice wins until it is stored: the answer may still carry the old language.
+  if (state.language && state.language !== LANG && !langPending && lg === langGen) setLang(state.language);
   renderAll();
   if (typeof checkDisclaimer === "function") checkDisclaimer();
 }
@@ -161,9 +183,12 @@ $("#btn-rescan").addEventListener("click", async () => {
 for (const b of $$("[data-lang]")) {
   b.addEventListener("click", async () => {
     setLang(b.dataset.lang);
+    designStamp = Date.now(); // design previews carry text in the language
     renderAll();
     if (!$("#editor").hidden) { drawDesignForm(); drawLayers(); drawWidgetForm(); }
+    langPending++; langGen++;
     try { await api("PUT", "/api/settings", { language: LANG }); } catch { /* not critical */ }
+    langPending--; langGen++;
   });
 }
 
@@ -256,52 +281,107 @@ function panelCard(p) {
       el("div", { class: "panel-name" }, shortName(p), p.experimental ? el("span", { class: "badge exp", title: t("dev.exp.hint") }, t("dev.exp.badge")) : null),
       el("div", { class: "panel-meta" }, `${p.width}×${p.height}` + (shortName(p) === p.name.replace(/ \(.*\)$/, "") ? "" : ` · ${p.name.replace(/ \(.*\)$/, "")}`))),
     el("span", { class: "content-pill" + (cfg.mode === "off" ? " off" : ""), title: contentLabel(cfg) }, contentLabel(cfg)),
-    p.error ? el("div", { class: "panel-error" }, p.error) : null);
+    p.error ? el("div", { class: "panel-error" }, p.error) : null,
+    p.bootPending ? el("div", { class: "panel-warn" }, t("boot.pending")) : null);
 }
 
 // Saves for one panel go out one after the other: two quick clicks (dark,
 // light) sent in parallel could reach the server in the wrong order and leave
 // the display on the first choice while the button shows the second.
-const panelQueue = {};
-function setPanel(id, cfg, quiet) {
-  cfg = { ...cfg };
-  const run = (panelQueue[id] || Promise.resolve()).then(() => setPanelNow(id, cfg, quiet));
+//
+// A save carries only the fields the user changed (PATCH): whatever else
+// changed meanwhile (API, a second window) stays as it is. p.config is
+// updated at the moment of the click, so a redraw or a state answer in between
+// shows the user's choice, not the old setup; the answer to the save then
+// brings the server's version (it may have adjusted fields).
+const panelQueue = {};   // id -> newest queued save (promise)
+const panelSeq = {};     // id -> counter, bumped when a save is queued and when one ends
+const panelJob = {};     // id -> newest save of that display
+const settleTimers = {}; // id -> timer of a slider or rotation change that waits to be sent
+const settlePatch = {};  // id -> the changes that timer will send
+const panelById = (id) => state.panels.find((x) => x.id === id);
+// Replace a config in place: the open drawer holds the same object.
+function replaceConfig(p, cfg) {
+  for (const k of Object.keys(p.config)) delete p.config[k];
+  Object.assign(p.config, cfg);
+}
+function showPill(p) {
+  const card = $(`[data-panel="${CSS.escape(p.id)}"] .content-pill`);
+  if (card) { card.textContent = card.title = contentLabel(p.config); card.classList.toggle("off", p.config.mode === "off"); }
+}
+// setPanel resolves to true when the server took the change.
+function setPanel(id, patch, quiet) {
+  patch = { ...patch };
+  const p = panelById(id);
+  if (p) {
+    Object.assign(p.config, patch);
+    if (p.config.grid === "") delete p.config.tiles;
+    showPill(p);
+  }
+  panelSeq[id] = (panelSeq[id] || 0) + 1;
+  const job = {};
+  panelJob[id] = job;
+  const run = (panelQueue[id] || Promise.resolve()).then(() => setPanelNow(id, patch, quiet, job));
   panelQueue[id] = run;
   run.finally(() => { if (panelQueue[id] === run) delete panelQueue[id]; });
   return run;
 }
-async function setPanelNow(id, cfg, quiet) {
-  const p = state.panels.find((x) => x.id === id);
-  const turned = p && isBarP(p) && (p.config.rotation || 0) !== (cfg.rotation || 0);
-  if (cfg.grid === "") { cfg = { ...cfg }; delete cfg.tiles; }
-  const before = p && p.config;
-  if (p) p.config = { ...cfg }; // optimistic: a poll or redraw meanwhile must not show the old setup
+async function setPanelNow(id, patch, quiet, job) {
+  const body = { ...patch };
+  if (body.grid === "") body.tiles = []; // the server drops the fields of a display without grid
+  let ok = false;
   try {
-    await api("PUT", `/api/panels/${encodeURIComponent(id)}`, cfg);
-    if (turned) { await refresh(); toast(t("applied.one", { name: shortName(state.panels.find((x) => x.id === id) || p) })); return; }
-    const cur = state.panels.find((x) => x.id === id); // state may have been replaced meanwhile
-    if (cur) cur.config = { ...cfg };
-    if (!quiet) {
-      toast(t("applied.one", { name: p ? shortName(p) : id }));
-      pulse(id);
+    const res = await api("PATCH", `/api/panels/${encodeURIComponent(id)}`, body);
+    ok = true;
+    const cur = panelById(id); // state may have been replaced meanwhile
+    // The newest save's answer is the truth, unless the user moved a slider since.
+    if (cur && panelJob[id] === job && !(id in settleTimers)) {
+      const changed = !sameJSON(cur.config, res);
+      replaceConfig(cur, res);
+      showPill(cur);
+      if (changed && drawerId === id) renderDrawer();
     }
-    const card = $(`[data-panel="${CSS.escape(id)}"] .content-pill`);
-    if (card) { card.textContent = card.title = contentLabel(cfg); card.classList.toggle("off", cfg.mode === "off"); }
   } catch (e) {
     toast(e.message, true);
     // The server kept the old setup: show that again, not the rejected change.
-    const cur = state.panels.find((x) => x.id === id);
-    if (cur && before) cur.config = before;
-    if (drawerId === id) renderDrawer();
+    if (panelJob[id] === job && !(id in settleTimers)) await resyncPanel(id);
   }
+  panelSeq[id] = (panelSeq[id] || 0) + 1;
+  const p = panelById(id);
+  if (ok && "rotation" in patch && p && isBarP(p)) await refresh(); // the display's size changed with it
+  if (ok && !quiet) {
+    toast(t("applied.one", { name: p ? shortName(p) : id }));
+    pulse(id);
+  }
+  return ok;
+}
+// resyncPanel takes the server's setup for one display, whatever is pending locally.
+async function resyncPanel(id) {
+  try {
+    const s = await api("GET", "/api/state");
+    const fresh = s.panels.find((x) => x.id === id), cur = panelById(id);
+    if (!fresh || !cur) return;
+    replaceConfig(cur, fresh.config);
+    showPill(cur);
+    renderPanels();
+    if (drawerId === id) renderDrawer();
+  } catch { /* the next state poll fixes it */ }
 }
 // Brightness and rotation are stored in the device's flash memory: they are
 // sent once the user has settled (release of the slider, 700 ms after the
 // last click), never for every step on the way. The preview may follow live.
-const settleTimers = {};
-function setPanelSettled(id, cfg, now) {
+function setPanelSettled(id, patch, now) {
+  const p = panelById(id);
+  if (p) Object.assign(p.config, patch); // the choice is shown (and survives a poll) while the send waits
+  settlePatch[id] = { ...settlePatch[id], ...patch };
   clearTimeout(settleTimers[id]);
-  const go = () => { delete settleTimers[id]; setPanel(id, cfg, true); };
+  const go = () => {
+    clearTimeout(settleTimers[id]);
+    delete settleTimers[id];
+    const pt = settlePatch[id];
+    delete settlePatch[id];
+    setPanel(id, pt, true);
+  };
   if (now) go(); else settleTimers[id] = setTimeout(go, 700);
 }
 
@@ -315,13 +395,15 @@ function pulse(id) {
 
 async function applyFanSet(panels, set) {
   const trio = (state.fanSets || {})[set] || (state.fanSets || {}).clean;
+  let failed = 0;
   for (let i = 0; i < panels.length; i++) {
-    const cfg = { ...panels[i].config, mode: "design", design: trio[i % trio.length] };
-    await setPanel(panels[i].id, cfg, true);
+    if (!(await setPanel(panels[i].id, { mode: "design", design: trio[i % trio.length] }, true))) failed++;
     pulse(panels[i].id);
   }
   renderPanels();
-  toast(t("fanset.done"));
+  // An error toast must not be wiped by a success message right behind it.
+  if (failed) toast(t("applied.partial", { ok: panels.length - failed, n: panels.length, fail: failed }), true);
+  else toast(t("fanset.done"));
 }
 
 $("#btn-identify-all").addEventListener("click", () =>
@@ -355,7 +437,7 @@ function arrFanNode(f) {
   const sel = arrSel === f.id;
   return el("button", { class: "arr-fan" + (sel ? " sel" : ""), "data-fan": f.id, "aria-pressed": sel ? "true" : "false",
     title: t("arr.fanTitle", { n: f.number, port: f.port, pos: f.index + 1 }), onclick: () => arrPick(f) },
-  el("img", { alt: "", "data-preview": f.id, src: liveFrames[f.id] || null }),
+  el("img", { alt: "", "data-preview": f.id, src: frameSrc(f.id) }),
   el("span", { class: "arr-no" }, String(f.number)));
 }
 
@@ -373,7 +455,7 @@ function arrPicker(fans, f) {
     el("p", { class: "sub" }, t("arr.pick.sub")),
     el("div", { class: "arr-nums" }, Array.from({ length: n }, (_, i) => i + 1).map((no) => {
       const o = owner(no);
-      return el("button", { class: "pick" + (no === f.number ? " active" : ""), title: o && o.id !== f.id ? t("arr.swap", { port: o.port, pos: o.index + 1 }) : "",
+      return el("button", { class: "pick" + (no === f.number ? " active" : ""), "aria-pressed": String(no === f.number), title: o && o.id !== f.id ? t("arr.swap", { port: o.port, pos: o.index + 1 }) : "",
         onclick: async () => {
           if (no === f.number) return;
           try { await api("POST", `/api/fans/${encodeURIComponent(f.id)}/number`, { number: no }); await refresh(); api("POST", `/api/panels/${encodeURIComponent(f.id)}/identify`).catch(() => {}); }
@@ -444,56 +526,102 @@ function renderArrScan(sc) {
 // Live previews: one event stream carries every frame the panels show, so
 // animations look as smooth here as on the LCDs.
 let live = null;
-const liveFrames = {};
-function startLive() {
-  if (live) return;
-  live = new EventSource(url("/api/live"));
-  live.onmessage = (ev) => {
-    const f = JSON.parse(ev.data);
-    const bin = atob(f.jpg);
+const liveFrames = {};   // id -> object URL of the newest decoded frame
+const liveRaw = {};      // id -> newest frame as it came (base64), decoded only when something shows it
+const liveDecoded = {};  // id -> the raw frame liveFrames[id] was made from
+let liveRetry = 0, liveRetryTimer = null;
+// frameSrc decodes the newest frame of a display when an image needs it; frames
+// for displays nobody looks at right now cost nothing but the string.
+function frameSrc(id) {
+  const raw = liveRaw[id];
+  if (!raw) return liveFrames[id] || null;
+  if (liveDecoded[id] !== raw) {
+    const bin = atob(raw);
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    const src = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
-    const old = liveFrames[f.id];
-    liveFrames[f.id] = src;
-    for (const img of $$("img[data-preview]")) if (img.dataset.preview === f.id) img.src = src;
+    const old = liveFrames[id];
+    liveFrames[id] = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
+    liveDecoded[id] = raw;
     if (old) setTimeout(() => URL.revokeObjectURL(old), 1000); // after the swap has painted
-  };
-  // EventSource reconnects by itself after errors.
+  }
+  return liveFrames[id];
 }
-function stopLive() { if (live) { live.close(); live = null; } }
+function startLive() {
+  if (live || document.hidden) return;
+  clearTimeout(liveRetryTimer);
+  live = new EventSource(url("/api/live"));
+  live.onopen = () => { liveRetry = 0; };
+  live.onmessage = (ev) => {
+    const f = JSON.parse(ev.data);
+    liveRaw[f.id] = f.jpg;
+    const imgs = $$("img[data-preview]").filter((img) => img.dataset.preview === f.id);
+    if (!imgs.length) return; // nothing shows this display now: no decoding
+    const src = frameSrc(f.id);
+    for (const img of imgs) img.src = src;
+  };
+  // EventSource reconnects by itself after network errors, but it gives up for
+  // good when the server refuses (503: too many streams open, e.g. several
+  // windows): then say so and try again a little later.
+  live.onerror = () => {
+    if (!live || live.readyState !== EventSource.CLOSED) return;
+    live = null;
+    liveRetry++;
+    if (liveRetry === 1) toast(t("live.busy"), true);
+    liveRetryTimer = setTimeout(startLive, Math.min(60000, 5000 * liveRetry));
+  };
+}
+function stopLive() { clearTimeout(liveRetryTimer); if (live) { live.close(); live = null; } }
 document.addEventListener("visibilitychange", () => (document.hidden ? stopLive() : startLive()));
 startLive();
 // New preview images show the latest frame right away.
 new MutationObserver(() => {
   for (const img of $$("img[data-preview]")) {
-    const src = liveFrames[img.dataset.preview];
+    const src = frameSrc(img.dataset.preview);
     if (src && img.src !== src) img.src = src;
   }
 }).observe(document.body, { childList: true, subtree: true });
 
 // ---------- drawer ----------
 let drawerId = null;
+let drawerHint = () => {}; // redraws the colour scheme hint of the open drawer
+let drawerOpener = null; // what had the focus before the drawer opened, to give it back
 function openDrawer(id) {
+  const wasOpen = !$("#drawer").hidden;
+  if (!wasOpen) drawerOpener = document.activeElement;
   drawerId = id;
   $("#drawer").hidden = false;
   $("#scrim").hidden = false;
   document.body.classList.add("drawer-open");
   $$(".panel-card").forEach((c) => c.classList.toggle("selected", c.dataset.panel === id));
   renderDrawer();
+  pollState(); // another window or the API may have changed this display, or a scene took it over, since the last state
+  $("#drawer").focus({ preventScroll: true }); // keyboard and screen reader users land in the dialog
 }
 function closeDrawer() {
+  const id = drawerId;
+  const inside = !document.activeElement || document.activeElement === document.body || $("#drawer").contains(document.activeElement);
   drawerId = null;
   $("#drawer").hidden = true;
   $("#scrim").hidden = true;
   document.body.classList.remove("drawer-open");
   $$(".panel-card").forEach((c) => c.classList.remove("selected"));
+  // Focus goes back to where the drawer was opened from (the card, which may have been redrawn).
+  if (inside) {
+    const back = drawerOpener && drawerOpener.isConnected ? drawerOpener : id && $(`[data-panel="${CSS.escape(id)}"]`);
+    if (back && back.focus) back.focus({ preventScroll: true });
+  }
+  drawerOpener = null;
 }
 $("#dr-close").addEventListener("click", closeDrawer);
 $("#scrim").addEventListener("click", closeDrawer);
+// Escape closes the topmost thing: menu, then an editor, then the drawer
+// (native dialogs close themselves).
 document.addEventListener("keydown", (e) => {
-  if (e.key !== "Escape") return;
-  if (!$("#menu").hidden) $("#menu").hidden = true;
+  if (e.key !== "Escape" || e.defaultPrevented) return;
+  if (!$("#menu").hidden) closeMenu(true);
+  else if (document.querySelector("dialog[open]")) return;
+  else if (!$("#editor").hidden) closeEditor();
+  else if (!$("#layout-editor").hidden) closeLayoutEditor(false);
   else if (drawerId) closeDrawer();
 });
 
@@ -501,26 +629,32 @@ function renderDrawer() {
   const p = state.panels.find((x) => x.id === drawerId);
   if ($("#dr-content").dataset.for !== drawerId) { delete $("#dr-content").dataset.scrolled; $("#dr-content").dataset.for = drawerId; }
   if (!p) { closeDrawer(); return; }
-  const cfg = { ...p.config };
+  // The drawer works on the display's own config object: every change goes
+  // through setPanel, which updates it at once and sends only that change.
+  const cfg = p.config;
   const prev = $("#dr-preview");
   prev.className = "drawer-preview" + (p.round ? " round" : "") + (isWideP(p) ? " wide" : "") + (isTallP(p) ? " tall" : "");
   prev.style.aspectRatio = ratio(p.width, p.height);
   prev.querySelector("img").dataset.preview = p.id;
   $("#dr-name").textContent = `${isTL(p) ? "" : t("display.n", { n: panelNumber(p) })}${isTL(p) ? shortName(p) : (cfg.name ? " · " + cfg.name : "")}`;
   const label = $("#dr-label");
-  label.value = cfg.name || "";
+  // What is being typed stays, whatever redraws the drawer meanwhile.
+  if (document.activeElement !== label) label.value = cfg.name || "";
   label.onchange = () => {
-    cfg.name = label.value.trim();
-    setPanel(p.id, cfg, true).then(() => { renderPanels(); renderDrawer(); });
+    setPanel(p.id, { name: label.value.trim() }, true).then(() => { renderPanels(); if (document.activeElement !== label) renderDrawer(); });
   };
   $("#dr-identify").onclick = () => api("POST", `/api/panels/${encodeURIComponent(p.id)}/identify`).then(() => toast(t("identify.done"))).catch((e) => toast(e.message, true));
   $("#dr-meta").textContent = `${deviceLabel(p).replace(/ \(.*\)$/, "")} · ${p.width}×${p.height}`;
 
-  const change = (patch) => { Object.assign(cfg, patch); setPanel(p.id, cfg); renderDrawerContent(p, cfg, change); renderModes(); $("#dr-theme-field").hidden = cfg.mode !== "design"; };
+  const change = (patch) => {
+    setPanel(p.id, patch);
+    renderDrawerContent(p, cfg, change); renderModes(); renderTheme();
+    $("#dr-theme-field").hidden = cfg.mode !== "design";
+  };
 
   const renderModes = () => {
     $("#dr-mode").replaceChildren(...["design", "media", "off"].map((m) =>
-      el("button", { class: cfg.mode === m ? "active" : "", onclick: () => change({ mode: m }) }, t("mode." + m))));
+      el("button", { class: cfg.mode === m ? "active" : "", "aria-pressed": String(cfg.mode === m), onclick: () => change({ mode: m }) }, t("mode." + m))));
   };
   renderModes();
   renderDrawerContent(p, cfg, change);
@@ -530,34 +664,39 @@ function renderDrawer() {
   setRangeFill(bri);
   $("#dr-bri-val").textContent = cfg.brightness + "%";
   bri.oninput = () => {
-    cfg.brightness = +bri.value;
     setRangeFill(bri);
-    $("#dr-bri-val").textContent = cfg.brightness + "%";
-    setPanelSettled(p.id, cfg, false); // keyboard steps and fallback; the release sends right away
+    $("#dr-bri-val").textContent = bri.value + "%";
+    setPanelSettled(p.id, { brightness: +bri.value }, false); // keyboard steps and fallback; the release sends right away
   };
-  bri.onchange = () => setPanelSettled(p.id, cfg, true);
+  bri.onchange = () => setPanelSettled(p.id, { brightness: +bri.value }, true);
   $("#dr-theme-field").hidden = cfg.mode !== "design";
-  // Redraw only the buttons: p.config holds the new theme only once the save
-  // has answered, so a full renderDrawer here would bring the old one back.
+  // The buttons and the hint are redrawn on their own; the hint also follows
+  // the automation and rotation state (see drawerHint).
   const ownTheme = () => !!cfg.grid && (cfg.tiles || []).some((x) => x.theme);
   const renderTheme = () => {
     $("#dr-theme").replaceChildren(...["dark", "light"].map((th) =>
-      el("button", { class: (cfg.theme || "dark") === th ? "active" : "", onclick: () => {
+      el("button", { class: (cfg.theme || "dark") === th ? "active" : "", "aria-pressed": String((cfg.theme || "dark") === th), onclick: () => {
+        if ((cfg.theme || "dark") === th) return;
         const patch = { theme: th === "dark" ? "" : th };
         // A field with its own scheme would ignore the switch: the whole display follows.
         // (Tiles of a bound layout are copied again by the server, so those stay.)
         if (ownTheme() && !cfg.layout) patch.tiles = cfg.tiles.map((x) => ({ ...x, theme: "" }));
-        change(patch); renderTheme();
+        change(patch);
       } }, t("theme." + th))));
-    const hint = holdingDisplays() ? t("theme.hint.held") : ownTheme() && cfg.layout ? t("theme.hint.layout") : "";
+    drawerHint();
+  };
+  drawerHint = () => {
+    const live = panelById(p.id) || p;
+    const hint = live.held ? t("theme.hint.held") : ownTheme() && cfg.layout ? t("theme.hint.layout") : ownTheme() ? t("theme.hint.reset") : "";
     $("#dr-theme-hint").hidden = !hint;
     $("#dr-theme-hint").textContent = hint;
   };
   renderTheme();
   const renderRot = () => $("#dr-rot").replaceChildren(...[0, 90, 180, 270].map((r) =>
-    el("button", { class: cfg.rotation === r ? "active" : "", onclick: () => {
-      cfg.rotation = r; renderRot(); // the device is written once the clicks stop
-      setPanelSettled(p.id, cfg, false);
+    el("button", { class: cfg.rotation === r ? "active" : "", "aria-pressed": String(cfg.rotation === r), onclick: () => {
+      if (cfg.rotation === r) return;
+      setPanelSettled(p.id, { rotation: r }, false); // the device is written once the clicks stop
+      renderRot();
     } }, r + "°")));
   renderRot();
   $("#dr-rot-hint").hidden = !isBarP(p);
@@ -567,6 +706,7 @@ function renderDrawer() {
   oc.checked = !!p.offlineClock;
   oc.onchange = () => api("POST", `/api/panels/${encodeURIComponent(p.id)}/offline-clock`, { on: oc.checked })
     .then(() => { p.offlineClock = oc.checked; toast(t("saved")); }).catch((e) => { oc.checked = !oc.checked; toast(e.message, true); });
+  $("#dr-boot-warn").hidden = !p.bootPending;
   $("#dr-fw-field").hidden = !p.firmware; // read only, shown when the display reported one
   $("#dr-fw").textContent = fwLabel(p.firmware);
   $("#dr-fw").title = p.firmware || ""; // the raw string, for reports
@@ -587,12 +727,21 @@ function renderDrawer() {
     : t("btn.applyAll." + (cfg.mode === "media" ? "media" : cfg.mode === "off" ? "off" : "design"), { n: targets.length });
   all.title = cfg.grid ? t("btn.applyAllBars.sub") : "";
   all.onclick = async () => {
-    for (const q of targets) await setPanel(q.id, { ...cfg }, true);
+    // What the displays show, not who they are: name, brightness and rotation
+    // (a flash write on some displays) stay each display's own.
+    const shown = {};
+    for (const k of APPLY_ALL_FIELDS) shown[k] = cfg[k] ?? (k === "tiles" ? [] : k === "bg_strength" ? 0 : k === "bg_bloom" ? false : "");
+    shown.tiles = (shown.tiles || []).map((x) => ({ ...x }));
+    let failed = 0;
+    for (const q of targets) if (!(await setPanel(q.id, shown, true))) failed++;
     targets.forEach((q) => pulse(q.id));
     renderPanels();
-    toast(targets.length === state.panels.length ? t("applied.all") : t("applied.some", { n: targets.length }));
+    if (failed) toast(t("applied.partial", { ok: targets.length - failed, n: targets.length, fail: failed }), true);
+    else toast(targets.length === state.panels.length ? t("applied.all") : t("applied.some", { n: targets.length }));
   };
 }
+
+const APPLY_ALL_FIELDS = ["mode", "design", "media", "background", "bg_strength", "bg_bloom", "theme", "grid", "tiles", "layout"];
 
 // ---------- grid layout (bar displays) ----------
 const SET_PREFIX = { clean: "", neon: "neon-", retro: "retro-", cyberpunk: "cyber-" };
@@ -608,13 +757,21 @@ function currentSet(cfg) {
 }
 
 // A design for a new field of the given shape.
+// Every PC has a CPU and a GPU, not every one a water loop: new fields start
+// with those, and the loop designs come last.
+const WATER_DESIGN = /coolant|loop|pump|water/;
 function defaultTile(cell, upright, set, i) {
   const pre = SET_PREFIX[set] || "";
   const squares = ((state.gridTemplates || {})[set] || (state.gridTemplates || {}).clean || [])[0];
-  if (cell.w === cell.h && squares) return { mode: "design", design: squares.tiles[i % squares.tiles.length].design };
-  if (cell.w === 480 && cell.h === 240) return { mode: "design", design: pre + "half-" + ["cpu", "gpu", "cpu-temp", "gpu-temp", "coolant", "pump", "power", "fps"][i % 8] };
+  if (cell.w === cell.h && squares) {
+    const all = squares.tiles.map((x) => x.design);
+    const dry = all.filter((d) => !WATER_DESIGN.test(d));
+    const pool = dry.length ? dry : all;
+    return { mode: "design", design: pool[i % pool.length] };
+  }
+  if (cell.w === 480 && cell.h === 240) return { mode: "design", design: pre + "half-" + ["cpu", "gpu", "cpu-temp", "gpu-temp", "power", "fps", "coolant", "pump"][i % 8] };
   const tag = (upright ? "h" + cell.h : "w" + cell.w);
-  return { mode: "design", design: pre + tag + "-" + ["cpu", "gpu", "coolant", "power", "fps"][i % 5] };
+  return { mode: "design", design: pre + tag + "-" + ["cpu", "gpu", "power", "fps", "coolant"][i % 5] };
 }
 
 // Fields for preset g: keep what fits the new shape, fill up the rest.
@@ -695,13 +852,13 @@ function layoutSection(p, cfg, change) {
   // The board: the live picture with a button over every field.
   const board = el("div", { class: "board" + (upright ? " tall" : ""), style: { aspectRatio: ratio(p.width, p.height) } },
     el("img", { alt: "", "data-preview": p.id, ...(p.layoutEditor ? { "data-draft": "1" } : {}) }),
-    ...g.cells.map((c, i) => el("button", { class: "cell" + (i === selField ? " active" : ""), "aria-label": t("field.n", { n: i + 1 }), title: t("field.n", { n: i + 1 }) + " · " + tileLabel((cfg.tiles || [])[i]),
+    ...g.cells.map((c, i) => el("button", { class: "cell" + (i === selField ? " active" : ""), "aria-pressed": String(i === selField), "aria-label": t("field.n", { n: i + 1 }), title: t("field.n", { n: i + 1 }) + " · " + tileLabel((cfg.tiles || [])[i]),
       style: { left: `${c.x / p.width * 100}%`, top: `${c.y / p.height * 100}%`, width: `${c.w / p.width * 100}%`, height: `${c.h / p.height * 100}%` },
       onclick: () => pick(i) }, el("span", {}, String(i + 1)))));
   // The list does the same for narrow windows (the board is too small there).
   const list = el("div", { class: "cell-list" }, g.cells.map((c, i) => {
     const label = tileLabel((cfg.tiles || [])[i]);
-    return el("button", { class: "cell-row" + (i === selField ? " active" : ""), onclick: () => pick(i) },
+    return el("button", { class: "cell-row" + (i === selField ? " active" : ""), "aria-pressed": String(i === selField), onclick: () => pick(i) },
       el("b", {}, String(i + 1)), el("span", {}, label), el("small", {}, `${c.w}×${c.h}`));
   }));
   sec.append(el("div", { class: "field" }, el("span", {}, t("layout.board")), board, list));
@@ -746,11 +903,11 @@ function fieldEditor(p, cfg, change) {
           onclick: () => { setSel(p, i); rerenderTarget(p, cfg, change); } }, String(i + 1))))));
   sec.append(el("div", { class: "field" }, el("span", {}, t("field.content")),
     el("div", { class: "seg small" }, ["design", "media", "off"].map((m) =>
-      el("button", { class: tile.mode === m ? "active" : "", onclick: () => tchange({ mode: m }) }, t("mode." + m))))));
+      el("button", { class: tile.mode === m ? "active" : "", "aria-pressed": String(tile.mode === m), onclick: () => tchange({ mode: m }) }, t("mode." + m))))));
   if (tile.mode === "design") {
     sec.append(el("div", { class: "field" }, el("span", {}, t("field.scheme")),
       el("div", { class: "seg small" }, [["", t("theme.inherit")], ["dark", t("theme.dark")], ["light", t("theme.light")]].map(([v, label]) =>
-        el("button", { class: (tile.theme || "") === v ? "active" : "", onclick: () => tchange({ theme: v }) }, label)))));
+        el("button", { class: (tile.theme || "") === v ? "active" : "", "aria-pressed": String((tile.theme || "") === v), onclick: () => tchange({ theme: v }) }, label)))));
     const all = el("input", { type: "checkbox", class: "switch", onchange: (e) => { showAllDesigns = e.target.checked; rerenderTarget(p, cfg, change); } });
     all.checked = showAllDesigns;
     sec.append(el("label", { class: "field check" }, all, el("span", {}, el("b", {}, t("field.showAll")), el("small", {}, t("field.showAll.sub")))));
@@ -772,7 +929,7 @@ function fieldEditor(p, cfg, change) {
 /** @type {Set<string> & { touched?: boolean }} */
 const openSets = new Set();
 function renderDrawerContent(p, cfg, change) {
-  change = change || ((patch) => { Object.assign(cfg, patch); setPanel(p.id, cfg); renderDrawer(); });
+  change = change || ((patch) => { setPanel(p.id, patch); renderDrawer(); });
   const box = $("#dr-content");
   box.replaceChildren();
   if (isBarP(p) && cfg.mode === "design") {
@@ -801,7 +958,7 @@ function renderTarget(box, p, cfg, change) {
         const det = el("details", { class: "pick-group", open },
           el("summary", {}, el("span", {}, title), el("small", {}, ds.some((d) => d.id === cfg.design) ? "✓ " + designName(cfg.design) : String(ds.length))),
           el("div", { class: "pick-grid" + (wide ? " wide" : "") }, ds.map((d) =>
-            el("button", { class: "pick" + (d.round && p.round ? " round" : "") + (cfg.design === d.id ? " active" : ""), title: designName(d.id), onclick: () => change({ design: d.id }) },
+            el("button", { class: "pick" + (d.round && p.round ? " round" : "") + (cfg.design === d.id ? " active" : ""), "aria-pressed": String(cfg.design === d.id), title: designName(d.id), onclick: () => change({ design: d.id }) },
               el("img", { src: url(`/api/designs/${d.id}/preview?${previewSize(p, 160)}&theme=${cfg.theme || "dark"}`), alt: "", loading: "lazy", style: { aspectRatio: ratio(p.width, p.height) } }),
               el("span", { class: "pick-label" }, hy(designName(d.id)))))));
         if (open) openSets.add(title);
@@ -821,7 +978,7 @@ function renderTarget(box, p, cfg, change) {
     const sec = el("section", { class: "dr-section" },
       el("div", { class: "dr-section-head" }, el("b", {}, t("field.background")), el("small", {}, t("bg.sub"))),
       el("div", { class: "pick-grid bg-grid" + (wide ? " wide2" : "") }, bgs.map(([v, label]) =>
-        el("button", { class: "pick" + (p.round ? " round" : "") + ((cfg.background || "") === v ? " active" : ""), title: label, onclick: () => change({ background: v }) },
+        el("button", { class: "pick" + (p.round ? " round" : "") + ((cfg.background || "") === v ? " active" : ""), "aria-pressed": String((cfg.background || "") === v), title: label, onclick: () => change({ background: v }) },
           el("img", { src: url(`/api/designs/${cfg.design}/preview?${previewSize(p, 120)}&theme=${cfg.theme || "dark"}&bg=${encodeURIComponent(v)}&bgs=${Math.min(80, Math.round(strength * 1.6))}&bloom=${cfg.bg_bloom ? 1 : 0}`), alt: "", loading: "lazy", style: { aspectRatio: ratio(p.width, p.height) } }),
           el("span", { class: "pick-label" }, hy(v && v === suggested ? "★ " + label : label))))),
       suggested ? el("div", { class: "bg-hint" }, t("bg.suggested")) : null);
@@ -846,7 +1003,7 @@ function renderTarget(box, p, cfg, change) {
         el("div", { class: "pick-grid" }, state.media.map((m) => {
           const th = el("div", { class: "thumb" }, m.kind === "video" ? "▶" : null);
           if (m.kind !== "video") th.style.backgroundImage = `url("${url(`/api/media/${encodeURIComponent(m.name)}`)}")`;
-          return el("button", { class: "pick" + (cfg.media === m.name ? " active" : ""), onclick: () => change({ media: m.name }) },
+          return el("button", { class: "pick" + (cfg.media === m.name ? " active" : ""), "aria-pressed": String(cfg.media === m.name), onclick: () => change({ media: m.name }) },
             th, el("span", { class: "pick-label" }, m.name));
         }))));
     }
@@ -854,23 +1011,46 @@ function renderTarget(box, p, cfg, change) {
 }
 
 // ---------- designs ----------
+let menuAnchor = null;
+function closeMenu(refocus) {
+  $("#menu").hidden = true;
+  if (refocus && menuAnchor && menuAnchor.isConnected) menuAnchor.focus();
+  menuAnchor = null;
+}
 function showMenu(anchor, title, items) {
   const m = $("#menu");
-  m.replaceChildren(el("div", { class: "menu-title" }, title),
-    ...items.map(([label, fn]) => el("button", { onclick: () => { m.hidden = true; fn(); } }, label)));
+  menuAnchor = anchor;
+  m.setAttribute("aria-label", title);
+  m.replaceChildren(el("div", { class: "menu-title", role: "presentation" }, title),
+    ...items.map(([label, fn]) => el("button", { role: "menuitem", onclick: () => { closeMenu(true); fn(); } }, label)));
   m.hidden = false;
+  const first = m.querySelector("button");
+  if (first) first.focus();
   m.style.left = "0px";
   const r = anchor.getBoundingClientRect();
   const top = Math.max(10, Math.min(r.bottom + 6, innerHeight - m.offsetHeight - 10));
   Object.assign(m.style, { left: Math.max(10, Math.min(r.left, document.documentElement.clientWidth - m.offsetWidth - 10)) + "px", top: top + "px" });
 }
 document.addEventListener("pointerdown", (e) => {
-  if (!$("#menu").hidden && !$("#menu").contains(e.target) && !(/** @type {Element} */ (e.target)).closest("[data-menu]")) $("#menu").hidden = true;
+  if (!$("#menu").hidden && !$("#menu").contains(e.target) && !(/** @type {Element} */ (e.target)).closest("[data-menu]")) closeMenu(false);
+});
+// Arrow keys move through the menu; Tab leaves it.
+$("#menu").addEventListener("keydown", (e) => {
+  const items = $$("#menu button");
+  const at = items.indexOf(document.activeElement);
+  if (e.key === "ArrowDown") { e.preventDefault(); items[(at + 1) % items.length].focus(); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); items[(at - 1 + items.length) % items.length].focus(); }
+  else if (e.key === "Home") { e.preventDefault(); items[0].focus(); }
+  else if (e.key === "End") { e.preventDefault(); items[items.length - 1].focus(); }
+  else if (e.key === "Tab") closeMenu(false);
 });
 
+// Changes when a design may have changed (saved, imported, deleted, language),
+// so the gallery reloads its previews then, and not on every redraw.
+let designStamp = Date.now();
 function designCard(d) {
   return el("div", { class: "card design-card" + (d.round ? " round" : "") + (isWideD(d) ? " wide" : "") },
-    el("div", { class: "thumb-wrap" }, el("img", { src: url(`/api/designs/${d.id}/preview?w=${isWideD(d) ? 720 : 360}&theme=${galleryTheme}&_=${Date.now()}`), alt: "", loading: "lazy", style: { aspectRatio: ratio(d.w, d.h) } })),
+    el("div", { class: "thumb-wrap" }, el("img", { src: url(`/api/designs/${d.id}/preview?w=${isWideD(d) ? 720 : 360}&theme=${galleryTheme}&_=${designStamp}`), alt: "", loading: "lazy", style: { aspectRatio: ratio(d.w, d.h) } })),
     el("div", { class: "meta" }, designName(d.id)),
     el("div", { class: "row-buttons" },
       el("button", { class: "ghost", onclick: () => openEditor(d.id, d.builtin) }, d.builtin ? t("btn.customize") : t("btn.edit")),
@@ -881,7 +1061,7 @@ function designCard(d) {
 let galleryTheme = "dark";
 function renderGalleryTheme() {
   $("#gallery-theme").replaceChildren(...["dark", "light"].map((th) =>
-    el("button", { class: galleryTheme === th ? "active" : "", onclick: () => { galleryTheme = th; renderDesigns(); } }, t("theme." + th))));
+    el("button", { class: galleryTheme === th ? "active" : "", "aria-pressed": String(galleryTheme === th), onclick: () => { galleryTheme = th; renderDesigns(); } }, t("theme." + th))));
 }
 
 // Preview size (query) that shows a design as the panel p would: its own
@@ -915,7 +1095,7 @@ function renderDesigns() {
 
 async function deleteDesign(d) {
   if (!confirm(t("confirm.deleteDesign", { name: d.name }))) return;
-  try { await api("DELETE", `/api/designs/${d.id}`); await refresh(); }
+  try { await api("DELETE", `/api/designs/${d.id}`); designStamp = Date.now(); await refresh(); }
   catch (e) { toast(e.message, true); }
 }
 $("#btn-new-design").addEventListener("click", () => openEditor("loop", true, true));
@@ -950,7 +1130,7 @@ function assignSection(p, cfg, change) {
       const det = el("details", { class: "pick-group", open },
         el("summary", {}, el("span", {}, title), el("small", {}, ls.some((l) => l.id === cfg.layout) ? "✓ " + layoutName(layoutById(cfg.layout)) : String(ls.length))),
         el("div", { class: "pick-grid layout-pick" }, ls.map((l) =>
-          el("button", { class: "pick" + (cfg.layout === l.id ? " active" : ""), title: layoutName(l),
+          el("button", { class: "pick" + (cfg.layout === l.id ? " active" : ""), "aria-pressed": String(cfg.layout === l.id), title: layoutName(l),
             onclick: () => change({ layout: l.id, grid: l.grid, tiles: l.tiles.map((x) => ({ ...x })) }) },
             el("img", { src: url(`/api/layouts/${encodeURIComponent(l.id)}/preview?w=480&theme=${cfg.theme || "dark"}&_=${layoutStamp}`), alt: "", loading: "lazy" }),
             el("span", { class: "pick-label" }, hy(layoutName(l)))))));
@@ -969,7 +1149,7 @@ let layoutStamp = Date.now(); // changes when a layout is saved, so previews rel
 let designsView = "designs";
 function renderDesignsView() {
   $("#designs-view").replaceChildren(...["designs", "layouts"].map((v) =>
-    el("button", { class: designsView === v ? "active" : "", onclick: () => { designsView = v; renderDesignsView(); } }, t("designs.view." + v))));
+    el("button", { class: designsView === v ? "active" : "", "aria-pressed": String(designsView === v), onclick: () => { designsView = v; renderDesignsView(); } }, t("designs.view." + v))));
   $("#designs-pane").hidden = designsView !== "designs";
   $("#layouts-pane").hidden = designsView !== "layouts";
   $("#designs-actions").hidden = designsView !== "designs";
@@ -1090,7 +1270,7 @@ $("#le-save").addEventListener("click", async () => {
     if (target) {
       const q = state.panels.find((x) => x.id === target);
       const l = layoutById(id);
-      if (q && l) { await setPanel(q.id, { ...q.config, layout: id, grid: l.grid, tiles: l.tiles.map((x) => ({ ...x })) }, true); await refresh(); }
+      if (q && l) { await setPanel(q.id, { layout: id, grid: l.grid, tiles: l.tiles.map((x) => ({ ...x })) }, true); await refresh(); }
     }
     toast(used && !target ? t("le.savedUsed", { n: used }) : t("le.saved"));
   } catch (e) { toast(e.message, true); }
@@ -1106,7 +1286,12 @@ let renamingScene = null;
 
 async function loadRotation() {
   try { rot = await api("GET", "/api/rotation"); } catch { return; }
-  try { auto = await api("GET", "/api/automation"); } catch { /* keep the old one */ }
+  if (!autoSaving) {
+    try {
+      const a = await api("GET", "/api/automation");
+      if (!autoSaving) auto = a;
+    } catch { /* keep the old one */ }
+  }
   auto.config.rules = auto.config.rules || [];
   renderScenes(); renderAutomation(); renderRotation(); renderStateChip();
 }
@@ -1124,6 +1309,7 @@ function renderStateChip() {
   pill.hidden = !text || !state.panels.length;
   pill.textContent = text;
   pill.title = t("chip.open");
+  if (drawerId) pollState(); // the drawer's hint says whether this display is held right now
 }
 $("#state-chip").addEventListener("click", () => showTab("scenes"));
 // The engine's own view changes by itself (a game starts): poll it cheaply.
@@ -1142,21 +1328,37 @@ async function pollAutomation() {
 // The whole rotation config goes back in one piece, so it is read again right
 // before writing: a scene saved meanwhile must not be wiped out by a stale
 // copy. patch is an object or a function of the fresh config.
-async function saveRotation(patch) {
-  try {
-    const fresh = (await api("GET", "/api/rotation")).config || {};
-    const change = typeof patch === "function" ? patch(fresh) : patch;
-    rot.config = { ...fresh, ...(change || {}) };
-    await api("PUT", "/api/rotation", rot.config);
-  } catch (e) { toast(e.message, true); }
-  setTimeout(loadRotation, 400);
+// Saves go one after the other (like the display saves): two clicks in a row
+// would otherwise both read the same old config, and the second PUT would wipe
+// out the first one's change.
+let rotChain = Promise.resolve();
+function saveRotation(patch) {
+  const run = rotChain.then(async () => {
+    try {
+      const fresh = (await api("GET", "/api/rotation")).config || {};
+      const change = typeof patch === "function" ? patch(fresh) : patch;
+      rot.config = { ...fresh, ...(change || {}) };
+      await api("PUT", "/api/rotation", rot.config);
+    } catch (e) { toast(e.message, true); }
+    setTimeout(loadRotation, 400);
+  });
+  rotChain = run;
+  return run;
 }
-async function saveAutomation(patch) {
-  Object.assign(auto.config, patch || {});
-  // A rule still waiting for its game name stays local until it has one.
-  const cfg = { ...auto.config, rules: auto.config.rules.filter((r) => r.when !== "game:") };
-  try { await api("PUT", "/api/automation", cfg); } catch (e) { toast(e.message, true); }
-  setTimeout(loadRotation, 300);
+let autoChain = Promise.resolve();
+let autoSaving = 0; // saves not finished: a config read meanwhile would bring the old rules back
+function saveAutomation(patch) {
+  Object.assign(auto.config, patch || {}); // local at once; each PUT sends the newest state
+  autoSaving++;
+  const run = autoChain.then(async () => {
+    // A rule still waiting for its game name stays local until it has one.
+    const cfg = { ...auto.config, rules: auto.config.rules.filter((r) => r.when !== "game:") };
+    try { await api("PUT", "/api/automation", cfg); } catch (e) { toast(e.message, true); }
+    autoSaving--;
+    setTimeout(loadRotation, 300);
+  });
+  autoChain = run;
+  return run;
 }
 const scenesOf = () => rot.config.scenes || [];
 const rulesUsing = (name) => (auto.config.rules || []).filter((r) => r.scene === name);
@@ -1171,7 +1373,23 @@ function chip(label, onRemove, extra) {
   return el("span", { class: "chip" }, extra || null, label, onRemove ? el("button", { class: "chip-x", title: t("btn.delete"), onclick: onRemove }, "✕") : null);
 }
 
+// typing(sel) is true while the user is typing in a field matching sel: such a
+// field must not be rebuilt under their hands.
+const typing = (sel) => !!document.activeElement && document.activeElement.matches && document.activeElement.matches(sel);
+// setSelect shows value in a select; one the list does not offer (set through
+// the API or an older version) is added, never shown blank.
+function setSelect(sel, value, label) {
+  value = String(value);
+  if (![...sel.options].some((o) => o.value === value)) {
+    const o = el("option", { value }, label || `${value} s`);
+    const at = [...sel.options].find((x) => +x.value > +value);
+    sel.insertBefore(o, at || null);
+  }
+  sel.value = value;
+}
+
 function renderScenes() {
+  if (renamingScene && typing(".scene-rename")) return; // a scene is being renamed
   const has = state.panels.length > 0;
   $("#scenes-body").hidden = !has;
   $("#scenes-empty").hidden = has;
@@ -1352,8 +1570,8 @@ function renderAutomation() {
   $("#auto-ignore").replaceChildren(...(ign.length
     ? ign.map((x) => chip(x, () => saveAutomation({ ignore_games: ign.filter((y) => y !== x) })))
     : [el("small", { class: "muted" }, t("auto.ignore.none"))]));
-  $("#auto-enter").value = String(c.enter_s || 3);
-  $("#auto-leave").value = String(c.leave_s || 10);
+  setSelect($("#auto-enter"), c.enter_s || 3);
+  setSelect($("#auto-leave"), c.leave_s || 10);
 }
 $("#auto-enabled").addEventListener("change", (e) => saveAutomation({ enabled: e.target.checked }));
 $("#auto-enter").addEventListener("change", (e) => saveAutomation({ enter_s: +e.target.value }));
@@ -1385,8 +1603,8 @@ function renderRotation() {
   const held = auto.config.enabled && auto.status && auto.status.activeRule >= 0;
   $("#rot-status").textContent = !c.enabled ? t("rot.off") : held ? t("rot.held", { s: auto.status.scene || t("auto.normal") }) : st.active ? (st.scene ? t("rot.scene", { s: st.scene }) : t("rot.running")) : t("rot.waiting");
   $("#rot-mode").replaceChildren(...["scenes", "conveyor"].map((m) =>
-    el("button", { class: (c.mode || "scenes") === m ? "active" : "", onclick: () => saveRotation({ mode: m }) }, t("rot.mode." + m))));
-  $("#rot-interval").value = String(c.interval_s || 15);
+    el("button", { class: (c.mode || "scenes") === m ? "active" : "", "aria-pressed": String((c.mode || "scenes") === m), onclick: () => saveRotation({ mode: m }) }, t("rot.mode." + m))));
+  setSelect($("#rot-interval"), c.interval_s || 15);
   $("#rot-mode-hint").textContent = t("rot.mode." + (c.mode || "scenes") + ".hint");
   $("#rot-effect").replaceChildren(...(state.transitions || []).map((fx) => el("option", { value: fx, selected: c.effect === fx }, t("fx." + fx))));
   $("#rot-cascade").checked = !!c.cascade;
@@ -1402,8 +1620,15 @@ function renderRotation() {
   $("#rot-body").hidden = !c.enabled;
   $("#rot-order-box").hidden = !(c.mode === "conveyor" || c.cascade);
   const conv = c.conveyor || [];
+  // Removed by design, not by position: the list may have changed since it was drawn.
+  const dropFromConveyor = (id, i) => saveRotation((cf) => {
+    const list = [...(cf.conveyor || [])];
+    const at = list[i] === id ? i : list.indexOf(id);
+    if (at >= 0) list.splice(at, 1);
+    return { conveyor: list };
+  });
   $("#rot-conveyor").replaceChildren(...(conv.length ? conv.map((id, i) =>
-    chip(designName(id), () => saveRotation((cf) => ({ conveyor: (cf.conveyor || []).filter((_, j) => j !== i) })), el("b", { class: "chip-n" }, i + 1))) : [el("small", { class: "muted" }, t("rot.noconveyor"))]));
+    chip(designName(id), () => dropFromConveyor(id, i), el("b", { class: "chip-n" }, i + 1))) : [el("small", { class: "muted" }, t("rot.noconveyor"))]));
   $("#rot-add-design").replaceChildren(el("option", { value: "" }, t("rot.adddesign")),
     ...state.designs.map((d) => el("option", { value: d.id }, designName(d.id, true))));
   // Display order (top to bottom) for cascade and conveyor.
@@ -1411,7 +1636,14 @@ function renderRotation() {
   const order = [...(c.order || []).filter((id) => ids.includes(id)), ...ids.filter((id) => !(c.order || []).includes(id))];
   $("#rot-order").replaceChildren(...order.map((id, i) => {
     const p = state.panels.find((x) => x.id === id);
-    const move = (d) => { const o = [...order]; [o[i], o[i + d]] = [o[i + d], o[i]]; saveRotation({ order: o }); };
+    // Swap with the neighbour by id, on the order stored right now.
+    const move = (d) => saveRotation((cf) => {
+      const nowIds = state.panels.map((x) => x.id);
+      const o = [...(cf.order || []).filter((x) => nowIds.includes(x)), ...nowIds.filter((x) => !(cf.order || []).includes(x))];
+      const at = o.indexOf(id);
+      if (at >= 0 && at + d >= 0 && at + d < o.length) [o[at], o[at + d]] = [o[at + d], o[at]];
+      return { order: o };
+    });
     return el("div", { class: "order-row" }, el("b", {}, i + 1), el("span", {}, shortName(p)),
       el("button", { class: "ghost icon-btn", disabled: i === 0, onclick: () => move(-1) }, "▲"),
       el("button", { class: "ghost icon-btn", disabled: i === order.length - 1, onclick: () => move(1) }, "▼"));
@@ -1448,6 +1680,7 @@ async function openCommunity() {
       imp.disabled = true;
       try {
         await api("POST", `/api/community/${c.id}/import`);
+        designStamp = Date.now();
         toast(t("comm.imported", { name: c.name }));
         await refresh();
         imp.textContent = t("comm.done");
@@ -1541,7 +1774,7 @@ function renderSettings(test) {
   $("#set-clock").value = st2.clock12h ? "12" : "24";
   $("#row-mcp").hidden = !st2.mcp;
   $("#mcp-snippet").textContent = JSON.stringify({ mcpServers: { casehud: { command: state.mcpCommand, args: ["mcp"] } } }, null, 2);
-  $("#set-interval").value = String(st2.intervalMs || 0);
+  setSelect($("#set-interval"), st2.intervalMs || 0, `${st2.intervalMs} ms`);
   renderUpdate();
   const pm = state.demo ? "demo" : state.presentmon || "unsupported";
   $("#pm-status").textContent = t("pm." + pm);
@@ -1577,7 +1810,11 @@ $("#btn-mcp-copy").addEventListener("click", async () => {
 // ---------- AWTRIX clocks ----------
 let aw = { devices: [], status: {}, apps: [] };
 async function loadAwtrix() {
-  try { aw = await api("GET", "/api/awtrix"); } catch (e) { return; }
+  if (typing(".aw-name")) return; // a name is being typed: it is saved on its own, and the list must not be rebuilt
+  let fresh;
+  try { fresh = await api("GET", "/api/awtrix"); } catch (e) { return; }
+  if (typing(".aw-name")) return;
+  aw = fresh;
   renderAwtrix();
 }
 async function saveAwtrix(reload = true) {
@@ -1717,7 +1954,15 @@ $("#update-install").addEventListener("click", async () => {
   } catch (e) { toast(e.message, true); }
 });
 // All advanced settings go through one endpoint and apply immediately.
-async function saveSettings() {
+// Saves go one after the other, each sending what the controls show when its
+// turn comes, so the last click wins.
+let settingsChain = Promise.resolve();
+function saveSettings() {
+  const run = settingsChain.then(saveSettingsNow);
+  settingsChain = run;
+  return run;
+}
+async function saveSettingsNow() {
   const st0 = state.settings || {};
   const body = {
     sensorSource: $("#set-source").value,
@@ -1742,7 +1987,10 @@ async function saveSettings() {
     state.settings = { ...body, ffmpeg: st0.ffmpeg };
     toast(t("saved"));
     setTimeout(() => refresh().catch(() => {}), 1500);
-  } catch (err) { toast(err.message, true); }
+  } catch (err) {
+    toast(err.message, true);
+    renderSettings(); // the server kept the old value: the control must show that again
+  }
 }
 for (const id of ["#set-source", "#set-pm", "#set-rtss", "#set-anim", "#set-devvideo", "#set-mcp", "#set-localapi", "#set-saver", "#set-temp", "#set-clock", "#set-interval", "#set-updates", "#set-fwcheck"]) $(id).addEventListener("change", saveSettings);
 $("#set-url").addEventListener("change", saveSettings);
@@ -1755,14 +2003,14 @@ $("#btn-pm-setup").addEventListener("click", async () => {
 $("#btn-open-data").addEventListener("click", () => api("POST", "/api/open-data").catch((e) => toast(e.message, true)));
 
 // ---------- design editor ----------
-const ed = { layout: null, id: "", sel: -1, liveTimer: null, undo: [] };
+const ed = { layout: null, id: "", sel: -1, liveTimer: null, undo: [], dirty: false };
 
 const WIDGET_DEFAULTS = {
   gauge: { w: 300, h: 300, label: "CPU", source: "Load/CPU Total", unit: "%", max: 100, glow: true, smooth: true, warn: 80, crit: 95 },
-  value: { w: 160, h: 100, label: "WASSER", source: "Temperatures/T Sensor", unit: "°C", decimals: 1 },
+  value: { w: 160, h: 100, label: "CPU", source: "Temperatures/CPU Package|Temperatures/Core (Tctl/Tdie)|Temperatures/Core (Tctl)", unit: "°C", decimals: 1 },
   bar: { w: 320, h: 80, label: "GPU", source: "Temperatures/GPU Core", unit: "°C", min: 30, max: 90 },
   graph: { w: 400, h: 120, label: "GPU TEMP", source: "Temperatures/GPU Core", unit: "°C", min: 30, max: 90 },
-  text: { w: 300, h: 50, text: "Hallo", size: 36 },
+  text: { w: 300, h: 50, text: "Text", size: 36 },
   clock: { w: 320, h: 120, text: "15:04", size: 110 },
 };
 const WIDGET_ICONS = {
@@ -1788,9 +2036,11 @@ const FIELDS = {
 
 function snapshot() {
   ed.undo.push(JSON.stringify(ed.layout));
+  ed.dirty = true;
   if (ed.undo.length > 100) ed.undo.shift();
 }
-const snapshotSoon = debounce(snapshot, 600);
+const snapshotLater = debounce(snapshot, 600);
+const snapshotSoon = () => { ed.dirty = true; snapshotLater(); };
 function undo() {
   if (!ed.undo.length) return;
   ed.layout = JSON.parse(ed.undo.pop());
@@ -1814,6 +2064,7 @@ async function openEditor(id, asCopy, isNew, layout) {
   }
   ed.layout.widgets = ed.layout.widgets || [];
   ed.undo = [];
+  ed.dirty = !!layout; // an imported file is not stored yet
   const d = designById(id);
   if (layout) ed.id = "";
   else if (isNew) { ed.layout.name = t("ed.newName"); ed.layout.widgets = []; ed.id = ""; }
@@ -1832,21 +2083,33 @@ function redrawEditor() {
   drawDesignForm(); drawOverlay(); drawLayers(); drawWidgetForm(); renderStage();
 }
 
-$("#ed-close").addEventListener("click", () => {
+function closeEditor() {
+  if (ed.dirty && !confirm(t("ed.discard"))) return;
   $("#editor").hidden = true;
   clearInterval(ed.liveTimer);
+  ed.dirty = false;
   refresh();
-});
+}
+$("#ed-close").addEventListener("click", closeEditor);
 $("#ed-name").addEventListener("input", (e) => { snapshotSoon(); ed.layout.name = e.target.value; });
 $("#ed-roundmask").addEventListener("change", (e) => { snapshot(); ed.layout.round = e.target.checked; drawOverlay(); });
 
 $("#ed-save").addEventListener("click", async () => {
-  const id = ed.id || slug(ed.layout.name || "design");
+  let id = ed.id;
+  if (!id) {
+    // A new design never replaces one of yours that has the same name: it gets
+    // its own id. Only a ready-made design is replaced (after asking).
+    const base = slug(ed.layout.name || "design");
+    id = base;
+    for (let n = 2; designById(id) && !designById(id).builtin; n++) id = `${base.slice(0, 56)}-${n}`;
+  }
   const clash = designById(id);
   if (!ed.id && clash && clash.builtin && !confirm(t("ed.overwriteBuiltin"))) return;
   try {
     await api("PUT", `/api/designs/${id}`, ed.layout);
     ed.id = id;
+    ed.dirty = false;
+    designStamp = Date.now();
     toast(t("ed.saved"));
     state.designs = (await api("GET", "/api/state")).designs;
   } catch (e) { toast(e.message, true); }
@@ -1969,10 +2232,18 @@ function startDrag(e, i, resize) {
   window.addEventListener("pointerup", up);
 }
 
+// A field where typing edits text (not a checkbox, slider or colour picker).
+function inTextField() {
+  const a = /** @type {any} */ (document.activeElement);
+  if (!a) return false;
+  if (a.isContentEditable || a.tagName === "TEXTAREA") return true;
+  return a.tagName === "INPUT" && !["checkbox", "radio", "range", "color", "button", "submit", "file"].includes(a.type);
+}
 // Arrow keys nudge (Shift = 10px), Delete removes, Ctrl+Z undoes.
 window.addEventListener("keydown", (e) => {
   if ($("#editor").hidden) return;
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); return; }
+  // In a text field Ctrl+Z is the field's own undo.
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { if (!inTextField()) { e.preventDefault(); undo(); } return; }
   if (ed.sel < 0 || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
   const w = ed.layout.widgets[ed.sel];
   const step = e.shiftKey ? 10 : 1;
@@ -1996,7 +2267,18 @@ function drawWidgetForm() {
   $("#widget-actions").hidden = !w;
   if (!w) return;
 
-  const num = (k) => el("input", { type: "number", value: w[k] ?? 0, oninput: (e) => { snapshotSoon(); w[k] = +e.target.value; drawOverlay(); renderStageSoon(); } });
+  // Position and size must be whole numbers; an empty or too small value is not
+  // taken (the box would vanish) and shows as invalid until fixed.
+  const num = (k) => el("input", { type: "number", value: w[k] ?? 0, step: "1", min: k === "w" || k === "h" ? 1 : 0,
+    oninput: (e) => {
+      const v = e.target.value === "" ? NaN : +e.target.value;
+      const ok = Number.isFinite(v) && (k === "w" || k === "h" ? v > 0 : v >= 0);
+      e.target.setAttribute("aria-invalid", String(!ok));
+      e.target.style.borderColor = ok ? "" : "var(--danger)";
+      if (!ok) return;
+      snapshotSoon(); w[k] = Math.round(v); drawOverlay(); renderStageSoon();
+    },
+    onchange: (e) => { e.target.value = w[k] ?? 0; e.target.removeAttribute("aria-invalid"); e.target.style.borderColor = ""; } });
   f.append(
     el("div", { class: "row2" }, el("label", { class: "field" }, el("span", {}, t("f.x")), num("x")), el("label", { class: "field" }, el("span", {}, t("f.y")), num("y"))),
     el("div", { class: "row2" }, el("label", { class: "field" }, el("span", {}, t("f.w")), num("w")), el("label", { class: "field" }, el("span", {}, t("f.h")), num("h"))));
@@ -2008,7 +2290,20 @@ function drawWidgetForm() {
       f.append(el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!w[key], onchange: (e) => set(e.target.checked) }), t(label)));
       continue;
     }
-    if (type === "number") input = el("input", { type: "number", step: "any", value: w[key] ?? "", oninput: (e) => set(e.target.value === "" ? "" : +e.target.value) });
+    if (type === "number") {
+      // A size must be above zero; counts cannot be negative. A value that does
+      // not fit is not taken and shows as invalid; the others may be left empty.
+      const bad = (v) => (key === "size" ? !(v > 0) : ["decimals", "segments", "ticks"].includes(key) ? v < 0 : false);
+      input = el("input", { type: "number", step: "any", value: w[key] ?? "", ...(key === "size" ? { min: "1" } : ["decimals", "segments", "ticks"].includes(key) ? { min: "0" } : {}),
+        oninput: (e) => {
+          const raw = e.target.value;
+          const invalid = key === "size" ? raw === "" || bad(+raw) : raw !== "" && bad(+raw);
+          e.target.setAttribute("aria-invalid", String(invalid));
+          e.target.style.borderColor = invalid ? "var(--danger)" : "";
+          if (!invalid) set(raw === "" ? "" : +raw);
+        },
+        onchange: (e) => { if (e.target.getAttribute("aria-invalid") === "true") { e.target.value = w[key] ?? ""; e.target.removeAttribute("aria-invalid"); e.target.style.borderColor = ""; } } });
+    }
     else if (type === "range") {
       input = el("input", { type: "range", min: 0.02, max: 0.15, step: 0.005, value: w[key] || 0.075, oninput: (e) => { setRangeFill(e.target); set(+e.target.value); } });
       setRangeFill(input);
@@ -2102,24 +2397,75 @@ const spy = () => {
 };
 window.addEventListener("scroll", spy, { passive: true });
 
+// ---------- strings added by the GUI review (same mechanism as the other files) ----------
+Object.assign(STRINGS.de, {
+  "theme.hint.reset": "Felder mit eigenem Farbschema werden beim Umschalten ebenfalls auf dieses Schema gestellt.",
+  "applied.partial": "{ok} von {n} Displays aktualisiert, {fail} fehlgeschlagen",
+  "ed.discard": "Änderungen am Design verwerfen?",
+  "live.busy": "Live-Vorschau nicht verfügbar: Es sind zu viele CaseHUD-Fenster offen. Schließe andere Fenster, der Versuch wird wiederholt.",
+  "int.half": "0,5 s",
+  "boot.pending": "Startbild-Übertragung unterbrochen – Display einmal stromlos machen.",
+  "boot.pending.long": "Die Übertragung des Startbilds wurde unterbrochen. Mach dieses Display einmal stromlos (USB trennen oder PC aus und wieder an). CaseHUD schreibt das Startbild nicht von selbst erneut; danach lässt es sich unter Einstellungen → Geräte neu schreiben.",
+});
+Object.assign(STRINGS.en, {
+  "theme.hint.reset": "Fields with their own color scheme are set to this scheme as well when you switch.",
+  "applied.partial": "{ok} of {n} displays updated, {fail} failed",
+  "ed.discard": "Discard changes to this design?",
+  "live.busy": "Live preview unavailable: too many CaseHUD windows are open. Close other windows; it will try again.",
+  "int.half": "0.5 s",
+  "boot.pending": "Boot picture transfer interrupted – power-cycle the display once.",
+  "boot.pending.long": "The boot picture transfer was interrupted. Power-cycle this display once (unplug USB, or switch the PC off and on). CaseHUD does not rewrite the boot picture by itself; afterwards you can rewrite it under Settings → Devices.",
+});
+
 // ---------- boot ----------
 applyI18n();
 refresh().catch((e) => toast(e.message, true));
-setInterval(() => {
+// pollState reads the state again and applies what changed, without disturbing
+// open forms. It runs every 5 s, and when something that decides what a display
+// shows may have changed (drawer opened, automation or rotation status).
+function pollState() {
   if (document.hidden || !$("#editor").hidden) return;
+  const saves = seqSnapshot();
+  const seq = refreshSeq;
   api("GET", "/api/state").then((s) => {
+    if (seq !== refreshSeq) return; // a full refresh ran meanwhile and is newer
     // Re-render only on structural changes so open forms keep focus.
-    const sig = (x) => JSON.stringify([x.panels.map((p) => [p.id, p.error, p.firmware, p.firmwareLatest && p.firmwareLatest.status, p.width, p.height, p.number, p.grids, p.experimental, p.deviceFlip, p.offlineClock]), x.monitorMode, x.designs.map((d) => d.id), x.media.map((m) => m.name), x.sensorsError, x.scanError, x.rescanGaveUp]);
+    const sig = (x) => JSON.stringify([x.panels.map((p) => [p.id, p.error, p.firmware, p.firmwareLatest && p.firmwareLatest.status, p.width, p.height, p.number, p.grids, p.experimental, p.deviceFlip, p.offlineClock, p.bootPending]), x.monitorMode, x.designs.map((d) => d.id), x.media.map((m) => m.name), x.sensorsError, x.scanError, x.rescanGaveUp]);
     const changed = sig(s) !== sig(state);
-    const keepConfigs = state.panels;
+    // Display setups come from the server (they change through the API, the
+    // MCP server or another window too), except for a display with a save of
+    // its own on the way. An unchanged setup keeps its object: the drawer holds it.
+    const old = state.panels;
+    keepLocalConfigs(s, old, saves);
+    const cfgChanged = new Set();
+    let heldChanged = false;
+    for (const p of s.panels) {
+      const o = old.find((x) => x.id === p.id);
+      if (!o) continue;
+      if (sameJSON(o.config, p.config)) p.config = o.config; else cfgChanged.add(p.id);
+      if (!!o.held !== !!p.held) heldChanged = true;
+    }
+    if (!changed) { // the page's panel objects stay (the drawer holds them)
+      for (const p of s.panels) {
+        const o = old.find((x) => x.id === p.id);
+        if (!o) continue;
+        o.held = p.held;
+        if (cfgChanged.has(p.id)) replaceConfig(o, p.config);
+      }
+      s.panels = old;
+    }
     state = s;
-    if (!changed) state.panels = keepConfigs; // local edits may be newer
-    else keepPendingConfigs(keepConfigs);
     renderStatus();
     renderUpdate();
     if (changed) renderAll();
+    else if (cfgChanged.size) {
+      renderPanels();
+      if (drawerId && cfgChanged.has(drawerId)) renderDrawer();
+    }
+    if (heldChanged) drawerHint();
   }).catch(() => {});
-}, 5000);
+}
+setInterval(pollState, 5000);
 
 // Deep link: index.html#scenes opens that tab.
 const openHashTab = () => { const h = location.hash.slice(1); if (h && $('[data-tab="' + h + '"]')) showTab(h); };

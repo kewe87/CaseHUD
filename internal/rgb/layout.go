@@ -20,7 +20,8 @@ func Positions(z Zone, zc ZoneConfig) []Point {
 	next := 0
 	for _, s := range segs {
 		start := segmentStart(s, next)
-		for i, p := range segmentPoints(s) {
+		sp := segmentPoints(s) // one registry lookup: the count and the points always agree
+		for i, p := range sp {
 			k := start + i
 			for len(pts) <= k {
 				pts, placed = append(pts, p), append(placed, false) // a gap takes this segment's first LED
@@ -29,7 +30,7 @@ func Positions(z Zone, zc ZoneConfig) []Point {
 				pts[k], placed[k] = p, true
 			}
 		}
-		next = start + segmentCount(s)
+		next = start + len(sp)
 	}
 	if limit := zoneLimit(z); len(pts) > limit {
 		pts = pts[:limit]
@@ -71,18 +72,37 @@ func zoneLimit(z Zone) int {
 func segmentCount(s Segment) int {
 	if s.Shape == "component" {
 		c, ok := LookupComponent(s.Component)
-		if !ok {
-			return 0
-		}
-		if s.Count <= 0 || s.Count > len(c.LEDs) {
-			return len(c.LEDs)
-		}
+		return componentCount(s, c, ok)
 	}
 	return max(s.Count, 0)
 }
 
+// componentCount is the number of LEDs of a component segment given the
+// component it resolved to (ok false: unknown, no LEDs).
+func componentCount(s Segment, c Component, ok bool) int {
+	if !ok {
+		return 0
+	}
+	if s.Count <= 0 || s.Count > len(c.LEDs) {
+		return len(c.LEDs)
+	}
+	return s.Count
+}
+
+// segmentPoints returns the LED positions of a segment. A component is looked
+// up exactly once: the registry may change at any time (the case sketch
+// replaces components while layouts are rebuilt), and the count and the
+// positions must come from the same component.
 func segmentPoints(s Segment) []Point {
-	n := segmentCount(s)
+	var c Component
+	n := 0
+	if s.Shape == "component" {
+		var ok bool
+		c, ok = LookupComponent(s.Component)
+		n = componentCount(s, c, ok)
+	} else {
+		n = max(s.Count, 0)
+	}
 	if n == 0 {
 		return nil
 	}
@@ -93,7 +113,6 @@ func segmentPoints(s Segment) []Point {
 	switch s.Shape {
 	case "component":
 		// grid cell centres scaled into the rectangle, rotated around its centre
-		c, _ := LookupComponent(s.Component)
 		sin, cos := math.Sin(rad), math.Cos(rad)
 		for i := range pts {
 			ux, uy := c.unit(c.LEDs[i])

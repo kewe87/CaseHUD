@@ -6,6 +6,8 @@ package app
 import (
 	"errors"
 	"time"
+
+	leds "github.com/kewe87/casehud/internal/rgb"
 )
 
 // DisclaimerVersion is the version of the disclaimer text (installer/disclaimer-*.txt,
@@ -29,6 +31,9 @@ type Acks struct {
 	AcceptedAt      string `json:"acceptedAt,omitempty"`
 	AckExperimental bool   `json:"ackExperimental"`
 	AckLighting     bool   `json:"ackLighting"`
+	// AckCapture: the user confirmed that the screen and audio effects may read
+	// the screen content and the audio output.
+	AckCapture bool `json:"ackCapture"`
 }
 
 // Acks returns the confirmations on record.
@@ -36,7 +41,7 @@ func (e *Engine) Acks() Acks {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return Acks{Version: DisclaimerVersion, Accepted: e.cfg.Disclaimer.Version >= DisclaimerVersion,
-		AcceptedAt: e.cfg.Disclaimer.At, AckExperimental: e.cfg.AckExperimental, AckLighting: e.cfg.AckLighting}
+		AcceptedAt: e.cfg.Disclaimer.At, AckExperimental: e.cfg.AckExperimental, AckLighting: e.cfg.AckLighting, AckCapture: e.cfg.AckCapture}
 }
 
 // DisclaimerAccepted reports whether the current disclaimer was accepted.
@@ -71,7 +76,8 @@ func (e *Engine) AcceptDisclaimer(v int) error {
 	return perr
 }
 
-// Acknowledge records a one-time confirmation: "experimental" or "lighting".
+// Acknowledge records a one-time confirmation: "experimental", "lighting" or
+// "capture" (screen and audio effects).
 func (e *Engine) Acknowledge(what string) error {
 	e.mu.Lock()
 	switch what {
@@ -79,11 +85,30 @@ func (e *Engine) Acknowledge(what string) error {
 		e.cfg.AckExperimental = true
 	case "lighting":
 		e.cfg.AckLighting = true
+	case "capture":
+		e.cfg.AckCapture = true
 	default:
 		e.mu.Unlock()
 		return errors.New("unknown confirmation")
 	}
 	e.mu.Unlock()
+	return e.persist()
+}
+
+// RevokeCapture withdraws the confirmation for the screen and audio effects:
+// a running capture effect is replaced by the default effect (which stops the
+// capture) and the withdrawal is saved. Selecting a capture effect needs the
+// confirmation again.
+func (e *Engine) RevokeCapture() error {
+	e.mu.Lock()
+	e.cfg.AckCapture = false
+	e.mu.Unlock()
+	if fx, _ := e.currentLighting(); isCaptureEffect(fx) {
+		def := leds.DefaultConfig().Effect
+		if _, err := e.PatchLighting(LightingPatch{Effect: &def}); err != nil {
+			return err
+		}
+	}
 	return e.persist()
 }
 

@@ -6,6 +6,11 @@ CaseHUD exposes a small, versioned HTTP API on `127.0.0.1` so other programs
 breaking change would get a new `/api/v2/`. Everything under `/api/` **without**
 `v1` is internal to the GUI and may change at any time.
 
+That includes the endpoints behind the case sketch editor of the lighting tab
+(`/api/lighting/catalog`, `/api/lighting/sketch`), the partial panel update
+`PATCH /api/panels/{id}` and `DELETE /api/ack/capture` (withdrawing the consent for
+screen and audio effects): they are GUI-only and not part of API v1.
+
 All bodies are JSON (`Content-Type: application/json`) unless noted.
 
 ## Turning the API on
@@ -485,8 +490,8 @@ experimental), `paused` (displays are off), `brightness` (0-100), `effect`,
 `params` (values of the current effect), `effects` (names with parameter
 descriptors: `key`, `label` (English), `labelDe` (German; featured effects only),
 `type` number/color/bool/enum/text, `min`, `max`, `step` (number parameters:
-1 for whole-number ranges, 0.1 otherwise), `default`, `values`; plus `featured`, true for the seven effects the GUI offers
-(solid, breathing, rainbow, cycle, wave, sensor, meteor), and for those `label`
+1 for whole-number ranges, 0.1 otherwise), `default`, `values`; plus `featured`, true for the nine effects the GUI offers
+(solid, breathing, rainbow, cycle, wave, sensor, meteor, and since 1.1 screen and audio), and for those `label`
 (English GUI name, e.g. sensor is "Temperature") and `labelDe`; the other
 effects stay valid), `devices` (`id`, `name`, `backend`, `state`
 ok/conflict/disabled/error, `message`, `disabled`, `ignoreConflicts`,
@@ -548,6 +553,34 @@ alone. Switching the TL fan controller backend (`tl`), device `settings` and
 `lighting: {enabled, active}`. Turning lighting on needs two one-time
 confirmations in the CaseHUD window (the disclaimer, and the lighting notice);
 without them `enabled: true` is answered with `409 ack_required`.
+
+Screen and audio effects (since 1.1): `screen` (screen ambilight) and `audio`
+(audio visualizer) derive the LED colors from the screen content and from what
+the computer plays. Because that is private data they are off by default and
+need a third one-time confirmation, which only the CaseHUD window can record
+(the dialog opens the first time the user picks one of them). Until it is on
+record, `PATCH` with `effect` `screen` or `audio` is answered with `409
+ack_required` and changes nothing; the effect descriptor carries `capture:
+true`. The same applies when an effect change comes through any other path.
+The user can withdraw the confirmation at any time with the switch "Allow
+screen and audio effects" in the CaseHUD window (Settings); that also returns a
+running `screen` or `audio` effect to the default effect, and `PATCH` is
+answered with `409 ack_required` again. The API can neither give nor withdraw it.
+Parameters of `screen`: `display` (0 = primary monitor, 0-8), `area` (`edges`,
+the default, samples a border band of the screen and fills every LED position
+from the edge colour in its direction from the centre, like an ambilight; or
+`full`, the whole picture), `saturation` (0-300 %), `smoothing` (0-95) and
+`fps` (capture rate, 5-30, default 15). Parameters of `audio`: `mode`
+(`spectrum` or `pulse`), `bands` (4-64), `sensitivity` (10-400 %), `decay`
+(0-100), `rainbow`, `low`, `high` and `useAccent`. Both effects exist on
+Windows only (elsewhere selecting them answers `400 bad_request`). Screen
+capture runs only while the effect is being rendered (it idles one second
+after lighting pauses or the effect is replaced) and everything is released
+when the effect ends. Pictures and sound stay in memory: they are never
+stored, logged, exported or sent. Presets cannot select these effects (library
+presets naming them are ignored, and the user's own presets cannot be saved
+from them), and the diagnostics export leaves out the recorded device traffic
+while one of them is in use.
 
 `GET` also carries `preset` (since 1.0.3): the `id` of the preset whose effect and parameters match the current
 lighting exactly, `""` when none does. `status.lighting` carries the same `preset`.

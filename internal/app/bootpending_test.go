@@ -4,6 +4,7 @@
 package app
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -75,5 +76,33 @@ func TestBootClosedLeavesNoMarker(t *testing.T) {
 	e.writeStartImages([]panel.Panel{b}, false)
 	if got, ok := e.cfg.BootImages[b.SettingsKey()]; ok {
 		t.Fatalf("marker %q left although nothing was sent", got)
+	}
+}
+
+func TestPanelStateReportsBootPending(t *testing.T) {
+	b := &bootBar{err: panel.ErrBootPartial}
+	e := bootEngine(t, b, 0)
+	e.mu.Lock()
+	e.order = append(e.order, b.ID())
+	e.mu.Unlock()
+	if ps := e.Panels(); len(ps) != 1 || ps[0].BootPending {
+		t.Fatalf("pending before any write: %+v", ps)
+	}
+	e.writeStartImages([]panel.Panel{b}, false) // breaks off, marker stays
+	if ps := e.Panels(); len(ps) != 1 || !ps[0].BootPending {
+		t.Fatalf("no bootPending after an interrupted write: %+v", ps)
+	}
+	raw, err := json.Marshal(e.Panels()[0])
+	if err != nil || !strings.Contains(string(raw), `"bootPending":true`) {
+		t.Fatalf("json %s (%v)", raw, err)
+	}
+	b.err = nil
+	e.writeStartImages([]panel.Panel{b}, true) // explicit rewrite succeeds
+	if ps := e.Panels(); ps[0].BootPending {
+		t.Fatal("bootPending stays after a successful rewrite")
+	}
+	raw, _ = json.Marshal(e.Panels()[0])
+	if strings.Contains(string(raw), "bootPending") {
+		t.Fatalf("flag not omitted when false: %s", raw)
 	}
 }

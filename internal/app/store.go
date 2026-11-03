@@ -123,6 +123,8 @@ type Config struct {
 	Disclaimer      DisclaimerAck `json:"disclaimer,omitzero"`
 	AckExperimental bool          `json:"ack_experimental,omitempty"`
 	AckLighting     bool          `json:"ack_lighting,omitempty"`
+	// AckCapture records the confirmation for the screen and audio effects.
+	AckCapture bool `json:"ack_capture,omitempty"`
 	// Awtrix lists AWTRIX 3 pixel clocks that show CaseHUD apps.
 	Awtrix []AwtrixDevice `json:"awtrix,omitempty"`
 	// NoAnimation turns off gliding values (on by default).

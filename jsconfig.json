@@ -16,6 +16,7 @@
     "internal/web/static/lighting.js",
     "internal/web/static/devices.js",
     "internal/web/static/tlstart.js",
-    "internal/web/static/conflicts.js"
+    "internal/web/static/conflicts.js",
+    "internal/web/static/sketch.js"
   ]
 }

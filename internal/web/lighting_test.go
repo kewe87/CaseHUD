@@ -37,7 +37,7 @@ func TestV1Lighting(t *testing.T) {
 			}
 		}
 	}
-	if len(featured) != 7 || !featured["sensor"] || !featured["meteor"] || featured["fill"] || len(v.Effects) < 8 {
+	if len(featured) != 9 || !featured["sensor"] || !featured["meteor"] || featured["fill"] || len(v.Effects) < 8 {
 		t.Fatalf("featured effects: %v of %d", featured, len(v.Effects))
 	}
 	wantStatus(t, v1(t, ts, "PATCH", "/api/v1/lighting", `{"enabled":true,"brightness":55,"effect":"breathing","params":{"period":99}}`, &v), 200)
@@ -45,12 +45,16 @@ func TestV1Lighting(t *testing.T) {
 		t.Fatalf("after patch: %+v", v)
 	}
 	for _, body := range []string{
-		`{"effect":"screen"}`, `{"brightness":500}`, `{"params":{"nope":1}}`, `{"bogus":1}`,
+		`{"effect":"video"}`, `{"brightness":500}`, `{"params":{"nope":1}}`, `{"bogus":1}`,
 		`{"devices":{"x":{"disabled":true}}}`, `not json`,
 	} {
 		wantError(t, v1(t, ts, "PATCH", "/api/v1/lighting", body, nil), 400, "bad_request")
 	}
 	wantError(t, v1(t, ts, "PATCH", "/api/v1/lighting", `{"tl":true}`, nil), 403, "gui_only")
+	// screen and audio read private data: 409 until the window confirmed it
+	for _, fx := range []string{"screen", "audio"} {
+		wantError(t, v1(t, ts, "PATCH", "/api/v1/lighting", `{"effect":"`+fx+`"}`, nil), 409, "ack_required")
+	}
 	wantError(t, v1(t, ts, "PATCH", "/api/v1/lighting", `{"devices":{"demo:board":{"ignoreConflicts":true}}}`, nil), 403, "gui_only")
 	big := `{"params":{"a":"` + strings.Repeat("x", 2<<20) + `"}}`
 	wantError(t, v1(t, ts, "PATCH", "/api/v1/lighting", big, nil), 413, "payload_too_large")

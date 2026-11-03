@@ -1,0 +1,145 @@
+{
+ "format": 1,
+ "id": "generic-fan-140",
+ "vendor": "Generic",
+ "model": "Fan 140 mm, LED ring",
+ "category": "fan",
+ "dimensions_mm": {
+  "w": 140,
+  "h": 140,
+  "d": 25,
+  "approximate": true
+ },
+ "outline": {
+  "front": [
+   {
+    "type": "rect",
+    "x": 0,
+    "y": 0,
+    "w": 140,
+    "h": 140,
+    "r": 6,
+    "role": "body"
+   },
+   {
+    "type": "circle",
+    "cx": 70.0,
+    "cy": 70.0,
+    "r": 66.0,
+    "role": "frame"
+   },
+   {
+    "type": "ring",
+    "cx": 70.0,
+    "cy": 70.0,
+    "r_outer": 55,
+    "r_inner": 49,
+    "role": "lit"
+   },
+   {
+    "type": "circle",
+    "cx": 70.0,
+    "cy": 70.0,
+    "r": 23.8,
+    "role": "body"
+   }
+  ],
+  "side": [
+   {
+    "type": "rect",
+    "x": 0,
+    "y": 0,
+    "w": 140,
+    "h": 25,
+    "r": 2,
+    "role": "body"
+   }
+  ],
+  "approximate": true
+ },
+ "leds": {
+  "count": 16,
+  "positions_mm": [
+   [
+    70.0,
+    18.0
+   ],
+   [
+    89.9,
+    21.958
+   ],
+   [
+    106.77,
+    33.23
+   ],
+   [
+    118.042,
+    50.1
+   ],
+   [
+    122.0,
+    70.0
+   ],
+   [
+    118.042,
+    89.9
+   ],
+   [
+    106.77,
+    106.77
+   ],
+   [
+    89.9,
+    118.042
+   ],
+   [
+    70.0,
+    122.0
+   ],
+   [
+    50.1,
+    118.042
+   ],
+   [
+    33.23,
+    106.77
+   ],
+   [
+    21.958,
+    89.9
+   ],
+   [
+    18.0,
+    70.0
+   ],
+   [
+    21.958,
+    50.1
+   ],
+   [
+    33.23,
+    33.23
+   ],
+   [
+    50.1,
+    21.958
+   ]
+  ],
+  "approximate": true,
+  "generator": {
+   "kind": "ring",
+   "radius": 52,
+   "min": 4,
+   "max": 64,
+   "default": 16
+  }
+ },
+ "connection": {
+  "type": "argb-header"
+ },
+ "verified_by": [
+  "community"
+ ],
+ "sources": [],
+ "notes": "Standard 140 mm frame (140 x 140 x 25 mm, 124.5 mm hole pitch). LED ring, first LED at the top, clockwise."
+}

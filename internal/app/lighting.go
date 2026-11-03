@@ -21,6 +21,7 @@ import (
 	"github.com/kewe87/casehud/internal/rgb/backend/fake"
 	"github.com/kewe87/casehud/internal/rgb/backend/lianli"
 	"github.com/kewe87/casehud/internal/rgb/backend/lianlitl"
+	"github.com/kewe87/casehud/internal/sketch"
 )
 
 // Timing of the lighting integration.
@@ -49,6 +50,10 @@ type LightingConfig struct {
 	Labels map[string]map[string]string `json:"labels,omitempty"`
 	Fans   []FanPos                     `json:"fans,omitempty"`
 	FansAt string                       `json:"fansAt,omitempty"` // RFC 3339
+	// Sketch is the case sketch (lighting_sketch.go); the components and zone
+	// segments derived from it are rebuilt on every start. The value is
+	// replaced as a whole, never modified in place.
+	Sketch *sketch.Sketch `json:"sketch,omitempty"`
 }
 
 // lightingState is the runtime side of the lighting integration. The LED
@@ -81,6 +86,8 @@ type lightingState struct {
 
 	badBackup string // backup of an unusable stored configuration (mu)
 
+	sketchMu sync.Mutex // one sketch change at a time; taken before lifeMu
+
 	ramNotes ramNotes     // status of the RAM lighting (SMBus bridge)
 	bridgeUp atomic.Bool  // the bridge pipe existed at the last probe
 	bridgeAt atomic.Int64 // time of that probe (unix nanoseconds)
@@ -88,9 +95,10 @@ type lightingState struct {
 	cfgErrMu sync.Mutex
 	cfgErrs  map[string]error // devices that refused their settings
 
-	traceMu    sync.Mutex // diagnostics recording (diagnostics.go)
-	traceUntil time.Time
-	traceTimer *time.Timer
+	traceMu      sync.Mutex // diagnostics recording (diagnostics.go)
+	traceUntil   time.Time
+	traceTainted bool // a capture effect interrupted the recording: no export
+	traceTimer   *time.Timer
 
 	topoMu   sync.Mutex
 	topoAt   time.Time // last time the controller was read (zero: never)
@@ -110,7 +118,8 @@ type LightingCalib struct {
 // startLighting loads the stored configuration and, if lighting is enabled,
 // starts the engine. It always starts the helper goroutine.
 func (e *Engine) startLighting() {
-	e.loadLibraryComponents() // stored layouts may name library parts
+	e.loadLibraryComponents()   // stored layouts may name library parts
+	e.restoreSketchComponents() // ... and sketch components: before the layout is cleaned
 	l := &e.light
 	e.mu.Lock()
 	e.cfg.Lighting.Labels = cleanStoredLabels(e.cfg.Lighting.Labels)
@@ -121,7 +130,7 @@ func (e *Engine) startLighting() {
 	l.mu.Lock()
 	l.cfg = leds.DefaultConfig()
 	if lc.Engine != nil {
-		c, err := cleanLightingConfig(degradeUnknownParts(*lc.Engine), nil)
+		c, err := cleanLightingConfig(degradeUnknownParts(dropDanglingSketch(*lc.Engine)), nil)
 		if err != nil {
 			log.Printf("lighting: stored configuration ignored: %v", err)
 			e.keepBadLightingConfig(*lc.Engine)
@@ -132,6 +141,10 @@ func (e *Engine) startLighting() {
 		} else {
 			l.cfg = c
 		}
+	}
+	if isCaptureEffect(l.cfg.Effect) && !e.Acks().AckCapture {
+		// a hand-edited file must not start reading the screen without the confirmation
+		l.cfg.Effect = leds.DefaultConfig().Effect
 	}
 	l.loaded = true
 	l.saveCh = make(chan struct{}, 1)
@@ -377,6 +390,13 @@ func (e *Engine) runLighting(ctx context.Context, save <-chan struct{}, done cha
 
 // saveLighting writes the engine configuration into config.json.
 func (e *Engine) saveLighting() {
+	if err := e.saveLightingErr(); err != nil {
+		log.Printf("lighting: save: %v", err)
+	}
+}
+
+// saveLightingErr is saveLighting for callers that report a failure.
+func (e *Engine) saveLightingErr() error {
 	l := &e.light
 	l.mu.Lock()
 	var c leds.Config
@@ -389,9 +409,7 @@ func (e *Engine) saveLighting() {
 	e.mu.Lock()
 	e.cfg.Lighting.Engine = &c
 	e.mu.Unlock()
-	if err := e.persist(); err != nil {
-		log.Printf("lighting: save: %v", err)
-	}
+	return e.persist()
 }
 
 // lightSensors serves the sensor values to the effects, rebuilt once a second.
@@ -645,6 +663,8 @@ var lightingFeatured = []struct{ name, de, en string }{
 	{"wave", "Farbwelle", "Color wave"},
 	{"sensor", "Temperatur", "Temperature"},
 	{"meteor", "Meteor", "Meteor"},
+	{"screen", "Bildschirm-Ambilight", "Screen ambilight"},
+	{"audio", "Audio-Visualizer", "Audio visualizer"},
 }
 
 func lightingIsFeatured(name string) bool {
@@ -660,8 +680,11 @@ func lightingIsFeatured(name string) bool {
 // English GUI name for featured effects; LabelDE the German one.
 type LightingEffectView struct {
 	leds.EffectInfo
-	Featured bool   `json:"featured"`
-	LabelDE  string `json:"labelDe,omitempty"`
+	Featured bool `json:"featured"`
+	// Capture: the effect reads the screen or the audio output and needs the
+	// one-time confirmation first (409 ack_required without it).
+	Capture bool   `json:"capture,omitempty"`
+	LabelDE string `json:"labelDe,omitempty"`
 	// Params shadows EffectInfo.Params: the descriptors plus labelDe and step.
 	Params []LightingParamView `json:"params"`
 }
@@ -683,7 +706,10 @@ var lightingParamDE = map[string]string{
 	"sensor": "Sensor", "sensor.min": "Wert für untere Farbe", "sensor.max": "Wert für obere Farbe",
 	"sensor.low": "Untere Farbe", "sensor.high": "Obere Farbe", "smoothing": "Glättung",
 	"colors": "Genutzte Farben", "path": "Verlauf", "mirror": "Zur Mitte spiegeln", "reverse": "Richtung umkehren",
-	"tail":   "Schweiflänge",
+	"tail":    "Schweiflänge",
+	"display": "Bildschirm (0 = Hauptbildschirm)", "area": "Bereich", "saturation": "Sättigung (%)", "fps": "Aufnahmerate (Bilder/s)",
+	"mode": "Modus", "bands": "Bänder", "sensitivity": "Empfindlichkeit (%)", "decay": "Abklingen", "rainbow": "Regenbogenfarben",
+	"low": "Untere Farbe", "high": "Obere Farbe",
 	"color1": "Farbe 1", "color2": "Farbe 2", "color3": "Farbe 3", "color4": "Farbe 4", "color5": "Farbe 5", "color6": "Farbe 6",
 }
 
@@ -733,7 +759,7 @@ func (e *Engine) cpuTempPath() string {
 func (e *Engine) lightingEffectList() []LightingEffectView {
 	out := make([]LightingEffectView, len(lightingEffects))
 	for i, info := range lightingEffects {
-		out[i] = LightingEffectView{EffectInfo: info}
+		out[i] = LightingEffectView{EffectInfo: info, Capture: isCaptureEffect(info.Name)}
 		out[i].Params = lightingParamViews(info.Name, info.Params, lightingIsFeatured(info.Name))
 		for _, f := range lightingFeatured {
 			if f.name == info.Name {
@@ -928,6 +954,9 @@ func (e *Engine) patchLightingLocked(p LightingPatch, wantEnabled, wantTL, need 
 		}
 		next.Params[effect] = merged
 	}
+	if isCaptureEffect(effect) && !e.Acks().AckCapture {
+		return LightingView{}, fmt.Errorf("%w: confirm the screen and audio notice in the CaseHUD window first", ErrAckRequired)
+	}
 	settingsOf := map[string]leds.DeviceStatus{}
 	for _, d := range devs {
 		settingsOf[d.ID] = d
@@ -1054,6 +1083,9 @@ func (e *Engine) patchLightingLocked(p LightingPatch, wantEnabled, wantTL, need 
 	}
 
 	// Apply: first the configuration, then the on/off transitions.
+	if isCaptureEffect(clean.Effect) {
+		l.taintTrace()
+	}
 	if l.eng != nil {
 		if err := l.eng.SetEffect(clean.Effect, clean.Params[clean.Effect]); err != nil {
 			return LightingView{}, lightErr("%v", err)

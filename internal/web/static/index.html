@@ -7,6 +7,7 @@
 <title>CaseHUD</title>
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="conflicts.css">
+<link rel="stylesheet" href="sketch.css">
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 </head>
 <body>
@@ -170,7 +171,7 @@
       </div>
       <div id="rot-body" class="rot-body">
         <div class="rot-grid">
-          <div class="field"><span data-i18n="rot.mode"></span><div class="seg small" id="rot-mode"></div><small class="muted" id="rot-mode-hint"></small></div>
+          <div class="field"><span data-i18n="rot.mode"></span><div class="seg small" id="rot-mode" role="group" data-i18n-aria="rot.mode"></div><small class="muted" id="rot-mode-hint"></small></div>
           <div class="field"><span data-i18n="rot.interval"></span>
             <select id="rot-interval"><option value="5">5 s</option><option value="10">10 s</option><option value="15">15 s</option><option value="30">30 s</option><option value="60">1 min</option><option value="300">5 min</option></select></div>
           <div class="field"><span data-i18n="rot.effect"></span><select id="rot-effect"></select></div>
@@ -195,6 +196,62 @@
   <section id="tab-light" class="tab">
     <div class="page-head">
       <div><h1 data-i18n="tab.light"></h1><p class="sub" data-i18n="light.sub"></p></div>
+    </div>
+
+    <div id="sketch-view" class="sketch" hidden>
+      <div class="sk-head">
+        <div class="sk-title">
+          <button id="sk-back" class="ghost" data-i18n="sk.back"></button>
+          <div><h1 data-i18n="sk.title"></h1><p class="sub" data-i18n="sk.sub"></p></div>
+          <span id="sk-dirty" class="badge sk-dirty" data-i18n="sk.dirty" hidden></span>
+        </div>
+        <div class="actions-row sk-actions">
+          <button id="sk-undo" class="ghost icon-btn" data-i18n-title="sk.undo" data-i18n-aria="sk.undo"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
+          <button id="sk-redo" class="ghost icon-btn" data-i18n-title="sk.redo" data-i18n-aria="sk.redo"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg></button>
+          <button id="sk-import" class="ghost" data-i18n="sk.import"></button>
+          <button id="sk-export" class="ghost" data-i18n="sk.export"></button>
+          <button id="sk-delete" class="danger" data-i18n="sk.delete"></button>
+          <button id="sk-discard" class="ghost" data-i18n="sk.discard"></button>
+          <button id="sk-save" class="primary" data-i18n="sk.save"></button>
+          <input id="sk-file" type="file" accept="application/json,.json" hidden>
+        </div>
+      </div>
+      <div id="sk-banner" class="banner error" role="alert" hidden></div>
+      <div class="sk-main">
+        <aside class="sk-palette card" id="sk-palette" data-i18n-aria="sk.palette">
+          <div class="sk-pal-head">
+            <h3 data-i18n="sk.palette"></h3>
+            <input id="sk-search" type="text" autocomplete="off" data-i18n-placeholder="sk.search" data-i18n-aria="sk.search">
+          </div>
+          <div id="sk-pal-list" class="sk-pal-list"></div>
+        </aside>
+        <section class="sk-stage-card card" data-i18n-aria="sk.stage">
+          <div class="sk-toolbar">
+            <div id="sk-views" class="seg small" role="tablist" data-i18n-aria="sk.views"></div>
+            <div class="sk-tools">
+              <button id="sk-zoom-out" class="ghost icon-btn sm" data-i18n-title="sk.zoomOut" data-i18n-aria="sk.zoomOut">&minus;</button>
+              <span id="sk-zoom" class="sk-zoom" aria-live="off"></span>
+              <button id="sk-zoom-in" class="ghost icon-btn sm" data-i18n-title="sk.zoomIn" data-i18n-aria="sk.zoomIn">+</button>
+              <button id="sk-fit" class="ghost sk-btn" data-i18n="sk.fit"></button>
+              <label class="sk-toggle"><input id="sk-snap" type="checkbox" class="switch" checked><span data-i18n="sk.snap"></span></label>
+              <label class="sk-toggle"><input id="sk-grid" type="checkbox" class="switch" checked><span data-i18n="sk.grid"></span></label>
+            </div>
+          </div>
+          <div class="sk-stage-box">
+            <div class="sk-corner"></div>
+            <svg id="sk-ruler-x" class="sk-ruler-x" aria-hidden="true"></svg>
+            <svg id="sk-ruler-y" class="sk-ruler-y" aria-hidden="true"></svg>
+            <div id="sk-stage" class="sk-stage">
+              <svg id="sk-svg" class="sk-svg" tabindex="0" role="application" data-i18n-aria="sk.stage"></svg>
+              <div id="sk-empty" class="sk-empty" hidden></div>
+              <div id="sk-tip" class="sk-tip" role="tooltip" hidden></div>
+            </div>
+          </div>
+          <div class="sk-status"><span id="sk-readout" class="sk-readout"></span><span id="sk-hint" class="sk-hint"></span></div>
+          <div id="sk-live" class="sk-sr" aria-live="polite"></div>
+        </section>
+        <aside class="sk-inspector card" id="sk-inspector" data-i18n-aria="sk.inspector"></aside>
+      </div>
     </div>
     <section class="part">
       <div class="card stack">
@@ -245,6 +302,13 @@
       <div id="light-devices" class="light-devices"></div>
     </section>
 
+    <section class="part" id="sketch-entry">
+      <div class="part-head part-head-row">
+        <div><h2 data-i18n="sk.entry.title"></h2><p class="sub" data-i18n="sk.entry.sub"></p><p class="sub sk-entry-info" id="sketch-entry-info"></p></div>
+        <button id="sketch-open" class="ghost" data-i18n="sk.open"></button>
+      </div>
+    </section>
+
     <section class="part" id="light-layout" hidden>
       <div class="part-head"><h2 data-i18n="light.layout"></h2><p class="sub" data-i18n="light.layout.sub"></p></div>
       <div class="card stack">
@@ -272,7 +336,7 @@
       <div class="head-actions">
         <div class="seg" id="designs-view"></div>
         <span class="head-group" id="designs-actions">
-          <span class="seg-label" data-i18n="designs.preview"></span><div class="seg small" id="gallery-theme"></div>
+          <span class="seg-label" data-i18n="designs.preview"></span><div class="seg small" id="gallery-theme" role="group" data-i18n-aria="designs.preview"></div>
           <button id="btn-community" class="ghost" data-i18n="btn.community"></button>
           <label class="button ghost"><span data-i18n="btn.import"></span><input id="design-import" type="file" accept=".json,application/json" hidden></label>
           <button id="btn-new-design" class="primary" data-i18n="btn.newdesign"></button>
@@ -398,7 +462,7 @@
             <div class="row"><div class="row-text"><b data-i18n="set.interval"></b><small data-i18n="set.interval.sub"></small></div>
               <select id="set-interval">
                 <option value="0" data-i18n="int.design"></option>
-                <option value="500">0,5 s</option>
+                <option value="500" data-i18n="int.half"></option>
                 <option value="1000">1 s</option>
                 <option value="2000">2 s</option>
                 <option value="5000">5 s</option>
@@ -446,6 +510,7 @@
               <p data-i18n="disc.p4"></p><p data-i18n="disc.p5"></p><p data-i18n="disc.p6"></p><p data-i18n="disc.p7"></p>
             </div>
             <small id="disc-status" class="disc-status"></small>
+            <label class="check-row cap-row"><input type="checkbox" class="switch" id="cap-consent"><span><b data-i18n="cap.title"></b><small data-i18n="cap.sub"></small></span></label>
           </div>
         </section>
 
@@ -456,7 +521,7 @@
 
 <!-- Display drawer -->
 <div id="scrim" class="scrim" hidden></div>
-<aside id="drawer" class="drawer" hidden>
+<aside id="drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="dr-name" tabindex="-1" style="outline:none" hidden>
   <div class="drawer-head">
     <div class="drawer-preview" id="dr-preview"><img alt=""></div>
     <div><h2 id="dr-name"></h2><p class="sub" id="dr-meta"></p></div>
@@ -466,18 +531,18 @@
     <div class="field">
       <span data-i18n="field.name"></span>
       <div class="input-row">
-        <input id="dr-label" data-i18n-placeholder="ph.name">
+        <input id="dr-label" maxlength="40" data-i18n-placeholder="ph.name">
         <button id="dr-identify" class="ghost" data-i18n="btn.identify"></button>
       </div>
     </div>
     <div class="field">
       <span data-i18n="field.content"></span>
-      <div class="seg" id="dr-mode"></div>
+      <div class="seg" id="dr-mode" role="group" data-i18n-aria="field.content"></div>
     </div>
     <div id="dr-content"></div>
     <div class="field" id="dr-theme-field">
       <span data-i18n="field.theme"></span>
-      <div class="seg small" id="dr-theme"></div>
+      <div class="seg small" id="dr-theme" role="group" data-i18n-aria="field.theme"></div>
       <p class="sub" id="dr-theme-hint" hidden></p>
     </div>
     <div class="field">
@@ -486,7 +551,7 @@
     </div>
     <div class="field">
       <span data-i18n="field.rotation"></span>
-      <div class="seg small" id="dr-rot"></div>
+      <div class="seg small" id="dr-rot" role="group" data-i18n-aria="field.rotation"></div>
       <p class="sub" id="dr-rot-hint" data-i18n="rot.bar" hidden></p>
     </div>
     <div class="field" id="dr-oclock-field" hidden>
@@ -494,6 +559,9 @@
     </div>
     <div class="field" id="dr-flip-field" hidden>
       <label class="check-row"><input type="checkbox" class="switch" id="dr-flip"><span><b data-i18n="field.flip"></b><small data-i18n="field.flip.sub"></small></span></label>
+    </div>
+    <div class="field" id="dr-boot-warn" hidden>
+      <p class="sub warn" role="alert" data-i18n="boot.pending.long"></p>
     </div>
     <div class="field" id="dr-fw-field" hidden>
       <span><span data-i18n="field.firmware"></span>: <b id="dr-fw"></b> <span id="dr-fw-note"></span></span>
@@ -597,9 +665,9 @@
   </div>
 </dialog>
 
-<div id="menu" class="menu" hidden></div>
+<div id="menu" class="menu" role="menu" hidden></div>
 <datalist id="sensor-list"></datalist>
-<div id="toast" class="toast" hidden></div>
+<div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 <script src="i18n.js"></script>
 <script src="app.js"></script>
 <script src="disclaimer.js"></script>
@@ -607,5 +675,6 @@
 <script src="devices.js"></script>
 <script src="tlstart.js"></script>
 <script src="conflicts.js"></script>
+<script src="sketch.js"></script>
 </body>
 </html>

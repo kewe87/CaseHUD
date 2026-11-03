@@ -61,6 +61,14 @@ bisherigen Lösungen. Mehr Designs, mehr Sensoren, volle Kontrolle für dich, oh
   Sensor-Dienstes, `docs/SMBUS-BRIDGE.md`) und den LED-Rahmen des Universal Screen 8.8". Es wird nichts gesendet,
   bis du die Beleuchtung einschaltest; Hinweise und Risiken (Flash-Verschleiß beim Controller) stehen im Tab
   Licht-Presets: fertige aus der Community-Library oder eigene gespeicherte, auch über die API (`docs/API.md`)
+- **Gehäuse-Skizze und LED-Layout-Editor:** Im Tab „Beleuchtung“ zeichnest du dein Gehäuse und setzt Teile maßstabsgetreu
+  hinein – allgemeine Teile (Lüfter, LED-Streifen, Pumpe, RAM, Grafikkarte, Verteilerplatte) oder Teile aus der Community-Library. Jedes Teil lässt sich
+  an eine LED-Zone binden; die Effekte folgen dann den echten Positionen der LEDs im Gehäuse. Skizzen lassen sich
+  importieren und exportieren
+- **Bildschirm-Ambilight und Audio-Visualizer (optional, standardmäßig aus):** Zwei Beleuchtungseffekte, die die LED-Farben aus dem
+  Bildschirminhalt bzw. aus dem Ton des PCs ableiten. Weil das private Daten sind, gibt es sie erst nach einer
+  einmaligen Zustimmung in der Oberfläche; unter Einstellungen lässt sie sich jederzeit zurücknehmen. Bilder und Ton bleiben
+  im Arbeitsspeicher: Nichts wird gespeichert, protokolliert oder gesendet
 - **Firmware-Anzeige:** Die Firmware-Versionen der Geräte werden angezeigt; eine optionale Prüfung auf neuere
   Versionen (standardmäßig aus) liest nur die Download-Seite des Herstellers. CaseHUD installiert keine Firmware
 - **Läuft im Hintergrund** mit Tray-Icon, auf Wunsch mit Windows-Autostart
@@ -258,9 +266,9 @@ Bilder und GIFs funktionieren ohne.
 - Ersteinrichtung: Sensoren prüfen, Lüfter erkennen, Design pro Lüfter vorschlagen
 - Signierte Prüfsummen, Diagnose-Export und Issue-Vorlagen für Geräte-Tests
 
-**1.1 – Beleuchtung ausbauen** (Ideen, keine Zusagen)
-- Gehäuse-Skizze und Layout-Editor für die LEDs, weitere Geräte und Controller
-- Bildschirm- und Audio-Effekte
+**1.1 – Beleuchtung ausbauen**
+- Umgesetzt: Gehäuse-Skizze und Layout-Editor für die LEDs, Bildschirm-Ambilight und Audio-Visualizer
+- Noch offen (Ideen, keine Zusagen): weitere Geräte und Controller
 
 **Ideen für später – nach Nachfrage**
 - Alarme (Display pulsiert bei kritischer Temperatur), Zeitpläne, abgeleitete Sensoren wie ΔT
@@ -324,6 +332,15 @@ sets (Clean, Neon, Retro, Cyberpunk): CPU + GPU temperature or load, gaming with
 power in watts, total power, VRAM and GPU hotspot – each in dark and light. Also included: scenes, automation
 (a game starts, a scene switches), rotation, animated backgrounds, AWTRIX pixel clocks, a local API and an
 optional MCP interface (both off by default).
+
+**Case sketch and LED layout editor.** In the lighting tab you draw your case and place parts in it to scale: generic
+parts (fans, LED strips, pump, RAM, graphics card, distro plate) or parts from the community library. Each part can be bound to an LED zone, so
+effects follow the real LED positions in your case. Sketches can be imported and exported.
+
+**Screen ambilight and audio visualizer (optional, off by default).** Two lighting effects derive the LED colors from the
+screen content or from the sound the PC plays. Because that is private data they need a one-time consent in the
+interface, which you can withdraw at any time in the settings. Pictures and sound stay in memory: nothing is stored,
+logged or sent.
 
 **Permanent writes to devices.** After you accept the disclaimer, CaseHUD writes its logo once into each UNI FAN TL LCD
 as start and idle image and into the Universal Screen 8.8" as boot picture (permanent, on by default, switchable under Settings → Devices). Assigning a serial number to

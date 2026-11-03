@@ -529,6 +529,9 @@ func (e *Engine) loop(ctx context.Context) {
 			go func() { rescanDone <- e.discover(ctx) }()
 		}
 
+		var rebuild bool
+		var rebuildInfo EffectInfo
+		var rebuildParams Params
 		e.mu.Lock()
 		if now.Sub(lastCheck) >= conflictCheckInterval {
 			lastCheck = now
@@ -538,13 +541,7 @@ func (e *Engine) loop(ctx context.Context) {
 			e.effectDirty = false
 			info := e.effects[e.cfg.Effect]
 			if info.New != nil {
-				eff, err := info.New(withDefaults(info, e.cfg.Params[info.Name]))
-				if err != nil {
-					e.opt.Logf("leds: effect %s: %v", info.Name, err)
-				} else {
-					closeEffect(effect)
-					effect, start, n = eff, now, 0
-				}
+				rebuild, rebuildInfo, rebuildParams = true, info, withDefaults(info, e.cfg.Params[info.Name])
 			}
 		}
 		if e.layoutDirty {
@@ -561,6 +558,18 @@ func (e *Engine) loop(ctx context.Context) {
 		bright := e.cfg.Brightness * 256 / 100
 		devices := append([]*deviceEntry(nil), e.devices...)
 		e.mu.Unlock()
+
+		// Local change: New and Close of an effect run without the engine
+		// lock; effects that hold devices (capture) may take a moment.
+		if rebuild {
+			eff, err := rebuildInfo.New(rebuildParams)
+			if err != nil {
+				e.opt.Logf("leds: effect %s: %v", rebuildInfo.Name, err)
+			} else {
+				closeEffect(effect)
+				effect, start, n = eff, now, 0
+			}
+		}
 
 		if !paused && effect != nil {
 			var s Sensors

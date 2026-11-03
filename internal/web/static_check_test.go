@@ -17,7 +17,7 @@ import (
 // and need no Node.js.
 
 // jsFiles are the scripts in the order index.html loads them.
-var jsFiles = []string{"i18n.js", "app.js", "disclaimer.js", "lighting.js", "devices.js", "tlstart.js", "conflicts.js"}
+var jsFiles = []string{"i18n.js", "app.js", "disclaimer.js", "lighting.js", "devices.js", "tlstart.js", "conflicts.js", "sketch.js"}
 
 var (
 	// dictionary literals: "  de: {" in i18n.js, Object.assign(STRINGS.de, { elsewhere

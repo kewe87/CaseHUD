@@ -45,7 +45,10 @@ var (
 	libKeyRe = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9]{0,31}$`)
 	libTagRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,23}$`)
 	libFxRe  = regexp.MustCompile(`^[a-z][a-z-]{0,31}$`)
-	libHexRe = regexp.MustCompile(`^#[0-9a-f]{6}$`)
+	// captureEffects read the screen or the audio output; presets from the
+	// library may not select them (the user switches them on in the window).
+	captureEffects = map[string]bool{"screen": true, "audio": true}
+	libHexRe       = regexp.MustCompile(`^#[0-9a-f]{6}$`)
 )
 
 // Library fetches and caches components, cases and lighting presets.
@@ -578,6 +581,9 @@ func ParsePreset(b []byte) (Preset, error) {
 	}
 	if !libFxRe.MatchString(f.Effect) {
 		return Preset{}, errors.New("invalid effect name")
+	}
+	if captureEffects[f.Effect] {
+		return Preset{}, errors.New("presets cannot select effects that read the screen or audio")
 	}
 	p := Preset{Format: libFormat, ID: f.ID, Effect: f.Effect, Params: map[string]any{}, Name: map[string]string{}}
 	for _, lang := range []string{"de", "en"} {

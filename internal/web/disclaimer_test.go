@@ -94,3 +94,34 @@ func TestStartImageRewriteNeedsConfirmFlag(t *testing.T) {
 		t.Fatalf("with confirm: %d", c)
 	}
 }
+
+// The window can withdraw the permission; the API cannot, and after the
+// withdrawal the API is refused again.
+func TestCaptureRevokeRoute(t *testing.T) {
+	_, ts := testServerAck(t, nil, true)
+	do := func(method, path, body, tok string) int {
+		req, _ := http.NewRequest(method, ts.URL+path, strings.NewReader(body))
+		req.Header.Set("X-Token", tok)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	if c := do("POST", "/api/ack", `{"what":"capture"}`, "secret"); c != 200 {
+		t.Fatalf("ack: %d", c)
+	}
+	if c := do("DELETE", "/api/v1/ack/capture", "", "client"); c == 200 {
+		t.Fatal("the API withdrew the permission")
+	}
+	if c := do("PATCH", "/api/v1/lighting", `{"effect":"audio"}`, "client"); c == http.StatusConflict {
+		t.Fatalf("v1 refused although the permission is given")
+	}
+	if c := do("DELETE", "/api/ack/capture", "", "secret"); c != 200 {
+		t.Fatalf("revoke: %d", c)
+	}
+	if c := do("PATCH", "/api/v1/lighting", `{"effect":"audio"}`, "client"); c != http.StatusConflict {
+		t.Fatalf("v1 after revocation: %d", c)
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	leds "github.com/kewe87/casehud/internal/rgb"
+	"github.com/kewe87/casehud/internal/rgb/effects/media"
 )
 
 // Limits for everything the lighting configuration takes from the GUI, the
@@ -32,9 +33,17 @@ var (
 	segShapes  = map[string]bool{"": true, "line": true, "ring": true, "rect": true, "point": true, "component": true}
 )
 
-// lightingEffects are the effects offered; the media effects that read files,
-// the screen or the audio are not part of this build.
-var lightingEffects = leds.BuiltinEffects()
+// lightingEffects are the effects offered: the built-in ones plus screen
+// ambience and the audio visualizer. The video effect, which reads files, is
+// not part of this build.
+var lightingEffects = append(leds.BuiltinEffects(), media.Effects()...)
+
+// captureEffects read the screen or the audio output. They need the one-time
+// confirmation (Acks.AckCapture), are never part of a library preset and keep
+// the diagnostics from exporting device traffic.
+var captureEffects = map[string]bool{"screen": true, "audio": true}
+
+func isCaptureEffect(name string) bool { return captureEffects[name] }
 
 func lightingEffect(name string) (leds.EffectInfo, bool) {
 	for _, info := range lightingEffects {

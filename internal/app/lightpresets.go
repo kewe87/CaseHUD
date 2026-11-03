@@ -300,7 +300,7 @@ func (e *Engine) LightingPresetList() []LightingPresetView {
 	effect, cur := e.currentLighting()
 	out := []LightingPresetView{}
 	for _, p := range e.presetCatalog() {
-		if _, ok := lightingEffect(p.Effect); !ok || !lightingIsFeatured(p.Effect) {
+		if _, ok := lightingEffect(p.Effect); !ok || !lightingIsFeatured(p.Effect) || isCaptureEffect(p.Effect) {
 			continue
 		}
 		out = append(out, LightingPresetView{Preset: p.Preset, Source: p.source, Active: presetMatches(p.Preset, effect, cur)})
@@ -338,6 +338,9 @@ func (e *Engine) ApplyLightingPreset(id string) (LightingView, []string, error) 
 		return LightingView{}, nil, fmt.Errorf("%w: preset %q", ErrPresetNotFound, id)
 	}
 	params, dropped, ok := presetParams(p.Preset)
+	if ok && isCaptureEffect(p.Effect) {
+		return LightingView{}, nil, lightErr("preset %q: presets cannot select the screen or audio effects", id)
+	}
 	if !ok {
 		return LightingView{}, nil, lightErr("preset %q needs the effect %q, which this version does not have", id, p.Effect)
 	}
@@ -387,7 +390,7 @@ func (e *Engine) SaveLightingPreset(name string) (LightingPresetView, error) {
 	}
 	effect, cur := e.currentLighting()
 	info, ok := lightingEffect(effect)
-	if !ok || cur == nil {
+	if !ok || cur == nil || isCaptureEffect(effect) {
 		return LightingPresetView{}, lightErr("the current effect %q cannot be saved", effect)
 	}
 	p := community.Preset{Format: 1, Name: map[string]string{"de": name, "en": name}, Effect: effect,

@@ -4,6 +4,7 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
@@ -129,10 +130,12 @@ func (s *Server) Handler() http.Handler {
 	api.HandleFunc("GET /api/state", s.state)
 	api.HandleFunc("POST /api/rescan", s.rescan)
 	api.HandleFunc("PUT /api/panels/{id}", s.putPanel)
+	api.HandleFunc("PATCH /api/panels/{id}", s.patchPanel)
 	api.HandleFunc("GET /api/panels/{id}/preview", s.panelPreview)
 	api.HandleFunc("GET /api/live", s.live)
 	s.lightingRoutes(api)
 	s.libraryRoutes(api)
+	s.sketchRoutes(api)
 	s.devicesRoutes(api)
 	s.monitorBackRoutes(api)
 	s.tlStartRoutes(api)
@@ -416,6 +419,51 @@ func (s *Server) putPanel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// patchPanel changes only the fields present in the body of a display's
+// configuration (same names as PUT), so a page that was open for a while does
+// not undo what changed elsewhere (API, a second window) in the meantime. The
+// answer is the resulting configuration.
+func (s *Server) patchPanel(w http.ResponseWriter, r *http.Request) {
+	var patch map[string]json.RawMessage
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&patch); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	c, err := s.Engine.UpdatePanelConfig(r.PathValue("id"), func(c *app.PanelConfig) error {
+		cur, err := json.Marshal(c)
+		if err != nil {
+			return err
+		}
+		var merged map[string]json.RawMessage
+		if err := json.Unmarshal(cur, &merged); err != nil {
+			return err
+		}
+		for k, v := range patch {
+			merged[k] = v
+		}
+		b, err := json.Marshal(merged)
+		if err != nil {
+			return err
+		}
+		var n app.PanelConfig
+		dec := json.NewDecoder(bytes.NewReader(b))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&n); err != nil {
+			return err
+		}
+		*c = n
+		return nil
+	})
+	switch {
+	case errors.Is(err, app.ErrNoPanel):
+		fail(w, http.StatusNotFound, err)
+	case err != nil:
+		fail(w, http.StatusBadRequest, err)
+	default:
+		writeJSON(w, c)
+	}
 }
 
 func (s *Server) panelPreview(w http.ResponseWriter, r *http.Request) {

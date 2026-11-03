@@ -408,3 +408,42 @@ type backendFunc func() []leds.Device
 
 func (backendFunc) Name() string                                      { return "func" }
 func (f backendFunc) Discover(context.Context) ([]leds.Device, error) { return f(), nil }
+
+type gatedEffect struct{ gate chan struct{} }
+
+func (gatedEffect) Render(leds.Frame, *image.RGBA) {}
+func (g gatedEffect) Close() error                 { <-g.gate; return nil }
+
+// Close of a replaced effect runs without the engine lock: a Close that hangs
+// must not block Config and the other calls that take the lock.
+func TestEffectCloseDoesNotHoldEngineLock(t *testing.T) {
+	gate := make(chan struct{})
+	var made atomic.Int32
+	slow := leds.EffectInfo{Name: "slow", New: func(leds.Params) (leds.Effect, error) {
+		if made.Add(1) == 1 {
+			return gatedEffect{gate}, nil
+		}
+		return closingEffect{new(atomic.Int32)}, nil
+	}}
+	plain := leds.EffectInfo{Name: "plain", New: func(leds.Params) (leds.Effect, error) { return closingEffect{new(atomic.Int32)}, nil }}
+	cfg := leds.DefaultConfig()
+	cfg.Effect = "slow"
+	e := leds.New(cfg, leds.Options{Effects: []leds.EffectInfo{slow, plain}, ProcessRunning: noProcs})
+	if err := e.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if err := e.SetEffect("plain", nil); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond) // the loop is now inside Close of the first effect
+	done := make(chan struct{})
+	go func() { e.Config(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Config blocked while an effect is closing")
+	}
+	close(gate)
+	e.Stop()
+}

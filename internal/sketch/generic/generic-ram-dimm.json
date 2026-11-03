@@ -1,0 +1,90 @@
+{
+ "format": 1,
+ "id": "generic-ram-dimm",
+ "vendor": "Generic",
+ "model": "Memory module with light bar",
+ "category": "ram",
+ "dimensions_mm": {
+  "w": 133.35,
+  "h": 40,
+  "d": 8,
+  "approximate": true
+ },
+ "outline": {
+  "front": [
+   {
+    "type": "rect",
+    "x": 0,
+    "y": 0,
+    "w": 133.35,
+    "h": 40,
+    "r": 1,
+    "role": "body"
+   },
+   {
+    "type": "rect",
+    "x": 6,
+    "y": 3,
+    "w": 121.35,
+    "h": 6,
+    "r": 2,
+    "role": "lit"
+   }
+  ],
+  "side": [
+   {
+    "type": "rect",
+    "x": 0,
+    "y": 0,
+    "w": 40,
+    "h": 8,
+    "r": 1,
+    "role": "body"
+   }
+  ],
+  "approximate": true
+ },
+ "leds": {
+  "count": 5,
+  "positions_mm": [
+   [
+    8.0,
+    6.0
+   ],
+   [
+    37.337,
+    6.0
+   ],
+   [
+    66.675,
+    6.0
+   ],
+   [
+    96.012,
+    6.0
+   ],
+   [
+    125.35,
+    6.0
+   ]
+  ],
+  "approximate": true,
+  "generator": {
+   "kind": "line",
+   "axis": "x",
+   "inset": 8,
+   "offset": 6,
+   "min": 1,
+   "max": 16,
+   "default": 5
+  }
+ },
+ "connection": {
+  "type": "argb-header"
+ },
+ "verified_by": [
+  "community"
+ ],
+ "sources": [],
+ "notes": "DIMM width 133.35 mm (JEDEC); height 40 mm with heat spreader. Light bar along the top edge, first LED on the left."
+}

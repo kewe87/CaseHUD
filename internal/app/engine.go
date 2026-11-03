@@ -104,6 +104,13 @@ type PanelState struct {
 	Error          string        `json:"error,omitempty"`
 	// ErrorCode classifies Error (see the Err* constants).
 	ErrorCode string `json:"errorCode,omitempty"`
+	// Held is set while a rotation or automation scene is on this display:
+	// changes to its setup are stored and show when that ends.
+	Held bool `json:"held,omitempty"`
+	// BootPending is set when a boot picture transfer to this display started
+	// and was not confirmed: the display may need a power cycle (the marker
+	// stays until a rewrite succeeds).
+	BootPending bool `json:"bootPending,omitempty"`
 }
 
 // Start loads the config, connects to the sensor backend and the panels.
@@ -490,7 +497,10 @@ func (e *Engine) Panels() []PanelState {
 		cfg := e.cfg.Panels[id].Clone()
 		sz := w.sizeFor(cfg.Rotation)
 		out = append(out, PanelState{ID: id, Name: w.p.Name(), Width: sz.X, Height: sz.Y,
-			Round: w.round, Experimental: panel.IsExperimental(w.p), Config: cfg, Number: nums[id], Error: w.err(), ErrorCode: w.errClass(), Grids: lcd.GridPresets(sz.X, sz.Y)})
+			Round: w.round, Experimental: panel.IsExperimental(w.p), Config: cfg, Number: nums[id], Error: w.err(), ErrorCode: w.errClass(), Grids: lcd.GridPresets(sz.X, sz.Y), Held: e.heldLocked(id)})
+		if bi, ok := w.p.(panel.BootImager); ok && strings.HasPrefix(e.cfg.BootImages[bi.SettingsKey()], bootPendingPrefix) {
+			out[len(out)-1].BootPending = true
+		}
 		if v, ok := w.p.(panel.Versioned); ok {
 			out[len(out)-1].Firmware = v.Version()
 			out[len(out)-1].FirmwareLatest = e.firmwareNote(panelFirmwareProduct(w.p), v.Version())
@@ -587,9 +597,35 @@ func (e *Engine) setPanelConfigLocked(id string, c PanelConfig) error {
 	}
 	e.cfg.Panels[id] = c
 	e.rot.transient = "" // the user changed something: a one-off scene is over
+	held := e.heldLocked(id)
 	e.mu.Unlock()
-	w.reconfigure(c)
+	// A rotation or automation scene is on this display: the new setup is
+	// stored and takes over when the hold ends (both restore it from e.cfg),
+	// instead of breaking the scene until the next step.
+	if !held {
+		w.reconfigure(c)
+	}
 	return e.persist()
+}
+
+// heldLocked reports whether a scene of the automation or the rotation is in
+// charge of display id, so its own configuration is not what is on screen.
+// e.mu is held.
+func (e *Engine) heldLocked(id string) bool {
+	hasPanel := func(s Scene) bool { _, ok := s.Panels[id]; return ok }
+	if e.auto.key != "" {
+		// The automation holds the rotation too; a rule without a scene shows
+		// the normal setup.
+		return e.auto.scene != "" && slices.ContainsFunc(e.cfg.Rotation.Scenes, func(s Scene) bool { return s.Name == e.auto.scene && hasPanel(s) })
+	}
+	r := e.cfg.Rotation
+	if !e.rot.active || !r.Enabled {
+		return false
+	}
+	if r.Mode == "conveyor" {
+		return true
+	}
+	return slices.ContainsFunc(rotationScenes(r.Scenes), hasPanel)
 }
 
 // checkContent rejects a design or media reference that is malformed (via

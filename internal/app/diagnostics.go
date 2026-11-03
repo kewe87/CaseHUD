@@ -42,11 +42,22 @@ var ErrTrace = errors.New("trace")
 // traffic: CaseHUD never starts talking to a device for diagnostics.
 func (e *Engine) StartLightTrace() (time.Time, error) {
 	l := &e.light
+	// l.mu is held from the check of the effect until the recording is on: a
+	// patch that selects a capture effect needs l.mu too, so it cannot slip in
+	// between (order: l.mu, then traceMu, as in taintTrace).
 	l.mu.Lock()
+	defer l.mu.Unlock()
 	running := l.eng != nil
-	l.mu.Unlock()
+	capturing := isCaptureEffect(l.cfg.Effect)
+	if l.eng != nil {
+		capturing = isCaptureEffect(l.eng.Config().Effect)
+	}
 	if !running {
 		return time.Time{}, fmt.Errorf("%w: lighting is not active, there is no device traffic to record", ErrTrace)
+	}
+	if capturing {
+		// the LED colours would show what is on the screen or what plays
+		return time.Time{}, fmt.Errorf("%w: the recording is not available while the screen or audio effect runs", ErrTrace)
 	}
 	l.traceMu.Lock()
 	defer l.traceMu.Unlock()
@@ -55,6 +66,7 @@ func (e *Engine) StartLightTrace() (time.Time, error) {
 		return time.Time{}, fmt.Errorf("%w: a recording is already running", ErrTrace)
 	}
 	leds.SetTracing(true)
+	l.traceTainted = false
 	l.traceUntil = now.Add(traceFor)
 	until := l.traceUntil
 	l.traceTimer = time.AfterFunc(traceFor, func() {
@@ -75,6 +87,32 @@ func (e *Engine) LightTraceStatus() (bool, time.Time) {
 		return true, l.traceUntil
 	}
 	return false, time.Time{}
+}
+
+// taintTrace ends a running recording because a capture effect was switched
+// on: what was recorded so far stays out of the export.
+func (l *lightingState) taintTrace() {
+	l.traceMu.Lock()
+	defer l.traceMu.Unlock()
+	if l.traceUntil.IsZero() {
+		return
+	}
+	if l.traceTimer != nil {
+		l.traceTimer.Stop()
+	}
+	leds.SetTracing(false)
+	l.traceUntil = time.Time{}
+	l.traceTainted = true
+}
+
+// packetsAllowed reports whether recorded device traffic may be exported:
+// not while a capture effect runs and not after one interrupted a recording.
+func (e *Engine) packetsAllowed() bool {
+	l := &e.light
+	effect, _ := e.currentLighting()
+	l.traceMu.Lock()
+	defer l.traceMu.Unlock()
+	return !l.traceTainted && !isCaptureEffect(effect)
 }
 
 // stopTrace ends a recording early (engine shutdown).
@@ -434,7 +472,7 @@ func (e *Engine) WriteDiagnostics(ctx context.Context, w io.Writer, version stri
 		return err
 	}
 	rep := e.lightingReport(ctx)
-	if !opt.Packets {
+	if !opt.Packets || !e.packetsAllowed() {
 		rep.Packets = nil
 	}
 	if err := addJSON("lighting.json", rep); err != nil {

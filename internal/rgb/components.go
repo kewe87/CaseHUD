@@ -139,3 +139,12 @@ func lineStrip(name, label string, n int) Component {
 	}
 	return c
 }
+
+// UnregisterComponent removes a registered component (no-op if unknown).
+// Layouts that still name it fail their next rebuild, so callers remove the
+// segments first.
+func UnregisterComponent(name string) {
+	componentsMu.Lock()
+	defer componentsMu.Unlock()
+	delete(components, name)
+}

@@ -518,7 +518,7 @@ try { LANG = localStorage.getItem("lang") || "de"; } catch { /* storage blocked 
 
 function t(key, vars) {
   let s = (STRINGS[LANG] && STRINGS[LANG][key]) ?? STRINGS.de[key] ?? key;
-  for (const [k, v] of Object.entries(vars || {})) s = s.replaceAll(`{${k}}`, v);
+  for (const [k, v] of Object.entries(vars || {})) s = s.replaceAll(`{${k}}`, () => String(v));
   return s;
 }
 

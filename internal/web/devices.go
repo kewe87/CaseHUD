@@ -15,6 +15,14 @@ func (s *Server) devicesRoutes(api *http.ServeMux) {
 	api.HandleFunc("PUT /api/devices", s.putDevices)
 	api.HandleFunc("POST /api/disclaimer/accept", s.acceptDisclaimer)
 	api.HandleFunc("POST /api/ack", s.ack)
+	// GUI only: withdraws the permission for the screen and audio effects.
+	api.HandleFunc("DELETE /api/ack/capture", func(w http.ResponseWriter, r *http.Request) {
+		if err := s.Engine.RevokeCapture(); err != nil {
+			fail(w, http.StatusInternalServerError, err)
+			return
+		}
+		writeJSON(w, s.Engine.Acks())
+	})
 }
 
 // acceptDisclaimer records the first-start acceptance (GUI token only: API

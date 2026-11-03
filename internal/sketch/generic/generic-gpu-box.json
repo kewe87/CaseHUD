@@ -1,0 +1,118 @@
+{
+ "format": 1,
+ "id": "generic-gpu-box",
+ "vendor": "Generic",
+ "model": "Graphics card (box)",
+ "category": "gpu-block",
+ "dimensions_mm": {
+  "w": 300,
+  "h": 120,
+  "d": 50,
+  "approximate": true
+ },
+ "outline": {
+  "front": [
+   {
+    "type": "rect",
+    "x": 0,
+    "y": 0,
+    "w": 300,
+    "h": 120,
+    "r": 4,
+    "role": "body"
+   },
+   {
+    "type": "rect",
+    "x": 20,
+    "y": 6,
+    "w": 260,
+    "h": 8,
+    "r": 3,
+    "role": "lit"
+   }
+  ],
+  "side": [
+   {
+    "type": "rect",
+    "x": 0,
+    "y": 0,
+    "w": 120,
+    "h": 50,
+    "r": 2,
+    "role": "body"
+   }
+  ],
+  "approximate": true
+ },
+ "leds": {
+  "count": 12,
+  "positions_mm": [
+   [
+    20.0,
+    10.0
+   ],
+   [
+    43.636,
+    10.0
+   ],
+   [
+    67.273,
+    10.0
+   ],
+   [
+    90.909,
+    10.0
+   ],
+   [
+    114.545,
+    10.0
+   ],
+   [
+    138.182,
+    10.0
+   ],
+   [
+    161.818,
+    10.0
+   ],
+   [
+    185.455,
+    10.0
+   ],
+   [
+    209.091,
+    10.0
+   ],
+   [
+    232.727,
+    10.0
+   ],
+   [
+    256.364,
+    10.0
+   ],
+   [
+    280.0,
+    10.0
+   ]
+  ],
+  "approximate": true,
+  "generator": {
+   "kind": "line",
+   "axis": "x",
+   "inset": 20,
+   "offset": 10,
+   "min": 1,
+   "max": 64,
+   "default": 12
+  }
+ },
+ "connection": {
+  "type": "argb-header"
+ },
+ "verified_by": [
+  "community"
+ ],
+ "sources": [],
+ "notes": "Generic 300 x 120 x 50 mm card (2.5 slots). Light bar along the top edge; rotate 90 degrees for a vertical mount."
+}

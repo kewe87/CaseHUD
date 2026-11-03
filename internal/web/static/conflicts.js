@@ -117,7 +117,7 @@ async function confLoad() {
     conf.st = await api("GET", "/api/conflicts");
   } catch { return; }
   confRender();
-  const accepted = !state || !state.acks || state.acks.accepted;
+  const accepted = !!(state && state.acks && state.acks.accepted); // never ahead of the first-start disclaimer
   if (!conf.asked && conf.st.ask && accepted && confPending().length && !$("dialog[open]")) {
     conf.asked = true; // the first sight asks once; later programs show the banner
     confOpen();

@@ -61,3 +61,57 @@ func TestComponentMM(t *testing.T) {
 		t.Fatal("unknown size gave positions")
 	}
 }
+
+// A component that is replaced or removed while layouts are built (the case
+// sketch does this at runtime) must never make Positions panic or return
+// positions that disagree with their segments. Run with -race.
+func TestPositionsWhileComponentsChange(t *testing.T) {
+	const name = "test.race-comp"
+	mk := func(n int) Component {
+		c := Component{Name: name, Label: "race", Width: n, Height: 1, Outline: "bar"}
+		for i := 0; i < n; i++ {
+			c.LEDs = append(c.LEDs, Point{X: float64(i)})
+		}
+		return c
+	}
+	if err := RegisterComponent(mk(4)); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { UnregisterComponent(name) })
+	z := Zone{ID: "z", Resizable: true, Max: 200}
+	zc := ZoneConfig{Segments: []Segment{
+		{Shape: "component", Component: name, X: 0, Y: 0, W: 0.5, H: 0.5},
+		{Shape: "component", Component: name, X: 0.5, Y: 0.5, W: 0.5, H: 0.5, Count: 3},
+		{Shape: "line", Count: 5, X: 0, Y: 0.9, W: 1},
+	}}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 3000; i++ {
+			switch i % 3 {
+			case 0:
+				UnregisterComponent(name)
+			case 1:
+				_ = RegisterComponent(mk(1 + i%7))
+			default:
+				_ = RegisterComponent(mk(8))
+			}
+		}
+	}()
+	for running := true; running; {
+		select {
+		case <-done:
+			running = false
+		default:
+		}
+		pts := Positions(z, zc)
+		if n := LEDCount(z, zc); n > 200 || len(pts) > 200 {
+			t.Fatalf("count %d, %d points", n, len(pts))
+		}
+		for _, p := range pts {
+			if p.X < 0 || p.X > 1 || p.Y < 0 || p.Y > 1 {
+				t.Fatalf("point %v outside the canvas", p)
+			}
+		}
+	}
+}

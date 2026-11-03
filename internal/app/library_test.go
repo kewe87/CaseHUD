@@ -106,7 +106,9 @@ func TestLibraryRefreshFeedsComponentsAndPresets(t *testing.T) {
 }
 
 func TestApplyEveryEffectDefaults(t *testing.T) {
+	fakeCapture(t)
 	e := startDemo(t)
+	e.Acknowledge("capture")
 	for _, info := range lightingEffects {
 		params := map[string]any{}
 		for _, d := range info.Params {
