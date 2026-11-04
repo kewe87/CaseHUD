@@ -26,8 +26,8 @@
 //	        3 port; B4 blink port [port]. Only on explicit request
 //	        (TestLight, BlinkPort), and then in every mode, passive included.
 //	A3      per-fan light, same layout with [0] = port<<4 | MB-sync bit and
-//	        [1] = port<<4 | fan. Used here only for MB sync (sync bit set,
-//	        everything else 0).
+//	        [1] = port<<4 | fan. Used here for MB sync (sync bit set,
+//	        everything else 0) and for the off switch (off.go).
 //
 // Modes (setting "mode"):
 //
@@ -50,7 +50,7 @@
 // hardware and canvas store every change in the controller's flash; they are
 // refused (ErrFlashWrites) unless the setting allowFlashWrites is set.
 //
-// Per-fan A3 lighting is not used: on the reference PC it only reached the
+// Per-fan A3 lighting is used only for the off switch (off.go). On the reference PC it only reached the
 // first fan of a TL LCD chain and left the others dark until a cold boot.
 // Ports are lit through groups.
 //
@@ -217,6 +217,11 @@ type device struct {
 	unlimited   bool               // flush everything pending in this frame
 	synced      bool               // output may follow the ARGB input (power-up default)
 	sentAt      map[int]time.Time
+
+	off          bool      // the controller holds the off state (off.go)
+	offClobbered bool      // a command replaced the fan lights since: write the off state again
+	offAt        time.Time // last change of the off state
+	flashOK      bool      // allowFlashWrites
 }
 
 func newDevice(h transport, inLen int) (*device, error) {
@@ -378,6 +383,9 @@ func (d *device) Configure(p leds.Params) error {
 		minDelta:    clampInt(p.Float("minDelta"), 0, 255),
 		merge:       p.Bool("merge"),
 	}
+	d.mu.Lock()
+	d.flashOK = false // until this call succeeded: a failed Configure leaves stale settings
+	d.mu.Unlock()
 	if (s.hardware || p.String("mode") == "canvas") && !p.Bool("allowFlashWrites") {
 		return ErrFlashWrites
 	}
@@ -402,6 +410,7 @@ func (d *device) Configure(p leds.Params) error {
 		d.dirty = true
 		clear(d.sent)
 	}
+	d.flashOK = p.Bool("allowFlashWrites")
 	return nil
 }
 
@@ -458,6 +467,8 @@ func (d *device) setupGroup(port int) error {
 func (d *device) SetupGroups(port int) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.touchOff()
+	defer d.settleOff()
 	if !contains(d.ports, port) {
 		return fmt.Errorf("lianlitl: no fans on port %d", port+1)
 	}
@@ -512,6 +523,8 @@ func (d *device) Probe(cmd byte, payload []byte) ([][]byte, error) {
 func (d *device) RingColors(port int, cols []color.RGBA) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.touchOff()
+	defer d.settleOff()
 	var fans []fan
 	for _, f := range d.fans {
 		if f.port == port {
@@ -555,6 +568,8 @@ func (d *device) RingColors(port int, cols []color.RGBA) error {
 func (d *device) FanColors(port int, cols []color.RGBA) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.touchOff()
+	defer d.settleOff()
 	var fans []fan
 	for _, f := range d.fans {
 		if f.port == port {
@@ -619,6 +634,7 @@ func (d *device) setSync(on bool) error {
 		}
 	}
 	d.synced = on
+	d.offClobbered = d.off // the sync switch replaces the stored light of a port's first fan
 	return nil
 }
 
@@ -641,8 +657,8 @@ func (d *device) SetFrame(frame map[string][]color.RGBA) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	s := d.set
-	if s.passive {
-		return nil
+	if s.passive || d.off {
+		return nil // off: the controller keeps its state, nothing is sent
 	}
 	if s.motherboard {
 		if !d.dirty {
@@ -920,6 +936,8 @@ func (d *device) mergedLight(s settings) error {
 func (d *device) TestLight(port, fan int, bottom bool) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.touchOff()
+	defer d.settleOff()
 	b := byte(0)
 	if bottom {
 		b = 1

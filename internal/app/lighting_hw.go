@@ -233,6 +233,14 @@ type ringDevice struct{ leds.Device }
 
 func (*ringDevice) Name() string { return ringName }
 
+// Firmware forwards the version the ring reported when it was opened.
+func (d *ringDevice) Firmware() string {
+	if f, ok := d.Device.(leds.FirmwareReporter); ok {
+		return f.Firmware()
+	}
+	return ""
+}
+
 // defaultRingSegments is the layout of the frame when the user has not placed
 // it yet: the library part with the ring outline if the library has it, else
 // a rectangle around the top of the canvas.

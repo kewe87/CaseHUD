@@ -7,6 +7,9 @@ import "time"
 // Enumerate is not implemented on this platform.
 func Enumerate(vid, pid uint16) ([]DeviceInfo, error) { return nil, ErrUnsupported }
 
+// Listed is not implemented on this platform.
+func Listed(vid, pid uint16) bool { return false }
+
 // Device is an open HID collection.
 type Device struct{ Info DeviceInfo }
 

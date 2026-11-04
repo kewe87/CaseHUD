@@ -13,6 +13,12 @@ Object.assign(STRINGS.de, {
   "light.effect": "Effekt", "light.effect.params": "Einstellungen des Effekts",
   "light.devices": "Geräte", "light.devices.sub": "Alles, was CaseHUD beleuchten kann. Geräte, die ein anderes Programm steuert, bleiben unberührt.",
   "light.devices.none": "Noch keine Geräte. Schalte die Beleuchtung ein oder suche erneut.", "light.devices.off": "Schalte die Beleuchtung ein, um Geräte zu suchen.",
+  "light.devoff": "Aus", "light.devoff.sub": "Das Gerät bleibt dunkel; Effekt und Farben bleiben gespeichert und kommen zurück, sobald „Aus“ wieder ausgeschaltet wird.",
+  "light.devoff.sub.tl": "Das Gerät bleibt dunkel, auch nach einem Neustart. Jeder Wechsel wird einmal in den Speicher des Controllers geschrieben.",
+  "light.devoff.note": "Ausgeschaltet",
+  "light.devoff.blocked": "Aus wird im Controller gespeichert und braucht „Controller-Beleuchtung erlauben“.",
+  "light.detected.ring": "LED-Ring erkannt – „Beleuchtung steuern“ einschalten, um ihn zu bedienen oder auszuschalten",
+  "light.detected.other": "Beleuchtungsgerät erkannt – „Beleuchtung steuern“ einschalten, um es zu bedienen oder auszuschalten",
   "light.rescan": "Neu suchen", "light.device.enabled": "Gerät ansteuern",
   "light.state.ok": "Aktiv", "light.state.conflict": "Belegt", "light.state.disabled": "Aus", "light.state.error": "Fehler",
   "light.conflict.by": "Wird von {names} gesteuert", "light.ignore": "Trotzdem ansteuern",
@@ -100,6 +106,12 @@ Object.assign(STRINGS.en, {
   "light.effect": "Effect", "light.effect.params": "Effect settings",
   "light.devices": "Devices", "light.devices.sub": "Everything CaseHUD can light. Devices that another program controls are left alone.",
   "light.devices.none": "No devices yet. Turn lighting on or search again.", "light.devices.off": "Turn lighting on to search for devices.",
+  "light.devoff": "Off", "light.devoff.sub": "The device stays dark; effect and colors stay stored and come back when Off is switched off.",
+  "light.devoff.sub.tl": "The device stays dark, also after a restart. Every change is written once to the controller's memory.",
+  "light.devoff.note": "Switched off",
+  "light.devoff.blocked": "Off is stored in the controller and needs \u201callow controller lighting\u201d.",
+  "light.detected.ring": "LED ring detected \u2013 turn on \u201cControl lighting\u201d to control or switch it off",
+  "light.detected.other": "Lighting device detected \u2013 turn on \u201cControl lighting\u201d to control or switch it off",
   "light.rescan": "Search again", "light.device.enabled": "Drive this device",
   "light.state.ok": "Active", "light.state.conflict": "In use", "light.state.disabled": "Off", "light.state.error": "Error",
   "light.conflict.by": "Controlled by {names}", "light.ignore": "Drive it anyway",
@@ -430,6 +442,8 @@ function lightDeviceCard(d, idx) {
   let note = "";
   if (d.state === "conflict") note = t("light.conflict.by", { names: (d.message || "").replace(/^in use by /, "") });
   else if (d.state === "error" || d.unsupported) note = d.message || "";
+  if (d.off && !d.disabled) note = note || t("light.devoff.note");
+  const offBlocked = d.off && hasFlashGate(d) && !(d.settingValues && d.settingValues.allowFlashWrites);
   const head = el("div", { class: "dev-head" },
     el("span", { class: "dev-dot", style: { background: col } }),
     el("div", { class: "dev-title" }, el("b", {}, d.name), el("small", { title: d.firmware ? t("field.firmware.sub") : "" }, d.backend + " · " + d.id + (d.firmware ? " · " + t("field.firmware") + " " + d.firmware : "")), ...fwNoteNodes(d.firmwareLatest).map((n) => el("small", {}, n))),
@@ -444,6 +458,13 @@ function lightDeviceCard(d, idx) {
       el("input", { type: "checkbox", class: "switch", checked: d.ignoreConflicts, onchange: (e) => lightPatch({ devices: { [d.id]: { ignoreConflicts: e.target.checked } } }) }),
       el("span", {}, el("b", {}, t("light.ignore")), el("small", {}, t("light.ignore.sub")))));
   }
+  if (!d.unsupported && !d.disabled) {
+    body.push(el("label", { class: "check-row dev-off" },
+      el("input", { type: "checkbox", class: "switch", checked: !!d.off, "aria-label": t("light.devoff"),
+        onchange: (e) => lightPatch({ devices: { [d.id]: { off: e.target.checked } } }) }),
+      el("span", {}, el("b", {}, t("light.devoff")), el("small", {}, t(d.backend === "lianlitl" ? "light.devoff.sub.tl" : "light.devoff.sub")))));
+  }
+  if (offBlocked) body.push(el("p", { class: "dev-note warn", role: "alert" }, t("light.devoff.blocked")));
   const sync = lightSyncRow(d);
   if (sync) body.push(sync);
   const zones = el("div", { class: "zones" }, d.zones.map((z) => lightZoneRow(d, z)));
@@ -792,7 +813,8 @@ function renderLight() {
       card.dataset.id = d.id;
       if (open.has(d.id)) $("details", card)?.setAttribute("open", "");
       return card;
-    }) : [el("div", { class: "empty-note" }, on ? t("light.devices.none") : t("light.devices.off"))]));
+    }) : [...(!on && lv.detected ? [el("div", { class: "empty-note detected" }, t("light.detected." + (lv.detected === "ring" ? "ring" : "other")))] : []),
+      el("div", { class: "empty-note" }, on ? t("light.devices.none") : t("light.devices.off"))]));
     const ram = lv.ram || {};
     if (on && lv.active && (ram.hint || ram.note)) {
       list.append(el("div", { class: "card ram-hint" }, el("b", {}, t("light.ram.title")),

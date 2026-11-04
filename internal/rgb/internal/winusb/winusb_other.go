@@ -16,5 +16,8 @@ func Open(path string, timeout time.Duration) (*Device, error) { return nil, Err
 // Write is not implemented on this platform.
 func (d *Device) Write(buf []byte) error { return ErrUnsupported }
 
+// Read is not implemented on this platform.
+func (d *Device) Read(buf []byte, timeout time.Duration) (int, error) { return 0, ErrUnsupported }
+
 // Close is a no-op.
 func (d *Device) Close() error { return nil }

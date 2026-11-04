@@ -15,6 +15,7 @@ type deviceWorker struct {
 
 	mu      sync.Mutex
 	pending map[string][]color.RGBA
+	ops     []func()
 	err     error
 
 	wake chan struct{}
@@ -43,6 +44,18 @@ func (w *deviceWorker) submit(frame map[string][]color.RGBA) {
 	}
 }
 
+// call queues fn to run on the worker goroutine before the next frame, so
+// device calls never overlap a SetFrame and never block the engine tick.
+func (w *deviceWorker) call(fn func()) {
+	w.mu.Lock()
+	w.ops = append(w.ops, fn)
+	w.mu.Unlock()
+	select {
+	case w.wake <- struct{}{}:
+	default:
+	}
+}
+
 // takeErr returns and clears the last SetFrame error.
 func (w *deviceWorker) takeErr() error {
 	w.mu.Lock()
@@ -61,9 +74,17 @@ func (w *deviceWorker) run() {
 		case <-w.wake:
 		}
 		w.mu.Lock()
-		frame := w.pending
-		w.pending = nil
+		frame, ops := w.pending, w.ops
+		w.pending, w.ops = nil, nil
 		w.mu.Unlock()
+		for _, fn := range ops {
+			select {
+			case <-w.quit:
+				return // stopped: queued calls are dropped
+			default:
+			}
+			fn()
+		}
 		if frame == nil {
 			continue
 		}

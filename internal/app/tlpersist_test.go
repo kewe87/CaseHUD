@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
@@ -50,7 +51,7 @@ func startEngine(t *testing.T, accepted bool) *Engine {
 	dir := t.TempDir()
 	cfg := `{"panels":{}}`
 	if accepted {
-		cfg = `{"disclaimer":{"version":3},"tl_serial_migrated":true,"panels":{}}`
+		cfg = `{"disclaimer":{"version":3},"tl_serial_migrated":true,"tl_start_image_on":true,"panels":{}}`
 	}
 	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
@@ -330,5 +331,68 @@ func TestRestImageWrittenOncePerFanAndImage(t *testing.T) {
 	b, _ := os.ReadFile(filepath.Join(e.Store.Dir, "config.json"))
 	if !contains(string(b), "tl_rest_images") {
 		t.Fatalf("record not persisted: %s", b)
+	}
+}
+
+// The logo write is opt-in: a config without the key (or with the former
+// opt-out key) means off.
+func TestStartImageDefaultIsOff(t *testing.T) {
+	e := startEngine(t, true)
+	e.mu.Lock()
+	e.cfg.TLStartImageOn = false
+	e.mu.Unlock()
+	if e.TLStartImage() {
+		t.Fatal("default config: start image on")
+	}
+	f := &startFan{key: "d"}
+	e.writeStartImages([]panel.Panel{f}, false)
+	if f.count() != 0 {
+		t.Fatalf("written with the default setting (%d)", f.count())
+	}
+	var c Config
+	if err := json.Unmarshal([]byte(`{"tl_start_image_off":false}`), &c); err != nil || c.TLStartImageOn {
+		t.Fatalf("old key: on=%v err=%v", c.TLStartImageOn, err)
+	}
+	if err := e.SetTLStartImage(true); err != nil || !e.TLStartImage() {
+		t.Fatalf("switch on: %v", err)
+	}
+}
+
+// Older versions read tl_start_image_off: it is written as the inverse of the
+// new flag on every save.
+func TestLegacyStartImageOffKeptInStep(t *testing.T) {
+	e := startEngine(t, true)
+	read := func() Config {
+		b, err := os.ReadFile(filepath.Join(e.Store.Dir, "config.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var c Config
+		if err := json.Unmarshal(b, &c); err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	if err := e.SetTLStartImage(false); err != nil {
+		t.Fatal(err)
+	}
+	if c := read(); !c.TLStartImageOff || c.TLStartImageOn {
+		t.Fatalf("off: %+v", c)
+	}
+	if err := e.SetTLStartImage(true); err != nil {
+		t.Fatal(err)
+	}
+	if c := read(); c.TLStartImageOff || !c.TLStartImageOn {
+		t.Fatalf("on: %+v", c)
+	}
+}
+
+func TestRewriteNeedsSwitchOn(t *testing.T) {
+	e := startEngine(t, true)
+	if err := e.SetTLStartImage(false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.RewriteStartImages(true); !errors.Is(err, ErrAckRequired) {
+		t.Fatalf("rewrite with the switch off: %v", err)
 	}
 }

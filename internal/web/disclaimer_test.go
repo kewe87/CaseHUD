@@ -90,6 +90,16 @@ func TestStartImageRewriteNeedsConfirmFlag(t *testing.T) {
 	if c := post(`{}`); c != http.StatusConflict {
 		t.Fatalf("without confirm: %d", c)
 	}
+	if c := post(`{"confirm":true}`); c != http.StatusConflict { // switch is off by default
+		t.Fatalf("with confirm, switch off: %d", c)
+	}
+	put, _ := http.NewRequest("PUT", ts.URL+"/api/tl-start-image", strings.NewReader(`{"on":true}`))
+	put.Header.Set("X-Token", "secret")
+	if resp, err := http.DefaultClient.Do(put); err != nil || resp.StatusCode != 200 {
+		t.Fatalf("switch on: %v", err)
+	} else {
+		resp.Body.Close()
+	}
 	if c := post(`{"confirm":true}`); c != 200 {
 		t.Fatalf("with confirm: %d", c)
 	}

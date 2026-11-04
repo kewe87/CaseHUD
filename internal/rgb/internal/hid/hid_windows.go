@@ -3,6 +3,7 @@ package hid
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -52,6 +53,24 @@ type hidpCaps struct {
 }
 
 const hidpStatusSuccess = 0x00110000
+
+// Listed reports whether a HID interface of vid:pid is present. It only
+// reads the device interface list and the IDs in the paths: nothing is opened.
+func Listed(vid, pid uint16) bool {
+	var guid windows.GUID
+	procHidDGetHidGuid.Call(uintptr(unsafe.Pointer(&guid)))
+	paths, err := windows.CM_Get_Device_Interface_List("", &guid, windows.CM_GET_DEVICE_INTERFACE_LIST_PRESENT)
+	if err != nil {
+		return false
+	}
+	want := fmt.Sprintf("vid_%04x&pid_%04x", vid, pid)
+	for _, p := range paths {
+		if strings.Contains(strings.ToLower(p), want) {
+			return true
+		}
+	}
+	return false
+}
 
 // Enumerate lists HID collections; vid/pid 0 match everything.
 func Enumerate(vid, pid uint16) ([]DeviceInfo, error) {

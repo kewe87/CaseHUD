@@ -100,6 +100,13 @@ type lightingState struct {
 	traceTainted bool // a capture effect interrupted the recording: no export
 	traceTimer   *time.Timer
 
+	rbOnce sync.Once
+	rb     *ringBootNotifier
+
+	detMu sync.Mutex
+	detAt time.Time
+	det   string
+
 	topoMu   sync.Mutex
 	topoAt   time.Time // last time the controller was read (zero: never)
 	topoBusy bool
@@ -161,6 +168,7 @@ func (e *Engine) startLighting() {
 	}
 	l.lifeMu.Unlock()
 	go e.runLighting(e.ctx, l.saveCh, l.done)
+	e.ringBootPoke() // once at start, after the configuration is loaded
 }
 
 // keepBadLightingConfig saves the unusable stored configuration next to
@@ -191,6 +199,7 @@ func (e *Engine) asleepSnapshot() bool {
 // resumeLighting starts the engine that startLighting held back until the
 // disclaimer was accepted.
 func (e *Engine) resumeLighting() {
+	defer e.ringBootPoke()
 	l := &e.light
 	e.mu.Lock()
 	lc := e.cfg.Lighting
@@ -270,7 +279,7 @@ func (e *Engine) startLightEngine(cfg leds.Config, tl bool) {
 		opt.ProcessRunning = demoProcessRunning
 	}
 	eng := leds.New(cfg, opt)
-	eng.OnConfigChange(func(leds.Config) { l.markDirty() })
+	eng.OnConfigChange(func(leds.Config) { l.markDirty(); e.ringBootPoke() })
 	eng.SetPaused(l.paused.Load())
 	errText := ""
 	if err := eng.Start(e.ctx); err != nil {
@@ -374,6 +383,11 @@ func (e *Engine) runLighting(ctx context.Context, save <-chan struct{}, done cha
 					if err := e.rescanLighting(ctx); err != nil && !errors.Is(err, ErrLighting) {
 						log.Printf("lighting: rescan after wake-up: %v", err)
 					}
+					// devices without a real off (the LED ring) lose their
+					// frame when the USB bus lost power: black once more
+					if eng := e.light.engPtr.Load(); eng != nil {
+						eng.ReassertOff()
+					}
 				}()
 			}
 			if !saveAt.IsZero() && now.After(saveAt) {
@@ -470,6 +484,7 @@ type LightingDeviceView struct {
 	State           leds.DeviceState `json:"state"`
 	Message         string           `json:"message,omitempty"`
 	Disabled        bool             `json:"disabled"`
+	Off             bool             `json:"off"` // switched off, the effect stays stored
 	IgnoreConflicts bool             `json:"ignoreConflicts"`
 	Settings        []leds.Param     `json:"settings,omitempty"`
 	SettingValues   leds.Params      `json:"settingValues,omitempty"`
@@ -487,6 +502,10 @@ type LightingView struct {
 	// Active: the engine runs (enabled and at least one backend is allowed).
 	Active bool `json:"active"`
 	TL     bool `json:"tl"`
+	// Detected: while lighting control is off, a supported lighting device
+	// is attached ("ring" = the LED ring, "other"); found by listing the USB
+	// devices only, nothing is opened or sent.
+	Detected string `json:"detected,omitempty"`
 	// TLAvailable: TL fans can be driven (Windows build, not demo).
 	TLAvailable bool `json:"tlAvailable"`
 	// RAM: RAM lighting works only through the SMBus bridge of the sensor service.
@@ -558,7 +577,36 @@ func (e *Engine) Lighting() LightingView {
 	v := e.lightingViewLocked(enabled, tl)
 	l.mu.Unlock()
 	v.Preset = e.ActiveLightingPreset()
+	if !enabled {
+		v.Detected = e.detectedLightingHW()
+	}
 	return v
+}
+
+// lightDetectTTL spares the device list from being read on every poll.
+const lightDetectTTL = 10 * time.Second
+
+// detectedLightingHW names the kind of supported lighting device on the USB
+// bus. It only enumerates (see lianli.Present, lianlitl.Present).
+func (e *Engine) detectedLightingHW() string {
+	if e.Demo {
+		return ""
+	}
+	l := &e.light
+	l.detMu.Lock()
+	defer l.detMu.Unlock()
+	if !l.detAt.IsZero() && time.Since(l.detAt) < lightDetectTTL {
+		return l.det
+	}
+	l.det = ""
+	switch {
+	case lianli.Present():
+		l.det = "ring"
+	case lianlitl.Present():
+		l.det = "other"
+	}
+	l.detAt = time.Now()
+	return l.det
 }
 
 func (e *Engine) lightingViewLocked(enabled, tl bool) LightingView {
@@ -585,7 +633,7 @@ func (e *Engine) lightingViewLocked(enabled, tl bool) LightingView {
 	for _, d := range all {
 		dc := cfg.Devices[d.ID]
 		dv := LightingDeviceView{ID: d.ID, Name: d.Name, Backend: d.Backend, Firmware: panel.CleanFirmware(d.Firmware), State: d.State, Message: d.Message,
-			Disabled: dc.Disabled, IgnoreConflicts: dc.IgnoreConflicts, Settings: d.Settings, Zones: []LightingZoneView{}}
+			Disabled: dc.Disabled, Off: dc.Off, IgnoreConflicts: dc.IgnoreConflicts, Settings: d.Settings, Zones: []LightingZoneView{}}
 		if len(d.Settings) > 0 {
 			dv.SettingValues = paramsWithDefaults(d.Settings, dc.Settings)
 		}
@@ -821,6 +869,7 @@ type LightingPatch struct {
 // LightingDevicePatch changes one device.
 type LightingDevicePatch struct {
 	Disabled        *bool                        `json:"disabled"`
+	Off             *bool                        `json:"off"`
 	IgnoreConflicts *bool                        `json:"ignoreConflicts"`
 	Settings        map[string]any               `json:"settings"`
 	Zones           map[string]LightingZonePatch `json:"zones"`
@@ -846,6 +895,12 @@ func lightErr(format string, a ...any) error {
 // PatchLighting validates the whole request first and then applies it; a
 // rejected request changes nothing.
 func (e *Engine) PatchLighting(p LightingPatch) (LightingView, error) {
+	v, err := e.patchLighting(p)
+	e.ringBootPoke()
+	return v, err
+}
+
+func (e *Engine) patchLighting(p LightingPatch) (LightingView, error) {
 	l := &e.light
 	if len(p.Devices) > maxLightDevices || len(p.Params) > 64 {
 		return LightingView{}, lightErr("request too large")
@@ -969,6 +1024,9 @@ func (e *Engine) patchLightingLocked(p LightingPatch, wantEnabled, wantTL, need 
 		dc := next.Devices[id]
 		if dp.Disabled != nil {
 			dc.Disabled = *dp.Disabled
+		}
+		if dp.Off != nil {
+			dc.Off = *dp.Off
 		}
 		if dp.IgnoreConflicts != nil {
 			dc.IgnoreConflicts = *dp.IgnoreConflicts

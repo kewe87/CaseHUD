@@ -48,6 +48,12 @@ var ErrNoDeviceEffect = errors.New("leds: device has no own effect to return to"
 // DeviceConfig holds per-device settings.
 type DeviceConfig struct {
 	Disabled bool `json:"disabled,omitempty"`
+	// Off keeps the device dark while the rest of the setup stays lit. The
+	// effect and its colors are not touched: switching Off back returns the
+	// device to them. Devices without a real off get an all-black frame once
+	// (again after a reconnect or a resume); devices that keep the state
+	// themselves (PersistentOff) are written once per change.
+	Off bool `json:"off,omitempty"`
 	// IgnoreConflicts drives the device even while a conflicting program runs.
 	IgnoreConflicts bool                  `json:"ignoreConflicts,omitempty"`
 	Zones           map[string]ZoneConfig `json:"zones,omitempty"` // per zone ID

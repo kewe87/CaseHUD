@@ -5,7 +5,61 @@ import (
 	"errors"
 	"image/color"
 	"testing"
+	"time"
 )
+
+// ringIn is a ring that also answers the version request.
+type ringIn struct {
+	ring
+	answer []byte
+}
+
+func (r *ringIn) Read(buf []byte, _ time.Duration) (int, error) {
+	if r.answer == nil {
+		return 0, errors.New("timeout")
+	}
+	return copy(buf, r.answer), nil
+}
+
+func TestFirmwareVersion(t *testing.T) {
+	r := &ringIn{answer: []byte{0x10, 1, 3}}
+	d := &device{leds: ring88LEDs, open: func() (transport, error) { return r, nil }}
+	if d.Firmware() != "" {
+		t.Fatal("version before the ring was opened")
+	}
+	if err := d.SetFrame(map[string][]color.RGBA{}); err != nil {
+		t.Fatal(err)
+	}
+	req := r.packets[0]
+	if len(req) != packetLen || req[0] != 0x10 || !bytes.Equal(req[1:], make([]byte, packetLen-1)) {
+		t.Fatalf("request % x", req)
+	}
+	if d.Firmware() != "1_3" {
+		t.Fatalf("version %q", d.Firmware())
+	}
+	// only the version request and the three LED packets were sent
+	if len(r.packets) != 4 {
+		t.Fatalf("%d packets", len(r.packets))
+	}
+}
+
+func TestFirmwareVersionFailuresAreSilent(t *testing.T) {
+	for name, tr := range map[string]transport{
+		"no IN pipe": &ring{},
+		"timeout":    &ringIn{},
+		"major 0":    &ringIn{answer: []byte{0x10, 0, 3}},
+		"wrong cmd":  &ringIn{answer: []byte{0x11, 1, 3}},
+		"short":      &ringIn{answer: []byte{0x10, 1}},
+	} {
+		d := &device{leds: ring88LEDs, open: func() (transport, error) { return tr, nil }}
+		if err := d.SetFrame(map[string][]color.RGBA{}); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if d.Firmware() != "" {
+			t.Fatalf("%s: version %q", name, d.Firmware())
+		}
+	}
+}
 
 type ring struct {
 	packets [][]byte

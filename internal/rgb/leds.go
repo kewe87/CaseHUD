@@ -79,6 +79,17 @@ type FirmwareReporter interface {
 	Firmware() string
 }
 
+// PersistentOff is implemented by devices that keep their off state
+// themselves, in memory that survives a restart of the host (for example
+// flash). Instead of an all-black frame the engine calls SetOff once per
+// change, and never again after a restart or reconnect.
+type PersistentOff interface {
+	// SetOff switches the device off or on. held reports that the device
+	// already is in that state (restart, reconnect): remember it, write
+	// nothing. A returned error is retried by the engine after a pause.
+	SetOff(off, held bool) error
+}
+
 // Backend discovers devices of one kind (ASUS Aura USB, ENE RAM, ...).
 type Backend interface {
 	Name() string
@@ -160,6 +171,8 @@ type DeviceStatus struct {
 	Zones   []Zone      `json:"zones"`
 	// Firmware is the device's firmware version (FirmwareReporter), "" if unknown.
 	Firmware string `json:"firmware,omitempty"`
+	// Off: the device is switched off in the configuration.
+	Off bool `json:"off,omitempty"`
 	// Settings describes the device-specific options (Configurable devices).
 	Settings []Param `json:"settings,omitempty"`
 }

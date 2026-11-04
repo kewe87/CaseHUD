@@ -14,6 +14,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\CaseHUD.Sensors\Smbus\*.cs" LinkBase="Smbus" />
+    <Compile Include="..\CaseHUD.Sensors\RingBoot\*.cs" LinkBase="RingBoot" />
     <Reference Include="System.Web.Extensions" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />

@@ -52,9 +52,9 @@ bisherigen Lösungen. Mehr Designs, mehr Sensoren, volle Kontrolle für dich, oh
 - **Ohne Streit mit Herstellersoftware:** Die Displays werden angesteuert, ohne Lüfter und Pumpe anzufassen.
   Erkennt CaseHUD Programme, die dieselben Displays oder LEDs ansteuern, fragt es, ob es sie beenden
   soll (nur auf Klick, nur bekannte Programme)
-- **Start- und Ruhebild der Lüfter-LCDs und Startbild des 8.8":** Nach der Zustimmung zum Haftungsausschluss schreibt CaseHUD einmalig sein Logo
-  als Start- und Ruhebild in jede UNI FAN TL LCD und als Startbild in den Universal Screen 8.8" (**dauerhaft im Display**; standardmäßig an, abschaltbar unter
-  Einstellungen → Geräte). Eine Seriennummer für Displays ohne eine vergibt CaseHUD nur, wenn du es dort einschaltest
+- **Start- und Ruhebild der Lüfter-LCDs:** Auf Wunsch schreibt CaseHUD einmalig sein Logo als Start- und Ruhebild in jede
+  UNI FAN TL LCD (**dauerhaft im Display**; standardmäßig aus, einschaltbar unter Einstellungen → Geräte). Der Universal
+  Screen 8.8" zeigt beim Beenden von CaseHUD das CaseHUD-Logo (normales Bild, es wird nichts gespeichert). Eine Seriennummer für Displays ohne eine vergibt CaseHUD nur, wenn du es dort einschaltest
   (standardmäßig aus); vorhandene Seriennummern werden nie geändert
 - **Beleuchtung (optional, standardmäßig aus):** Tab „Beleuchtung“ für den UNI FAN TL Controller (Lüfter-LEDs),
   ARGB-Anschlüsse und Onboard-Licht von ASUS-Mainboards, RAM-Riegel (nur über die optionale SMBus-Brücke des
@@ -342,8 +342,8 @@ screen content or from the sound the PC plays. Because that is private data they
 interface, which you can withdraw at any time in the settings. Pictures and sound stay in memory: nothing is stored,
 logged or sent.
 
-**Permanent writes to devices.** After you accept the disclaimer, CaseHUD writes its logo once into each UNI FAN TL LCD
-as start and idle image and into the Universal Screen 8.8" as boot picture (permanent, on by default, switchable under Settings → Devices). Assigning a serial number to
+**Permanent writes to devices.** CaseHUD can write its logo once into each UNI FAN TL LCD
+as start and idle image (permanent; off by default, switch it on under Settings → Devices). The Universal Screen 8.8" shows the CaseHUD logo when the app quits (an ordinary picture, nothing is stored). Assigning a serial number to
 displays without one is optional and off by default; existing serial numbers are never changed.
 
 **Lighting (optional, off by default).** The "Beleuchtung" (lighting) tab drives the UNI FAN TL controller, ARGB headers
@@ -469,7 +469,7 @@ CaseHUD installiert einen Sensor-Dienst, der mit Systemrechten läuft, und den T
 
 Beleuchtung und experimentelle Geräte sind optional und standardmäßig ausgeschaltet.
 
-CaseHUD schreibt sein Logo einmalig als Startbild in unterstützte Displays (in Lüfter-Displays zusätzlich als Ruhebild) und vergibt an Displays ohne Seriennummer eine Seriennummer. Beides sind dauerhafte Schreibvorgänge auf dem Gerät; Start- und Ruhebild und Seriennummer lassen sich unter Einstellungen → Geräte abschalten.
+Auf Wunsch (standardmäßig aus) schreibt CaseHUD sein Logo einmalig als Start- und Ruhebild in Lüfter-Displays und vergibt an Lüfter-Displays ohne Seriennummer eine Seriennummer. Beides sind dauerhafte Schreibvorgänge auf dem Gerät und lassen sich unter Einstellungen → Geräte ein- und ausschalten.
 
 ### English
 
@@ -485,4 +485,4 @@ CaseHUD installs a sensor service that runs with system rights and the PawnIO dr
 
 Lighting and experimental devices are optional and off by default.
 
-CaseHUD writes its logo once as the start image of supported displays (on fan displays also as the idle image) and assigns a serial number to displays that have none. Both are permanent writes to the device; both can be switched off under Settings → Devices.
+On request (off by default), CaseHUD writes its logo once as the start and idle image of fan displays and assigns a serial number to fan displays that have none. Both are permanent writes to the device and can be switched on and off under Settings → Devices.

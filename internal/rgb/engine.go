@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/kewe87/casehud/internal/rgb/internal/diag"
@@ -56,6 +57,10 @@ type Engine struct {
 	done        chan struct{}
 
 	discovered chan discovery
+
+	// offFailed: device ID -> its last SetOff to "off" failed, so a new
+	// entry for it must write for real instead of taking the state over.
+	offFailed sync.Map
 }
 
 type discovery struct {
@@ -81,7 +86,39 @@ type deviceEntry struct {
 	frame  map[string][]color.RGBA
 	lit    bool // received at least one frame since the last pause
 	worker *deviceWorker
+
+	// Off handling. offSent is the engine goroutine's; the others are
+	// guarded by Engine.mu.
+	offSent     bool // the black frame of an off device went out
+	offReassert bool // ReassertOff: send it again
+
+	// PersistentOff. The engine goroutine owns offInit and offWant; the
+	// worker's calls only touch the atomics (they never take Engine.mu) and
+	// offErr (the worker goroutine's).
+	offInit    bool
+	offWant    bool         // the state the counters below belong to
+	offApplied atomic.Bool  // the device is off
+	offBusy    atomic.Bool  // a SetOff call is queued or running
+	offRetryAt atomic.Int64 // not before (unix nanoseconds)
+	offFails   atomic.Int32 // failed attempts for offWant, harmless refusals excluded
+	offErr     string       // last SetOff error that was logged
 }
+
+// offRetryWait is the pause before a failed SetOff is tried again; every
+// attempt can write the controller's flash.
+var offRetryWait = 30 * time.Second
+
+const (
+	// offMaxRetries is how often a failed SetOff is repeated (after the
+	// first attempt). Then the engine waits for a change of the setting or a
+	// new device.
+	offMaxRetries = 2
+)
+
+// ErrOffBlocked marks a SetOff that was refused before anything was written
+// (rate limit, missing consent, passive mode). The engine tries again later
+// without counting it as a failure.
+var ErrOffBlocked = errors.New("leds: off state not written")
 
 type zoneRuntime struct {
 	id    string
@@ -163,6 +200,12 @@ func (e *Engine) Stop() error {
 	off, _ := ParseHexColor(e.cfg.ShutdownColor) // invalid or empty: black
 	keep := e.cfg.ShutdownColor == ShutdownKeep
 	toDevice := e.cfg.ShutdownColor == ShutdownDevice
+	offIDs := map[string]bool{}
+	for id, dc := range e.cfg.Devices {
+		if dc.Off {
+			offIDs[id] = true
+		}
+	}
 	e.mu.Unlock()
 
 	// devices shut down in parallel, every step bounded, so a hanging device
@@ -184,6 +227,30 @@ func (e *Engine) Stop() error {
 			defer wg.Done()
 			restored := false
 			busy := !d.worker.stopWithin(stopWait)
+			_, holds := d.dev.(PersistentOff)
+			isOff := offIDs[d.dev.ID()]
+			if isOff && holds {
+				// the device keeps its off state: nothing to send
+				if err := within(stopWait, d.dev.Close); err != nil {
+					fail(d, err)
+				}
+				return
+			}
+			if isOff && !busy && d.state == StateOK && d.frame != nil {
+				// off stays off whatever "on exit" says: black, once
+				for _, z := range d.zones {
+					for i := range z.buf {
+						z.buf[i] = color.RGBA{A: 255}
+					}
+				}
+				if err := within(stopWait, func() error { return d.dev.SetFrame(d.frame) }); err != nil {
+					fail(d, err)
+				}
+				if err := within(stopWait, d.dev.Close); err != nil {
+					fail(d, err)
+				}
+				return
+			}
 			if r, ok := d.dev.(DeviceEffectRestorer); ok && toDevice && !busy && d.state == StateOK {
 				err := within(stopWait, r.RestoreDeviceEffect)
 				restored = err == nil
@@ -298,6 +365,27 @@ func (e *Engine) SetShutdown(v string) {
 	e.update(func(c *Config) { c.ShutdownColor = v }, nil)
 }
 
+// SetDeviceOff switches one device off or on (DeviceConfig.Off).
+func (e *Engine) SetDeviceOff(id string, off bool) {
+	e.update(func(c *Config) {
+		dc := c.Devices[id]
+		dc.Off = off
+		c.Devices[id] = dc
+	}, nil)
+}
+
+// ReassertOff makes devices that are off send their off state again: black
+// frames are sent once more (the ring forgets its frame when the USB bus
+// loses power). Devices that keep the state themselves (PersistentOff) are
+// left alone. Call it after the PC woke up.
+func (e *Engine) ReassertOff() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, d := range e.devices {
+		d.offReassert = true
+	}
+}
+
 // SetPaused switches all LEDs off (true) or resumes the effect (false).
 // It is not persisted; CaseHUD uses it for the screen saver.
 func (e *Engine) SetPaused(p bool) {
@@ -358,6 +446,7 @@ func (e *Engine) statusLocked(d *deviceEntry) DeviceStatus {
 	if f, ok := d.dev.(FirmwareReporter); ok {
 		st.Firmware = f.Firmware()
 	}
+	st.Off = e.cfg.Devices[d.dev.ID()].Off
 	return st
 }
 
@@ -394,6 +483,13 @@ func (e *Engine) discover(ctx context.Context) discovery {
 // apply merges a discovery result: known healthy devices keep their instance,
 // new ones are added, vanished or failed ones are closed.
 func (e *Engine) apply(d discovery) {
+	var removed []*deviceEntry
+	defer func() { // after e.mu is released: workers may be mid-call
+		for _, de := range removed {
+			de.worker.stop()
+			de.dev.Close()
+		}
+	}()
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	old := make(map[string]*deviceEntry, len(e.devices))
@@ -427,8 +523,7 @@ func (e *Engine) apply(d discovery) {
 	}
 	for _, de := range old {
 		e.opt.Logf("leds: device %s removed", de.dev.ID())
-		de.worker.stop()
-		de.dev.Close()
+		removed = append(removed, de)
 	}
 	e.devices = next
 	e.layoutDirty = true
@@ -588,9 +683,33 @@ func (e *Engine) loop(ctx context.Context) {
 				e.opt.Logf("leds: %s: %v", d.dev.ID(), err)
 			}
 			ok := d.state == StateOK
+			want := e.cfg.Devices[d.dev.ID()].Off
+			reassert := d.offReassert
+			d.offReassert = false
 			e.mu.Unlock()
 			if !ok {
 				continue
+			}
+			if ps, holds := d.dev.(PersistentOff); holds {
+				if e.driveOff(d, ps, want, now) {
+					continue
+				}
+			} else if want {
+				if reassert {
+					d.offSent = false
+				}
+				if !d.offSent {
+					for _, z := range d.zones {
+						for i := range z.buf {
+							z.buf[i] = color.RGBA{A: 255}
+						}
+					}
+					d.worker.submit(d.frame)
+					d.offSent, d.lit = true, false
+				}
+				continue
+			} else {
+				d.offSent = false
 			}
 			if paused {
 				if !d.lit {
@@ -616,6 +735,69 @@ func (e *Engine) loop(ctx context.Context) {
 			d.lit = !paused
 		}
 	}
+}
+
+// driveOff takes a PersistentOff device to the configured state with few
+// SetOff calls (on the device's worker) and reports whether frames must be
+// held back. A device that starts up off is not written to: it keeps the
+// state itself, unless its last SetOff failed. Failures are retried at most
+// offMaxRetries times, 30 s apart.
+func (e *Engine) driveOff(d *deviceEntry, ps PersistentOff, want bool, now time.Time) (hold bool) {
+	id := d.dev.ID()
+	if !d.offInit {
+		d.offInit, d.offWant = true, want
+		failed, _ := e.offFailed.Load(id)
+		if want && failed != true {
+			d.offApplied.Store(true)
+			d.offBusy.Store(true)
+			d.worker.call(func() {
+				err := ps.SetOff(true, true)
+				d.offBusy.Store(false)
+				if err != nil {
+					e.offFailed.Store(id, true)
+				}
+			})
+		} else if !want {
+			e.offFailed.Delete(id)
+		}
+	}
+	if want != d.offWant { // the setting changed: a fresh start for the counters
+		d.offWant = want
+		d.offFails.Store(0)
+		d.offRetryAt.Store(0)
+	}
+	if want != d.offApplied.Load() && !d.offBusy.Load() && now.UnixNano() >= d.offRetryAt.Load() && d.offFails.Load() <= offMaxRetries {
+		d.offBusy.Store(true)
+		d.worker.call(func() {
+			err := ps.SetOff(want, false)
+			d.offBusy.Store(false)
+			if err == nil {
+				d.offFails.Store(0)
+				d.offApplied.Store(want)
+				if want {
+					e.offFailed.Store(id, false)
+				}
+				d.offErr = ""
+				return
+			}
+			if want {
+				e.offFailed.Store(id, true)
+			}
+			d.offRetryAt.Store(time.Now().Add(offRetryWait).UnixNano())
+			if !errors.Is(err, ErrOffBlocked) {
+				d.offFails.Add(1)
+			}
+			if msg := err.Error(); msg != d.offErr {
+				d.offErr = msg
+				e.opt.Logf("leds: %s: off: %v", id, err)
+			}
+		})
+	}
+	if want || d.offApplied.Load() || d.offBusy.Load() {
+		d.lit = false
+		return true
+	}
+	return false
 }
 
 func (e *Engine) buildLayoutLocked(d *deviceEntry) {

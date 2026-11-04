@@ -94,8 +94,8 @@ namespace CaseHUD.Sensors.Smbus
         public const int CmdMin = 0xA0;
         public const int CmdMax = 0xAF;
 
-        /// <summary>Returns the request, or null with a reason for the (rate-limited) log.</summary>
-        public static BridgeRequest Parse(byte[] body, out string reason)
+        /// <summary>Decodes the JSON object of a message; null with a reason if it is not one.</summary>
+        public static Dictionary<string, object> ParseRoot(byte[] body, out string reason)
         {
             reason = null;
             object root;
@@ -110,12 +110,20 @@ namespace CaseHUD.Sensors.Smbus
                 return null;
             }
             var obj = root as Dictionary<string, object>;
-            if (obj == null)
-            {
-                reason = "not an object";
-                return null;
-            }
+            if (obj == null) reason = "not an object";
+            return obj;
+        }
 
+        /// <summary>Returns the request, or null with a reason for the (rate-limited) log.</summary>
+        public static BridgeRequest Parse(byte[] body, out string reason)
+        {
+            Dictionary<string, object> obj = ParseRoot(body, out reason);
+            return obj == null ? null : Parse(obj, out reason);
+        }
+
+        public static BridgeRequest Parse(Dictionary<string, object> obj, out string reason)
+        {
+            reason = null;
             long v, addr, lockMs;
             if (!TryInt(obj, "v", 0, 1000000, out v) || v != 1) { reason = "unsupported version"; return null; }
             if (!TryInt(obj, "addr", 0, 255, out addr) || addr < AddrMin || addr > AddrMax) { reason = "address not allowed"; return null; }

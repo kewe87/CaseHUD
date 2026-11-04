@@ -19,6 +19,7 @@ var (
 	procWinUsbQueryPipe             = modWinUSB.NewProc("WinUsb_QueryPipe")
 	procWinUsbSetPipePolicy         = modWinUSB.NewProc("WinUsb_SetPipePolicy")
 	procWinUsbWritePipe             = modWinUSB.NewProc("WinUsb_WritePipe")
+	procWinUsbReadPipe              = modWinUSB.NewProc("WinUsb_ReadPipe")
 )
 
 const (
@@ -68,6 +69,7 @@ type Device struct {
 	h    windows.Handle
 	ih   uintptr
 	pipe uint8
+	in   uint8 // bulk IN pipe, 0 if none
 	// MaxPacket is the packet size of the bulk OUT endpoint.
 	MaxPacket int
 }
@@ -95,13 +97,16 @@ func Open(path string, timeout time.Duration) (*Device, error) {
 	}
 	found := false
 	for i := uint8(0); i < desc.NumEndpoints; i++ {
+		var in pipeInformation
+		if r, _, _ := procWinUsbQueryPipe.Call(d.ih, 0, uintptr(i), uintptr(unsafe.Pointer(&in))); r != 0 && in.PipeType == pipeTypeBulk && in.PipeID&0x80 != 0 && d.in == 0 {
+			d.in = in.PipeID
+		}
 		var pi pipeInformation
 		if r, _, _ := procWinUsbQueryPipe.Call(d.ih, 0, uintptr(i), uintptr(unsafe.Pointer(&pi))); r == 0 {
 			continue
 		}
-		if pi.PipeType == pipeTypeBulk && pi.PipeID&0x80 == 0 {
+		if pi.PipeType == pipeTypeBulk && pi.PipeID&0x80 == 0 && !found {
 			d.pipe, d.MaxPacket, found = pi.PipeID, int(pi.MaximumPacketSize), true
-			break
 		}
 	}
 	if !found {
@@ -133,6 +138,26 @@ func (d *Device) Write(buf []byte) error {
 		return fmt.Errorf("winusb: short write (%d of %d)", n, len(buf))
 	}
 	return nil
+}
+
+// Read reads one packet from the bulk IN pipe, waiting at most timeout.
+func (d *Device) Read(buf []byte, timeout time.Duration) (int, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.ih == 0 {
+		return 0, windows.ERROR_INVALID_HANDLE
+	}
+	if d.in == 0 || len(buf) == 0 {
+		return 0, errors.New("winusb: no bulk IN endpoint")
+	}
+	ms := uint32(timeout.Milliseconds())
+	procWinUsbSetPipePolicy.Call(d.ih, uintptr(d.in), pipeTransferTimeout, unsafe.Sizeof(ms), uintptr(unsafe.Pointer(&ms)))
+	var n uint32
+	if r, _, err := procWinUsbReadPipe.Call(d.ih, uintptr(d.in), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)),
+		uintptr(unsafe.Pointer(&n)), 0); r == 0 {
+		return 0, fmt.Errorf("winusb: read: %w", err)
+	}
+	return int(n), nil
 }
 
 // Close releases the device.

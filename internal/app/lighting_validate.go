@@ -405,7 +405,7 @@ func cleanLightingConfig(in leds.Config, devSettings map[string][]leds.Param) (l
 		if !lightIDRe.MatchString(id) {
 			return out, fmt.Errorf("invalid device id %q", id)
 		}
-		nd := leds.DeviceConfig{Disabled: dc.Disabled, IgnoreConflicts: dc.IgnoreConflicts}
+		nd := leds.DeviceConfig{Disabled: dc.Disabled, Off: dc.Off, IgnoreConflicts: dc.IgnoreConflicts}
 		if len(dc.Settings) > 0 {
 			var err error
 			dc.Settings = migrateLightSettings(dc.Settings)

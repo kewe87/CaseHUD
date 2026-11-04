@@ -79,6 +79,9 @@ type device struct {
 
 	mu sync.Mutex
 	h  transport
+
+	fwMu sync.Mutex
+	fw   string // firmware version, read when the ring is opened
 }
 
 func (d *device) ID() string   { return fmt.Sprintf("lianli:%04x:%04x", vendorID, productRing88) }
@@ -101,6 +104,9 @@ func (d *device) SetFrame(frame map[string][]color.RGBA) error {
 			return fmt.Errorf("lianli: %w (another program may hold the device)", err)
 		}
 		d.h = h
+		if d.Firmware() == "" { // once per device
+			d.setFirmware(readVersion(h))
+		}
 	}
 	cols := frame["ring"]
 	n := min(max(len(cols), d.leds), maxLEDs)

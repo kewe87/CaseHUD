@@ -8,6 +8,7 @@ using System.Net;
 using System.ServiceProcess;
 using System.Text;
 using System.Threading;
+using CaseHUD.Sensors.RingBoot;
 using CaseHUD.Sensors.Smbus;
 using LibreHardwareMonitor.Hardware;
 
@@ -90,6 +91,8 @@ namespace CaseHUD.Sensors
         private Thread _updater;
         private volatile bool _running;
         private SmbusBridgeHost _bridge;
+        private SmbusBridgeHost _ringPipe;
+        private readonly CancellationTokenSource _cancel = new CancellationTokenSource();
 
         public void Start()
         {
@@ -113,6 +116,33 @@ namespace CaseHUD.Sensors
             {
                 Log.Write("HTTP listener failed (port 8086 in use?): " + e);
                 throw;
+            }
+
+            // Ring boot state: show the user's chosen ring state right after Windows
+            // starts (one frame, then the USB handle is released), off the start path.
+            var ringStore = new RingBootStore(RingBootStore.DefaultPath, Log.Write);
+            var ringHandler = new RingBootRequestHandler(ringStore, Log.Write);
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    new RingBootApplier(new WinUsbRingUsb(), Log.Write).Apply(ringStore.Load(), _cancel.Token);
+                }
+                catch (Exception e)
+                {
+                    Log.Write("ring boot: failed: " + e.Message);
+                }
+            });
+
+            // Always-on pipe that only accepts the ring boot state.
+            try
+            {
+                _ringPipe = RingConnection.CreateHost(ringHandler, Log.Write);
+                _ringPipe.Start();
+            }
+            catch (Exception e)
+            {
+                Log.Write("ring pipe setup failed: " + e.Message);
             }
 
             // Optional SMBus bridge for RAM RGB (off unless sensors.json enables it).
@@ -242,7 +272,9 @@ namespace CaseHUD.Sensors
         public void Dispose()
         {
             _running = false;
+            try { _cancel.Cancel(); } catch { }
             try { _bridge?.Dispose(); } catch { }
+            try { _ringPipe?.Dispose(); } catch { }
             try { _listener.Stop(); } catch { }
             try { _computer.Close(); } catch { }
             Log.Write("stopped");

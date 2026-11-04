@@ -666,7 +666,9 @@ applyI18n();
         ? sv("text", { class: "sk-front-label", x: -8 / b.scale, y: vs.h / 2, "font-size": f, "text-anchor": "middle", transform: `rotate(-90 ${-8 / b.scale} ${vs.h / 2})` }, "◂ " + t("sk.front"))
         : sv("text", { class: "sk-front-label", x: vs.w / 2, y: -8 / b.scale, "font-size": f, "text-anchor": "middle" }, "▴ " + t("sk.front")));
     }
-    const list = parts().filter((p) => (p.view || "side") === S.view);
+    // Large parts (mainboard, distro plate) are drawn first so parts mounted on them stay visible.
+    const area = (p) => { const b = proj(p).box; return b.w * b.h; };
+    const list = parts().filter((p) => (p.view || "side") === S.view).sort((a, b) => area(b) - area(a));
     S.drawn = new Map(list.map((p) => [p.id, { x: p.x, y: p.y }]));
     const layer = sv("g", { class: "sk-parts" });
     for (const p of list) if (p.id !== S.sel) layer.append(partGroup(p));

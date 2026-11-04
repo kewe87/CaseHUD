@@ -14,12 +14,12 @@
 <header>
   <div class="brand"><img src="logo.svg" alt="" class="logo"><span>CaseHUD</span></div>
   <nav id="tabs">
-    <button data-tab="displays" class="active"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span data-i18n="tab.displays"></span></button>
-    <button data-tab="scenes"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg><span data-i18n="tab.scenes"></span></button>
-    <button data-tab="light"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg><span data-i18n="tab.light"></span></button>
-    <button data-tab="designs"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20z"/><path d="M14 7l3 3"/></svg><span data-i18n="tab.designs"></span></button>
-    <button data-tab="media"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg><span data-i18n="tab.media"></span></button>
-    <button data-tab="settings"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span data-i18n="tab.settings"></span></button>
+    <button data-tab="displays" data-i18n-title="tab.displays" class="active"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span data-i18n="tab.displays"></span></button>
+    <button data-tab="scenes" data-i18n-title="tab.scenes"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg><span data-i18n="tab.scenes"></span></button>
+    <button data-tab="light" data-i18n-title="tab.light"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg><span data-i18n="tab.light"></span></button>
+    <button data-tab="designs" data-i18n-title="tab.designs"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20z"/><path d="M14 7l3 3"/></svg><span data-i18n="tab.designs"></span></button>
+    <button data-tab="media" data-i18n-title="tab.media"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg><span data-i18n="tab.media"></span></button>
+    <button data-tab="settings" data-i18n-title="tab.settings"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span data-i18n="tab.settings"></span></button>
   </nav>
   <div class="status">
     <button id="status-pill" class="pill" data-i18n-title="status.title"><span class="dot"></span><span id="status-text"></span></button>
@@ -559,9 +559,6 @@
     </div>
     <div class="field" id="dr-flip-field" hidden>
       <label class="check-row"><input type="checkbox" class="switch" id="dr-flip"><span><b data-i18n="field.flip"></b><small data-i18n="field.flip.sub"></small></span></label>
-    </div>
-    <div class="field" id="dr-boot-warn" hidden>
-      <p class="sub warn" role="alert" data-i18n="boot.pending.long"></p>
     </div>
     <div class="field" id="dr-fw-field" hidden>
       <span><span data-i18n="field.firmware"></span>: <b id="dr-fw"></b> <span id="dr-fw-note"></span></span>

@@ -494,7 +494,7 @@ descriptors: `key`, `label` (English), `labelDe` (German; featured effects only)
 (solid, breathing, rainbow, cycle, wave, sensor, meteor, and since 1.1 screen and audio), and for those `label`
 (English GUI name, e.g. sensor is "Temperature") and `labelDe`; the other
 effects stay valid), `devices` (`id`, `name`, `backend`, `state`
-ok/conflict/disabled/error, `message`, `disabled`, `ignoreConflicts`,
+ok/conflict/disabled/error, `message`, `disabled`, `off`, `ignoreConflicts`, `firmware`,
 `settings`, `settingValues`, `zones` with LED positions on the 320x200 canvas),
 `conflicts` and `errors` (counts).
 
@@ -523,7 +523,7 @@ zone LED index where a segment begins; without it a segment follows the previous
 
 ```json
 {"enabled": true, "brightness": 60, "shutdown": "device", "effect": "wave", "params": {"speed": 40, "color": "#3a8dff"},
- "devices": {"demo:board": {"disabled": false, "ignoreConflicts": false,
+ "devices": {"demo:board": {"disabled": false, "off": false, "ignoreConflicts": false,
    "zones": {"argb1": {"count": 30}}}}}
 ```
 
@@ -549,7 +549,7 @@ most 16 segments and 2048 LEDs per zone). `devices` only accepts devices that
 are currently found. A
 device that another RGB program drives is reported as `conflict` and left
 alone. Switching the TL fan controller backend (`tl`), device `settings` and
-`ignoreConflicts` are GUI-only and answered with `403 gui_only`. `status` also carries
+`ignoreConflicts` are GUI-only and answered with `403 gui_only`, as is `off` for the fan controller (it is stored in the controller's flash). `off` darkens one device and keeps its effect. `status` also carries
 `lighting: {enabled, active}`. Turning lighting on needs two one-time
 confirmations in the CaseHUD window (the disclaimer, and the lighting notice);
 without them `enabled: true` is answered with `409 ack_required`.

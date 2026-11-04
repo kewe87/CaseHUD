@@ -16,8 +16,10 @@ import (
 	"github.com/kewe87/casehud/internal/winusb"
 )
 
-// Boot picture of the Universal Screen 8.8": the device shows the file
-// /usr/data/boot.jpg while it starts. It is written with the device's
+// Boot picture of the Universal Screen 8.8": the device keeps the file
+// /usr/data/boot.jpg but never shows it (hardware test: it always shows the
+// vendor logo at power-on), so the app no longer writes it; these helpers stay
+// exported for later use. The file is written with the device's
 // file-write command, which is a permanent write and has no checks of its
 // own on the device side:
 //
@@ -154,4 +156,51 @@ func (p *universal88) WriteBootImage(img image.Image, rotation int) error {
 		return fmt.Errorf("%s: boot picture: device answered % x", p.name, r[:2])
 	}
 	return nil
+}
+
+// usOpFileSize asks for the size of a file on the device. Read-only: the
+// reply carries the size (u32 little endian at [8:12]); 0 means the file is
+// missing or empty. Arguments: path length (u32 BE) at [0:4], [4:8] unused,
+// the path without a NUL at [8:] (plaintext offset 16).
+const usOpFileSize usOp = 0x62
+
+// BootFileSize returns the size of /usr/data/boot.jpg on the 8.8" (0 = no
+// file). The path is the constant us88BootPath; nothing is written.
+func (p *universal88) BootFileSize() (uint32, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.mdl().bootLogo {
+		return 0, fmt.Errorf("%s: no boot picture on this model", p.name)
+	}
+	if p.closed {
+		return 0, ErrClosed
+	}
+	if err := p.reopen(); err != nil {
+		return 0, fmt.Errorf("%s: %w: %w", p.name, ErrClosed, err)
+	}
+	args := make([]byte, 8+len(us88BootPath))
+	binary.BigEndian.PutUint32(args[0:4], uint32(len(us88BootPath)))
+	copy(args[8:], us88BootPath)
+	c := usCommand{Op: usOpFileSize, Stamp: p.clock.next(), Args: args}
+	p.drain()
+	if err := p.write(c.seal()); err != nil {
+		return 0, fmt.Errorf("%s: file size query: %w", p.name, err)
+	}
+	buf := make([]byte, 512)
+	for i := 0; i < 8; i++ { // bounded: skip stale replies and empty packets
+		n, err := p.dev.Read(us88EPIn, buf, us88ReadTO)
+		if err != nil {
+			p.drain()
+			return 0, fmt.Errorf("%s: file size query: %w", p.name, err)
+		}
+		if n == 0 {
+			continue
+		}
+		r := buf[:n]
+		if len(r) >= 12 && r[0] == byte(usOpFileSize) && r[1] == 0xC8 && binary.LittleEndian.Uint32(r[2:6]) == c.Stamp {
+			return binary.LittleEndian.Uint32(r[8:12]), nil
+		}
+	}
+	p.drain()
+	return 0, fmt.Errorf("%s: file size query: no matching reply", p.name)
 }

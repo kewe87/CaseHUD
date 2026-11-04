@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/kewe87/casehud/internal/app"
 )
@@ -113,8 +114,14 @@ func (s *Server) lightingPatchWith(w http.ResponseWriter, r *http.Request, api b
 		for _, d := range p.Devices {
 			guiOnly = guiOnly || len(d.Settings) > 0 || d.IgnoreConflicts != nil
 		}
+		for id, d := range p.Devices {
+			// switching the fan controller off writes its flash: window only
+			if d.Off != nil && strings.HasPrefix(id, "lianlitl:") {
+				guiOnly = true
+			}
+		}
 		if guiOnly {
-			apiFail(w, http.StatusForbidden, "gui_only", "tl, devices.*.settings and devices.*.ignoreConflicts can only be changed in the CaseHUD window")
+			apiFail(w, http.StatusForbidden, "gui_only", "tl, devices.*.settings, devices.*.ignoreConflicts and off for the fan controller can only be changed in the CaseHUD window")
 			return
 		}
 	}

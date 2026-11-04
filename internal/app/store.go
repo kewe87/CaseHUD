@@ -152,16 +152,21 @@ type Config struct {
 	// that stores them in flash (see panel.SettingsCache): a restart does not
 	// write values the device already holds.
 	DeviceWritten map[string]panel.Written `json:"device_written,omitempty"`
-	// TLStartImageOff switches off writing the CaseHUD logo as the start image
-	// of the TL LCD fans; TLStartImages is the hash of the image last written
-	// to each fan (see tlpersist.go).
+	// TLStartImageOn switches on writing the CaseHUD logo as the start image
+	// of the TL LCD fans (off by default; the former opt-out key
+	// tl_start_image_off is ignored); TLStartImages is the hash of the image
+	// last written to each fan (see tlpersist.go).
+	TLStartImageOn bool `json:"tl_start_image_on,omitempty"`
+	// TLStartImageOff is the former opt-out flag. It is ignored on load and
+	// rewritten before every save as !TLStartImageOn, so an older version
+	// reading this file stays off unless the user switched the logo on.
 	TLStartImageOff bool              `json:"tl_start_image_off,omitempty"`
 	TLStartImages   map[string]string `json:"tl_start_images,omitempty"`
 	// TLRestImages is the same record for the stored picture the fans show
 	// when CaseHUD is not running.
 	TLRestImages map[string]string `json:"tl_rest_images,omitempty"`
-	// BootImages is the same record for the boot picture of the 8.8" bar
-	// (written while the start image setting is on).
+	// BootImages is the record of boot pictures written by earlier versions;
+	// no longer written.
 	BootImages map[string]string `json:"boot_images,omitempty"`
 	// TLSerialOn assigns a serial number to TL LCD fans that have none (off
 	// by default). TLSerialOff is the old opt-out flag; TLSerialMigrated
@@ -251,8 +256,20 @@ func (s *Store) LoadConfig() (Config, error) {
 	if c.Panels == nil {
 		c.Panels = map[string]PanelConfig{}
 	}
+	dropBootPending(&c)
 	migrateTLSerial(&c)
 	return c, nil
+}
+
+// dropBootPending removes the "write started, not confirmed" markers that
+// earlier versions left in the boot picture record: a device that works is
+// not hung. Confirmed records stay; they show that our file sits on the device.
+func dropBootPending(c *Config) {
+	for k, v := range c.BootImages {
+		if strings.HasPrefix(v, bootPendingPrefix) {
+			delete(c.BootImages, k)
+		}
+	}
 }
 
 // migrateTLSerial keeps the serial number assignment on for an installation

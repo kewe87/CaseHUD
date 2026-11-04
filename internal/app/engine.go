@@ -107,10 +107,6 @@ type PanelState struct {
 	// Held is set while a rotation or automation scene is on this display:
 	// changes to its setup are stored and show when that ends.
 	Held bool `json:"held,omitempty"`
-	// BootPending is set when a boot picture transfer to this display started
-	// and was not confirmed: the display may need a power cycle (the marker
-	// stays until a rewrite succeeds).
-	BootPending bool `json:"bootPending,omitempty"`
 }
 
 // Start loads the config, connects to the sensor backend and the panels.
@@ -336,6 +332,7 @@ func (e *Engine) persist() error {
 	e.saveMu.Lock()
 	defer e.saveMu.Unlock()
 	e.mu.Lock()
+	e.cfg.TLStartImageOff = !e.cfg.TLStartImageOn // older versions read the opt-out flag
 	b, err := json.MarshalIndent(e.cfg, "", "  ")
 	e.mu.Unlock()
 	if err != nil {
@@ -498,9 +495,6 @@ func (e *Engine) Panels() []PanelState {
 		sz := w.sizeFor(cfg.Rotation)
 		out = append(out, PanelState{ID: id, Name: w.p.Name(), Width: sz.X, Height: sz.Y,
 			Round: w.round, Experimental: panel.IsExperimental(w.p), Config: cfg, Number: nums[id], Error: w.err(), ErrorCode: w.errClass(), Grids: lcd.GridPresets(sz.X, sz.Y), Held: e.heldLocked(id)})
-		if bi, ok := w.p.(panel.BootImager); ok && strings.HasPrefix(e.cfg.BootImages[bi.SettingsKey()], bootPendingPrefix) {
-			out[len(out)-1].BootPending = true
-		}
 		if v, ok := w.p.(panel.Versioned); ok {
 			out[len(out)-1].Firmware = v.Version()
 			out[len(out)-1].FirmwareLatest = e.firmwareNote(panelFirmwareProduct(w.p), v.Version())

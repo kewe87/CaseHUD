@@ -156,6 +156,8 @@ function renderStatus() {
   if (state.demo) { pill.className = "pill warn"; $("#status-text").textContent = t("status.demo", { n }); }
   else if (state.sensorsError) { pill.className = "pill error"; $("#status-text").textContent = t("status.sensorsOff", { n }); }
   else { pill.className = "pill ok"; $("#status-text").textContent = t("status.ok", { n }); }
+  // Only a problem (demo mode, sensors missing) earns room in the header.
+  pill.hidden = !state.demo && !state.sensorsError;
   pill.title = state.sensorsError || t("status.title");
 }
 $("#status-pill").addEventListener("click", () => $('[data-tab="settings"]').click());
@@ -281,8 +283,7 @@ function panelCard(p) {
       el("div", { class: "panel-name" }, shortName(p), p.experimental ? el("span", { class: "badge exp", title: t("dev.exp.hint") }, t("dev.exp.badge")) : null),
       el("div", { class: "panel-meta" }, `${p.width}×${p.height}` + (shortName(p) === p.name.replace(/ \(.*\)$/, "") ? "" : ` · ${p.name.replace(/ \(.*\)$/, "")}`))),
     el("span", { class: "content-pill" + (cfg.mode === "off" ? " off" : ""), title: contentLabel(cfg) }, contentLabel(cfg)),
-    p.error ? el("div", { class: "panel-error" }, p.error) : null,
-    p.bootPending ? el("div", { class: "panel-warn" }, t("boot.pending")) : null);
+    p.error ? el("div", { class: "panel-error" }, p.error) : null);
 }
 
 // Saves for one panel go out one after the other: two quick clicks (dark,
@@ -706,7 +707,6 @@ function renderDrawer() {
   oc.checked = !!p.offlineClock;
   oc.onchange = () => api("POST", `/api/panels/${encodeURIComponent(p.id)}/offline-clock`, { on: oc.checked })
     .then(() => { p.offlineClock = oc.checked; toast(t("saved")); }).catch((e) => { oc.checked = !oc.checked; toast(e.message, true); });
-  $("#dr-boot-warn").hidden = !p.bootPending;
   $("#dr-fw-field").hidden = !p.firmware; // read only, shown when the display reported one
   $("#dr-fw").textContent = fwLabel(p.firmware);
   $("#dr-fw").title = p.firmware || ""; // the raw string, for reports
@@ -2404,8 +2404,6 @@ Object.assign(STRINGS.de, {
   "ed.discard": "Änderungen am Design verwerfen?",
   "live.busy": "Live-Vorschau nicht verfügbar: Es sind zu viele CaseHUD-Fenster offen. Schließe andere Fenster, der Versuch wird wiederholt.",
   "int.half": "0,5 s",
-  "boot.pending": "Startbild-Übertragung unterbrochen – Display einmal stromlos machen.",
-  "boot.pending.long": "Die Übertragung des Startbilds wurde unterbrochen. Mach dieses Display einmal stromlos (USB trennen oder PC aus und wieder an). CaseHUD schreibt das Startbild nicht von selbst erneut; danach lässt es sich unter Einstellungen → Geräte neu schreiben.",
 });
 Object.assign(STRINGS.en, {
   "theme.hint.reset": "Fields with their own color scheme are set to this scheme as well when you switch.",
@@ -2413,8 +2411,6 @@ Object.assign(STRINGS.en, {
   "ed.discard": "Discard changes to this design?",
   "live.busy": "Live preview unavailable: too many CaseHUD windows are open. Close other windows; it will try again.",
   "int.half": "0.5 s",
-  "boot.pending": "Boot picture transfer interrupted – power-cycle the display once.",
-  "boot.pending.long": "The boot picture transfer was interrupted. Power-cycle this display once (unplug USB, or switch the PC off and on). CaseHUD does not rewrite the boot picture by itself; afterwards you can rewrite it under Settings → Devices.",
 });
 
 // ---------- boot ----------
@@ -2430,7 +2426,7 @@ function pollState() {
   api("GET", "/api/state").then((s) => {
     if (seq !== refreshSeq) return; // a full refresh ran meanwhile and is newer
     // Re-render only on structural changes so open forms keep focus.
-    const sig = (x) => JSON.stringify([x.panels.map((p) => [p.id, p.error, p.firmware, p.firmwareLatest && p.firmwareLatest.status, p.width, p.height, p.number, p.grids, p.experimental, p.deviceFlip, p.offlineClock, p.bootPending]), x.monitorMode, x.designs.map((d) => d.id), x.media.map((m) => m.name), x.sensorsError, x.scanError, x.rescanGaveUp]);
+    const sig = (x) => JSON.stringify([x.panels.map((p) => [p.id, p.error, p.firmware, p.firmwareLatest && p.firmwareLatest.status, p.width, p.height, p.number, p.grids, p.experimental, p.deviceFlip, p.offlineClock]), x.monitorMode, x.designs.map((d) => d.id), x.media.map((m) => m.name), x.sensorsError, x.scanError, x.rescanGaveUp]);
     const changed = sig(s) !== sig(state);
     // Display setups come from the server (they change through the API, the
     // MCP server or another window too), except for a display with a save of
