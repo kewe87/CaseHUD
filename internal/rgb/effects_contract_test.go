@@ -27,6 +27,7 @@ var effectContract = map[string]string{
 	"sand":         "color1 color2 color3 color4 colors mirror path reverse speed",
 	"spark":        "color1 color2 color3 color4 colors mirror path reverse speed",
 	"meet":         "color1 color2 colors mirror path reverse speed",
+	"orbit":        "background color dot dots mirror originX originY path reverse speed tail",
 	"rainbow-gaps": "gaps mirror path reverse speed",
 	"fire":         "color height speed tip",
 }

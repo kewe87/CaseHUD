@@ -263,23 +263,32 @@ var ErrUnknownSet = fmt.Errorf("unknown design set")
 // coolant, repeating, like the GUI's "style for all fans") or, for a square
 // display, the set's combined design.
 func SetDesign(set string, round bool, i int) (string, error) {
-	return setDesign(set, round, false, i)
+	return setDesign(set, round, false, i, true)
 }
 
 // setDesign is SetDesign that also knows bar displays (the 1920x480 screen),
-// where the clean set has its own wide dashboard.
-func setDesign(set string, round, wide bool, i int) (string, error) {
-	trio, ok := FanSets[set]
+// where the clean set has its own wide dashboard. Without a coolant sensor
+// (coolant false) no design with coolant is chosen: the trio gets the total
+// power in its place, the clean square display the CPU + GPU design, and a bar
+// gets "" (the caller builds the four-square composition, see barTiles).
+func setDesign(set string, round, wide bool, i int, coolant bool) (string, error) {
+	trio, ok := FanSetsFor(coolant)[set]
 	if !ok {
 		return "", ErrUnknownSet
 	}
 	if wide {
+		if !coolant {
+			return "", nil
+		}
 		if set == "clean" {
 			return "water-wide", nil
 		}
 		return wideDesign[set], nil
 	}
 	if !round {
+		if !coolant && set == "clean" {
+			return "cpu-gpu", nil
+		}
 		return squareDesign[set], nil
 	}
 	return trio[i%len(trio)], nil
@@ -307,10 +316,12 @@ func (e *Engine) ApplySet(set, theme string, ids []string) ([]string, error) {
 	}
 	var done []string
 	round := 0
+	coolant := e.HasCoolant()
 	for _, p := range targets {
 		// IsBar: an upright bar (rotation 90/270) reports the turned size
 		// (480x1920); the renderer stacks the wide design for it.
-		d, _ := setDesign(set, p.Round, IsBar(p.Width, p.Height), round)
+		d, _ := setDesign(set, p.Round, IsBar(p.Width, p.Height), round, coolant)
+		bar := IsBar(p.Width, p.Height)
 		if p.Round {
 			round++
 		}
@@ -319,6 +330,8 @@ func (e *Engine) ApplySet(set, theme string, ids []string) ([]string, error) {
 			if c.Grid != "" {
 				// A grid stays; every field gets the set's equivalent design.
 				restyleTiles(c, set)
+			} else if bar && !coolant {
+				c.Grid, c.Tiles, c.Layout = "4", barTiles(set), ""
 			} else {
 				c.Design = d
 			}

@@ -10,6 +10,7 @@ package metrics
 
 import (
 	"strings"
+	"time"
 )
 
 // Reading is one sensor value.
@@ -18,6 +19,13 @@ type Reading struct {
 	Path  string  // human path, e.g. "NVIDIA GeForce RTX 4080/Temperatures/GPU Core"
 	Value float64 // numeric value
 	Unit  string  // "°C", "%", "RPM", ...
+	// Age is how long before it was delivered the value was read from the hardware,
+	// if the source says so (AgeKnown). Most sources do not.
+	Age      time.Duration `json:"-"`
+	AgeKnown bool          `json:"-"`
+	// DisplayOnly marks a value from a source that is not known to be the sensor
+	// service of this machine: it may be shown, but must not drive the cooling.
+	DisplayOnly bool `json:"-"`
 }
 
 // Provider is a source of sensor readings.
@@ -34,6 +42,10 @@ type Provider interface {
 	All() []Reading
 }
 
+// Match resolves source against a list of readings with the rules documented
+// on Provider.Get.
+func Match(readings []Reading, source string) (Reading, bool) { return match(readings, source) }
+
 // match resolves source against readings using the rules documented on
 // Provider.Get.
 func match(readings []Reading, source string) (Reading, bool) {
@@ -44,7 +56,7 @@ func match(readings []Reading, source string) (Reading, bool) {
 		}
 		la := strings.ToLower(alt)
 		for _, r := range readings {
-			if r.Key == alt || strings.ToLower(r.Path) == la {
+			if (r.Key == alt || strings.ToLower(r.Path) == la) && plausible(la, r) {
 				return r, true
 			}
 		}
@@ -53,7 +65,7 @@ func match(readings []Reading, source string) (Reading, bool) {
 		// devices that aren't integrated GPUs.
 		var fallback *Reading
 		for i, r := range readings {
-			if strings.HasSuffix(strings.ToLower(r.Path), "/"+la) {
+			if strings.HasSuffix(strings.ToLower(r.Path), "/"+la) && plausible(la, r) {
 				if !isIntegratedGPU(r.Path) {
 					return r, true
 				}
@@ -67,6 +79,18 @@ func match(readings []Reading, source string) (Reading, bool) {
 		}
 	}
 	return Reading{}, false
+}
+
+// plausible rejects the reading of a coolant probe header ("T Sensor") with
+// nothing connected: zero, below zero or implausibly hot. The source then falls
+// through to the next alternative, or shows nothing. A pump header is not
+// filtered: a pump that stands must stay visible as 0 rpm.
+func plausible(alt string, r Reading) bool {
+	switch {
+	case strings.HasSuffix(alt, "/t sensor"):
+		return r.Value > 0 && r.Value < 120
+	}
+	return true
 }
 
 // integratedGPUs are name fragments of CPU-integrated graphics in

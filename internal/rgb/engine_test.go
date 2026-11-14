@@ -213,6 +213,92 @@ func TestCalibrate(t *testing.T) {
 	}
 }
 
+// Identify lights the whole zone, up to its hardware limit, blinking.
+func TestIdentify(t *testing.T) {
+	dev := &fake.Device{DeviceID: "fake:i", ZoneList: []leds.Zone{
+		{ID: "strip", Count: 10, Max: 50, Resizable: true, Order: "GRB"},
+		{ID: "other", Count: 3, Max: 3, Order: "RGB"},
+	}}
+	cfg := leds.DefaultConfig()
+	cfg.Effect = "solid"
+	e := leds.New(cfg, leds.Options{Backends: []leds.Backend{&fake.Backend{Devices: []*fake.Device{dev}}}, ProcessRunning: noProcs})
+	if err := e.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	defer e.Stop()
+	if err := e.Identify("fake:i", "nope"); err == nil {
+		t.Fatal("unknown zone accepted")
+	}
+	if err := e.Identify("fake:i", "strip"); err != nil {
+		t.Fatal(err)
+	}
+	lit := false
+	for end := time.Now().Add(2 * time.Second); time.Now().Before(end) && !lit; time.Sleep(20 * time.Millisecond) {
+		f := dev.Last()
+		s := f["strip"]
+		if len(s) != 50 {
+			continue
+		}
+		if f["other"][0] != (color.RGBA{A: 255}) {
+			t.Fatalf("other zone not dark: %v", f["other"][0])
+		}
+		lit = s[0] == leds.IdentifyColor && s[49] == leds.IdentifyColor
+	}
+	if !lit {
+		t.Fatal("the zone never lit up as a whole")
+	}
+	on, off := leds.IdentifyFrame(3, time.Unix(0, 0)), leds.IdentifyFrame(3, time.Unix(0, int64(600*time.Millisecond)))
+	if on[2] != leds.IdentifyColor || off[2] != (color.RGBA{A: 255}) {
+		t.Fatalf("blink: %v %v", on, off)
+	}
+	e.EndCalibration()
+	time.Sleep(150 * time.Millisecond)
+	if len(dev.Last()["strip"]) != 10 {
+		t.Fatal("effect not restored")
+	}
+}
+
+// Pattern shows a still picture on one zone: its colours from LED 1 on, the
+// rest of the zone and the other zones of the device dark.
+func TestPattern(t *testing.T) {
+	dev := &fake.Device{DeviceID: "fake:p", ZoneList: []leds.Zone{
+		{ID: "strip", Count: 10, Max: 50, Resizable: true, Order: "GRB"},
+		{ID: "other", Count: 3, Max: 3, Order: "RGB"},
+	}}
+	cfg := leds.DefaultConfig()
+	cfg.Effect = "solid"
+	e := leds.New(cfg, leds.Options{Backends: []leds.Backend{&fake.Backend{Devices: []*fake.Device{dev}}}, ProcessRunning: noProcs})
+	if err := e.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	defer e.Stop()
+	red, blue := color.RGBA{255, 0, 0, 255}, color.RGBA{0, 0, 255, 255}
+	if err := e.Pattern("fake:p", "strip", make([]color.RGBA, 51)); err == nil {
+		t.Fatal("pattern past the hardware limit accepted")
+	}
+	if err := e.Pattern("fake:p", "nope", []color.RGBA{red}); err == nil {
+		t.Fatal("unknown zone accepted")
+	}
+	if err := e.Pattern("fake:p", "strip", []color.RGBA{{A: 255}, red, blue}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(150 * time.Millisecond)
+	f := dev.Last()
+	s := f["strip"]
+	// GRB wire order: red = (0,255,0)
+	if len(s) != 50 || s[1] != (color.RGBA{0, 255, 0, 255}) || s[2] != blue || s[0] != (color.RGBA{A: 255}) || s[3] != (color.RGBA{A: 255}) {
+		t.Fatalf("pattern frame (%d LEDs): %v", len(s), s[:4])
+	}
+	if f["other"][0] != (color.RGBA{A: 255}) {
+		t.Fatalf("other zone not dark: %v", f["other"][0])
+	}
+	e.EndCalibration()
+	time.Sleep(150 * time.Millisecond)
+	if len(dev.Last()["strip"]) != 10 {
+		t.Fatal("effect not restored")
+	}
+}
+
 func TestShutdownKeep(t *testing.T) {
 	dev := newDev()
 	cfg := leds.DefaultConfig()

@@ -1,8 +1,17 @@
 // Package mcp is CaseHUD's optional Model Context Protocol server: AI
 // assistants (desktop assistants, editors, ...) start "casehud-cli mcp" and can
-// then read sensors, design layouts, preview them and put them on a display.
-// It talks to the running CaseHUD app over its local API and only works
-// while the user has enabled it in the settings.
+// then read sensors, design layouts, preview them and put them on a display,
+// read and change the cooling (outputs, curves, presets, speed measurement),
+// the lighting, scenes and displays, and reach every other route of the API
+// through a generic call (api_call, with api_spec as its reference).
+//
+// It talks to the running CaseHUD app only over the public API (/api/v1/) with
+// a token of its own, which the user grants in the CaseHUD window, and only
+// works while the user has enabled it in the settings. The rights are enforced
+// by CaseHUD, not here: a connection without the control right can only read,
+// and quitting or updating CaseHUD (the system right) is not reachable at all.
+// Everything that only the CaseHUD window may do has no route in the API and
+// so no tool.
 package mcp
 
 import (
@@ -83,6 +92,9 @@ type Server struct {
 	Name, Version string
 	Instructions  string
 	Tools         []Tool
+	// OnClient is called with the name the client gave in initialize
+	// (clientInfo.name), "" if it gave none.
+	OnClient func(name string)
 }
 
 // Serve handles newline-delimited JSON-RPC on r/w (the stdio transport)
@@ -118,11 +130,17 @@ func (s *Server) handle(req request) (any, *rpcError) {
 	case "initialize":
 		var p struct {
 			ProtocolVersion string `json:"protocolVersion"`
+			ClientInfo      struct {
+				Name string `json:"name"`
+			} `json:"clientInfo"`
 		}
 		if len(req.Params) > 0 {
 			if err := json.Unmarshal(req.Params, &p); err != nil {
 				return nil, &rpcError{-32602, "invalid params: " + err.Error()}
 			}
+		}
+		if s.OnClient != nil {
+			s.OnClient(p.ClientInfo.Name)
 		}
 		v := ProtocolVersion
 		switch p.ProtocolVersion {

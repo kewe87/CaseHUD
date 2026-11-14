@@ -3,9 +3,12 @@ package web
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"log"
 	"os"
 	"path/filepath"
+
+	"github.com/kewe87/casehud/internal/fileacl"
 )
 
 // APIFileName is the discovery file in the data folder.
@@ -29,40 +32,11 @@ func WriteAPIFile(dir string, f APIFile) error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(dir, APIFileName+".*.tmp") // created 0600
-	if err != nil {
-		return err
-	}
-	name := tmp.Name()
-	// Restrict the (still empty) file before the token is written into it.
-	if err := restrictFile(name); err != nil {
-		tmp.Close()
-		os.Remove(name)
-		return err
-	}
-	if _, err := tmp.Write(append(b, '\n')); err != nil {
-		tmp.Close()
-		os.Remove(name)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(name)
-		return err
-	}
-	if err := os.Chmod(name, 0o600); err != nil {
-		os.Remove(name)
-		return err
-	}
-	if err := restrictFile(name); err != nil { // Windows: explicit DACL
-		os.Remove(name)
-		return err
-	}
-	if err := os.Rename(name, filepath.Join(dir, APIFileName)); err != nil {
-		os.Remove(name)
-		return err
-	}
-	return nil
+	return WriteSecretFile(filepath.Join(dir, APIFileName), append(b, 0x0a))
 }
+
+// WriteSecretFile writes data to path the way api.json is written, see fileacl.WriteFile.
+func WriteSecretFile(path string, data []byte) error { return fileacl.WriteFile(path, data) }
 
 // ReadAPIFile reads the discovery file from the data folder.
 func ReadAPIFile(dir string) (APIFile, error) {
@@ -128,12 +102,24 @@ func (s *Server) SyncAPI() {
 	s.syncMu.Lock()
 	defer s.syncMu.Unlock()
 	on := s.Engine.APIEnabled()
+	mcpOn := s.Engine.MCPEnabled()
 	s.apiMu.Lock()
+	if !mcpOn && s.mcpGen != nil {
+		close(s.mcpGen) // ends the open event streams of MCP connections
+		s.mcpGen = nil
+	}
+	if mcpOn && s.mcpGen == nil {
+		s.mcpGen = make(chan struct{})
+	}
 	if !on {
 		s.clientToken = ""
 		if s.clientGen != nil {
 			close(s.clientGen) // ends open event streams of the client
 			s.clientGen = nil
+		}
+		if s.pairGen != nil {
+			close(s.pairGen) // and those of the paired programs
+			s.pairGen = nil
 		}
 	} else if s.clientToken == "" {
 		tok, err := randomToken()
@@ -147,6 +133,9 @@ func (s *Server) SyncAPI() {
 	if on && s.clientGen == nil {
 		s.clientGen = make(chan struct{})
 	}
+	if on && s.pairGen == nil {
+		s.pairGen = make(chan struct{})
+	}
 	s.apiMu.Unlock()
 	if s.APIFileDir == "" {
 		return
@@ -155,6 +144,11 @@ func (s *Server) SyncAPI() {
 		RemoveAPIFile(s.APIFileDir, os.Getpid())
 		return
 	}
+	s.writeAPIFile()
+}
+
+// writeAPIFile writes api.json with the current client token.
+func (s *Server) writeAPIFile() {
 	exe, err := os.Executable()
 	if err != nil {
 		log.Println("api.json:", err)
@@ -164,6 +158,48 @@ func (s *Server) SyncAPI() {
 	if err := WriteAPIFile(s.APIFileDir, s.APIInfo(os.Getpid(), exe)); err != nil {
 		log.Println("api.json:", err)
 	}
+}
+
+// RenewClientToken replaces the token of api.json ("Standard-Zugang") with a
+// new one: the old one stops working at once and its event streams end. The
+// programs that read api.json fresh for each start keep working; others have
+// to read it again.
+func (s *Server) RenewClientToken() error {
+	s.syncMu.Lock()
+	defer s.syncMu.Unlock()
+	if !s.Engine.APIEnabled() {
+		return errors.New("the API is switched off")
+	}
+	tok, err := randomToken()
+	if err != nil {
+		return err
+	}
+	s.apiMu.Lock()
+	s.clientToken = tok
+	if s.clientGen != nil {
+		close(s.clientGen)
+	}
+	s.clientGen = make(chan struct{})
+	s.apiMu.Unlock()
+	if s.APIFileDir != "" {
+		s.writeAPIFile()
+	}
+	return nil
+}
+
+// apiOff is closed when the API is switched off; paired programs' streams end then.
+func (s *Server) apiOff() <-chan struct{} {
+	s.apiMu.RLock()
+	defer s.apiMu.RUnlock()
+	return s.pairGen
+}
+
+// mcpOff is closed when the MCP interface is switched off; the streams of MCP
+// connections end then.
+func (s *Server) mcpOff() <-chan struct{} {
+	s.apiMu.RLock()
+	defer s.apiMu.RUnlock()
+	return s.mcpGen
 }
 
 // RestrictFile limits path to the current user, SYSTEM and Administrators

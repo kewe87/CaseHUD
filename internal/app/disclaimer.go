@@ -132,3 +132,18 @@ func (e *Engine) startOutput() {
 	default:
 	}
 }
+
+// AIHintDismissed tells whether the hint about installed AI apps is switched off.
+func (e *Engine) AIHintDismissed() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.cfg.AIHintOff
+}
+
+// DismissAIHint switches the hint about installed AI apps off for good.
+func (e *Engine) DismissAIHint() error {
+	e.mu.Lock()
+	e.cfg.AIHintOff = true
+	e.mu.Unlock()
+	return e.persist()
+}

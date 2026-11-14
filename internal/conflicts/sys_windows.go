@@ -81,6 +81,9 @@ func (winSys) Processes(want func(exe string) bool) ([]Proc, error) {
 		}
 		out = append(out, p)
 	}
+	if !errors.Is(err, windows.ERROR_NO_MORE_FILES) {
+		return nil, err
+	}
 	return out, nil
 }
 

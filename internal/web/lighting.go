@@ -21,6 +21,7 @@ func (s *Server) lightingRoutes(api *http.ServeMux) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	api.HandleFunc("POST /api/lighting/blink", s.lightingBlink)
+	api.HandleFunc("POST /api/lighting/identify", s.lightingIdentify)
 	api.HandleFunc("POST /api/lighting/sync", s.lightingSync)
 	// LED count of ARGB headers (GUI only): assistant, parts, templates.
 	api.HandleFunc("POST /api/lighting/assist", s.lightingAssist)
@@ -42,16 +43,18 @@ func (s *Server) lightingRoutes(api *http.ServeMux) {
 	})
 }
 
-// lightingRoutesV1 adds GET/PATCH /api/v1/lighting.
-func (s *Server) lightingRoutesV1(m *http.ServeMux) {
-	m.HandleFunc("GET /api/v1/lighting", s.lightingGet)
-	m.HandleFunc("PATCH /api/v1/lighting", s.lightingPatchV1)
-	m.HandleFunc("GET /api/v1/lighting/presets", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, s.Engine.LightingPresetList())
-	})
-	m.HandleFunc("POST /api/v1/lighting/presets", s.lightingPresetSave)
-	m.HandleFunc("POST /api/v1/lighting/presets/{id}/apply", s.libraryApplyPreset)
-	m.HandleFunc("DELETE /api/v1/lighting/presets/{id}", s.lightingPresetDelete)
+// lightingRoutesV1 lists the lighting routes of the public API.
+func (s *Server) lightingRoutesV1() []v1Route {
+	return []v1Route{
+		{"GET /api/v1/lighting", scopeRead, s.lightingGet},
+		{"PATCH /api/v1/lighting", scopeControl, s.lightingPatchV1},
+		{"GET /api/v1/lighting/presets", scopeRead, func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(w, s.Engine.LightingPresetList())
+		}},
+		{"POST /api/v1/lighting/presets", scopeControl, s.lightingPresetSave},
+		{"POST /api/v1/lighting/presets/{id}/apply", scopeControl, s.libraryApplyPreset},
+		{"DELETE /api/v1/lighting/presets/{id}", scopeControl, s.lightingPresetDelete},
+	}
 }
 
 // lightingFail answers in the format of the path: the v1 error object under
@@ -151,6 +154,23 @@ func (s *Server) lightingCalibrate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.Engine.LightingCalibrate(req.Device, req.Zone, req.Pos); err != nil {
+		lightingFail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// lightingIdentify lets one zone blink as a whole (GUI only): the guided
+// search for the parts on a header.
+func (s *Server) lightingIdentify(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Device string `json:"device"`
+		Zone   string `json:"zone"`
+	}
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	if err := s.Engine.LightingIdentify(req.Device, req.Zone); err != nil {
 		lightingFail(w, r, err)
 		return
 	}

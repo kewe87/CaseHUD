@@ -8,6 +8,7 @@ using System.Net;
 using System.ServiceProcess;
 using System.Text;
 using System.Threading;
+using CaseHUD.Sensors.Cooling;
 using CaseHUD.Sensors.RingBoot;
 using CaseHUD.Sensors.Smbus;
 using LibreHardwareMonitor.Hardware;
@@ -22,6 +23,7 @@ namespace CaseHUD.Sensors
     internal static class Program
     {
         public const string ServiceName = "CaseHUDSensors";
+        public const int Port = 8086;
         public const string Prefix = "http://127.0.0.1:8086/";
 
         private static int Main(string[] args)
@@ -74,7 +76,7 @@ namespace CaseHUD.Sensors
 
     internal sealed class SensorHost : IDisposable
     {
-        private readonly Computer _computer = new Computer
+        private readonly Computer _computer = new Computer(new HeaderStartSettings())
         {
             IsCpuEnabled = true,
             IsGpuEnabled = true,
@@ -92,7 +94,12 @@ namespace CaseHUD.Sensors
         private volatile bool _running;
         private SmbusBridgeHost _bridge;
         private SmbusBridgeHost _ringPipe;
+        private SmbusBridgeHost _coolingPipe;
+        private ControlHolds _holds;
+        private Timer _holdsSweep;
+        private volatile bool _hardwareOpen;
         private readonly CancellationTokenSource _cancel = new CancellationTokenSource();
+        private readonly SnapshotClock _clock = new SnapshotClock();
 
         public void Start()
         {
@@ -145,6 +152,22 @@ namespace CaseHUD.Sensors
                 Log.Write("ring pipe setup failed: " + e.Message);
             }
 
+            // Always-on pipe that only accepts holding a fan header of the mainboard.
+            try
+            {
+                // The journal tells a restarted service which headers a run that ended hard left set.
+                _holds = new ControlHolds(new LhmControlPorts(() => _hardwareOpen ? _computer.Hardware : null, Log.Write), Log.Write,
+                    null, new FileHoldJournal(FileHoldJournal.DefaultPath, Log.Write));
+                _coolingPipe = CoolingConnection.CreateHost(_holds, CoolingAllowList.CreateDefault(Log.Write).IsAllowed, Log.Write,
+                    ClientImage.ForThisService(ClientImage.CoolingClients));
+                _coolingPipe.Start();
+                _holdsSweep = new Timer(_ => _holds.Sweep(), null, CoolingConnection.SweepMs, CoolingConnection.SweepMs);
+            }
+            catch (Exception e)
+            {
+                Log.Write("cooling pipe setup failed: " + e.Message);
+            }
+
             // Optional SMBus bridge for RAM RGB (off unless sensors.json enables it).
             try
             {
@@ -174,6 +197,7 @@ namespace CaseHUD.Sensors
                 Log.Write("opening hardware failed: " + e);
             }
             Log.Write("hardware opened in " + sw.ElapsedMilliseconds + " ms");
+            _hardwareOpen = true;
 
             var failed = new HashSet<string>();
             bool first = true;
@@ -184,6 +208,7 @@ namespace CaseHUD.Sensors
                     try
                     {
                         Update(hw);
+                        _clock.Updated(hw.Identifier.ToString());
                     }
                     catch (Exception e)
                     {
@@ -193,8 +218,9 @@ namespace CaseHUD.Sensors
                 }
                 try
                 {
-                    byte[] json = Encoding.UTF8.GetBytes(Json.Tree(_computer));
+                    byte[] json = Encoding.UTF8.GetBytes(Json.Tree(_computer, hw => _clock.HardwareAgeMs(hw.Identifier.ToString())));
                     lock (_lock) _json = json;
+                    _clock.Built();
                 }
                 catch (Exception e)
                 {
@@ -247,6 +273,12 @@ namespace CaseHUD.Sensors
 
             try
             {
+                // Only requests addressed to the service itself: not a rebound DNS name.
+                if (!Http.HostCheck.Allowed(ctx.Request.Headers["Host"], Program.Port))
+                {
+                    ctx.Response.StatusCode = 403;
+                    return;
+                }
                 byte[] body;
                 lock (_lock) body = _json;
                 ctx.Response.Headers["Cache-Control"] = "no-store";
@@ -256,6 +288,9 @@ namespace CaseHUD.Sensors
                     return;
                 }
                 ctx.Response.ContentType = "application/json; charset=utf-8";
+                // How old the readings in this answer are: a hung update leaves them as they were.
+                long? age = _clock.SnapshotAgeMs();
+                if (age.HasValue) ctx.Response.Headers[SnapshotClock.AgeHeader] = age.Value.ToString(CultureInfo.InvariantCulture);
                 ctx.Response.ContentLength64 = body.Length;
                 ctx.Response.OutputStream.Write(body, 0, body.Length);
             }
@@ -275,6 +310,10 @@ namespace CaseHUD.Sensors
             try { _cancel.Cancel(); } catch { }
             try { _bridge?.Dispose(); } catch { }
             try { _ringPipe?.Dispose(); } catch { }
+            try { _coolingPipe?.Dispose(); } catch { }
+            try { _holdsSweep?.Dispose(); } catch { }
+            try { _holds?.Release(null); } catch { }
+            _hardwareOpen = false;
             try { _listener.Stop(); } catch { }
             try { _computer.Close(); } catch { }
             Log.Write("stopped");
@@ -317,7 +356,8 @@ namespace CaseHUD.Sensors
     {
         private static int _id;
 
-        public static string Tree(IComputer computer)
+        /// <param name="ageOf">How long ago the values of a top-level hardware were read; null if unknown.</param>
+        public static string Tree(IComputer computer, Func<IHardware, long?> ageOf = null)
         {
             _id = 0;
             var sb = new StringBuilder(64 * 1024);
@@ -330,15 +370,17 @@ namespace CaseHUD.Sensors
             {
                 if (!first) sb.Append(',');
                 first = false;
-                Hardware(sb, hw);
+                Hardware(sb, hw, ageOf);
             }
             sb.Append("]}]}");
             return sb.ToString();
         }
 
-        private static void Hardware(StringBuilder sb, IHardware hw)
+        private static void Hardware(StringBuilder sb, IHardware hw, Func<IHardware, long?> ageOf = null)
         {
             Open(sb, hw.Name, "");
+            long? age = ageOf == null ? null : ageOf(hw);
+            if (age.HasValue) sb.Append(",\"AgeMs\":").Append(age.Value.ToString(CultureInfo.InvariantCulture));
             sb.Append(",\"Children\":[");
             bool first = true;
             foreach (IHardware sub in hw.SubHardware)

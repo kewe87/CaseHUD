@@ -54,6 +54,44 @@ type LightingConfig struct {
 	// segments derived from it are rebuilt on every start. The value is
 	// replaced as a whole, never modified in place.
 	Sketch *sketch.Sketch `json:"sketch,omitempty"`
+	// SketchV1 is the sketch as it was stored before the 3D model (format
+	// version 1), kept verbatim as a backup. While it is set, the sketch is
+	// upgraded from it at every start with the full catalog; the first save
+	// of the editor drops it.
+	SketchV1 json.RawMessage `json:"sketch_v1,omitempty"`
+}
+
+// UnmarshalJSON reads the stored lighting configuration. A sketch of format
+// version 1 is not converted here (the part catalog is not known yet): it is
+// kept as the backup and upgraded when lighting starts.
+func (c *LightingConfig) UnmarshalJSON(data []byte) error {
+	type plain LightingConfig
+	aux := struct {
+		*plain
+		Sketch json.RawMessage `json:"sketch"`
+	}{plain: (*plain)(c)}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	c.Sketch = nil
+	if len(aux.Sketch) == 0 || string(aux.Sketch) == "null" {
+		return nil
+	}
+	var head struct {
+		Version int `json:"version"`
+	}
+	if json.Unmarshal(aux.Sketch, &head) == nil && head.Version == sketch.LegacyVersion {
+		if len(c.SketchV1) == 0 {
+			c.SketchV1 = append(json.RawMessage(nil), aux.Sketch...)
+		}
+		return nil
+	}
+	var sk sketch.Sketch
+	if err := json.Unmarshal(aux.Sketch, &sk); err != nil {
+		return err
+	}
+	c.Sketch = &sk
+	return nil
 }
 
 // lightingState is the runtime side of the lighting integration. The LED
@@ -88,6 +126,10 @@ type lightingState struct {
 
 	sketchMu sync.Mutex // one sketch change at a time; taken before lifeMu
 
+	preview        leds.Previewer // effect preview while the engine does not run
+	previewSensors func() leds.Sensors
+	previewOnce    sync.Once
+
 	ramNotes ramNotes     // status of the RAM lighting (SMBus bridge)
 	bridgeUp atomic.Bool  // the bridge pipe existed at the last probe
 	bridgeAt atomic.Int64 // time of that probe (unix nanoseconds)
@@ -111,6 +153,9 @@ type lightingState struct {
 	topoAt   time.Time // last time the controller was read (zero: never)
 	topoBusy bool
 	topo     []FanPos
+
+	tlPorts tlPortState                    // per-port plan of the TL controller (lighting_tlports.go)
+	demoCtl atomic.Pointer[demoController] // the demo fan controller of the running engine (tests)
 }
 
 // LightingCalib is the zone that shows the calibration marker.
@@ -120,12 +165,20 @@ type LightingCalib struct {
 	Pos    int    `json:"pos"`
 	// Range: the assistant for the LED count lights LEDs 1..Pos instead of one marker.
 	Range bool `json:"range,omitempty"`
+	// Identify: the whole zone blinks so its parts can be found (LightingIdentify).
+	Identify bool `json:"identify,omitempty"`
+	// Part: the orientation check of that part shows Pattern (colours as
+	// "#rrggbb") from zone LED Start on (LightingPartPattern).
+	Part    string   `json:"part,omitempty"`
+	Start   int      `json:"start,omitempty"`
+	Pattern []string `json:"pattern,omitempty"`
 }
 
 // startLighting loads the stored configuration and, if lighting is enabled,
 // starts the engine. It always starts the helper goroutine.
 func (e *Engine) startLighting() {
 	e.loadLibraryComponents()   // stored layouts may name library parts
+	e.upgradeStoredSketch()     // a sketch of the old format becomes the 3D model with the full catalog
 	e.restoreSketchComponents() // ... and sketch components: before the layout is cleaned
 	l := &e.light
 	e.mu.Lock()
@@ -163,7 +216,7 @@ func (e *Engine) startLighting() {
 	l.loadFans(lc)
 	cfg := l.cfg
 	l.mu.Unlock()
-	if lc.Enabled && e.outputAllowed() && e.Acks().AckLighting {
+	if lc.Enabled && e.outputAllowed() && e.Acks().AckLighting && e.lightingOn() {
 		e.startLightEngine(cfg, lc.TL)
 	}
 	l.lifeMu.Unlock()
@@ -207,7 +260,7 @@ func (e *Engine) resumeLighting() {
 	l.lifeMu.Lock()
 	defer l.lifeMu.Unlock()
 	l.mu.Lock()
-	if !lc.Enabled || !l.loaded || l.stopped || l.eng != nil || !e.Acks().AckLighting {
+	if !lc.Enabled || !l.loaded || l.stopped || l.eng != nil || !e.Acks().AckLighting || !e.lightingOn() {
 		l.mu.Unlock()
 		return
 	}
@@ -239,7 +292,13 @@ func (e *Engine) stopLighting() {
 func (e *Engine) lightBackends(tl bool) ([]leds.Backend, *tlTap) {
 	l := &e.light
 	if e.Demo {
-		return demoLightBackend(l.setCfgErr), nil
+		bs := demoLightBackend(l.setCfgErr)
+		for _, b := range bs {
+			if db, ok := b.(*demoBackend); ok && db.ctl != nil {
+				l.demoCtl.Store(db.ctl)
+			}
+		}
+		return bs, nil
 	}
 	// The mainboard and the LED frame of the 8.8" display are on whenever
 	// lighting is; RAM only through the SMBus bridge (named pipe, fixed name,
@@ -294,6 +353,7 @@ func (e *Engine) startLightEngine(cfg leds.Config, tl bool) {
 	l.mu.Unlock()
 	e.applyDefaultLayouts(eng)
 	eng.SetPaused(l.paused.Load()) // a sleep request that came in meanwhile
+	e.syncTLPorts()
 }
 
 // detachLightEngineLocked takes the engine out of use and keeps its
@@ -376,6 +436,7 @@ func (e *Engine) runLighting(ctx context.Context, save <-chan struct{}, done cha
 				resumeAt = now.Add(lightResume)
 			}
 			last = now
+			e.syncTLPorts() // devices found by a rescan, fan list read meanwhile
 			if !resumeAt.IsZero() && now.After(resumeAt) {
 				resumeAt = time.Time{}
 				// Device I/O: in its own goroutine, so saving and the tick go on.
@@ -494,6 +555,8 @@ type LightingDeviceView struct {
 	Unsupported bool               `json:"unsupported,omitempty"`
 	Sync        *LightingSync      `json:"sync,omitempty"` // TL controller: follow a mainboard header
 	Zones       []LightingZoneView `json:"zones"`
+	// Ports: TL controller in the hardware mode, what every port runs and why.
+	Ports []LightingPortView `json:"ports,omitempty"`
 }
 
 // LightingView is the lighting state as the GUI and the API see it.
@@ -571,6 +634,7 @@ func (e *Engine) LightingBrief() LightingBrief {
 // Lighting returns the current state.
 func (e *Engine) Lighting() LightingView {
 	e.refreshBridgeProbe() // before l.mu: it lists the pipe directory
+	e.syncTLPorts()        // before l.mu: it reads the sketch and the fan list
 	enabled, tl := e.lightingFlags()
 	l := &e.light
 	l.mu.Lock()
@@ -627,6 +691,7 @@ func (e *Engine) lightingViewLocked(enabled, tl bool) LightingView {
 		return v
 	}
 	all := l.eng.Devices()
+	lang := e.Language()
 	e.mu.Lock()
 	labels := e.cfg.Lighting.Labels // replaced as a whole on change, never modified in place
 	e.mu.Unlock()
@@ -639,11 +704,12 @@ func (e *Engine) lightingViewLocked(enabled, tl bool) LightingView {
 		}
 		if d.Backend == "lianlitl" {
 			dv.FirmwareLatest = e.firmwareNote(fwProdTLCtrl, dv.Firmware)
+			dv.Ports = l.tlPortViewsLocked(d.ID)
 		}
-		dv.Warning = l.deviceWarning(d.ID)
+		dv.Warning = l.deviceWarning(d.ID, lang)
 		dv.Unsupported = strings.HasPrefix(d.ID, unsupportedPref)
 		if dv.Unsupported {
-			dv.Message = "Nicht unterstützt – wird nicht beschrieben"
+			dv.Message = pick(lang, "Nicht unterstützt – wird nicht beschrieben", "Not supported – not written to")
 		}
 		mirror, mirrorFrom := false, ""
 		if hasSetting(d.Settings, "syncSource") {
@@ -711,6 +777,7 @@ var lightingFeatured = []struct{ name, de, en string }{
 	{"wave", "Farbwelle", "Color wave"},
 	{"sensor", "Temperatur", "Temperature"},
 	{"meteor", "Meteor", "Meteor"},
+	{"orbit", "Umlauf", "Orbit"},
 	{"screen", "Bildschirm-Ambilight", "Screen ambilight"},
 	{"audio", "Audio-Visualizer", "Audio visualizer"},
 }
@@ -754,7 +821,7 @@ var lightingParamDE = map[string]string{
 	"sensor": "Sensor", "sensor.min": "Wert für untere Farbe", "sensor.max": "Wert für obere Farbe",
 	"sensor.low": "Untere Farbe", "sensor.high": "Obere Farbe", "smoothing": "Glättung",
 	"colors": "Genutzte Farben", "path": "Verlauf", "mirror": "Zur Mitte spiegeln", "reverse": "Richtung umkehren",
-	"tail":    "Schweiflänge",
+	"tail": "Schweiflänge", "dot": "Punktgröße", "dots": "Anzahl Punkte", "originX": "Mittelpunkt X (%)", "originY": "Mittelpunkt Y (%)",
 	"display": "Bildschirm (0 = Hauptbildschirm)", "area": "Bereich", "saturation": "Sättigung (%)", "fps": "Aufnahmerate (Bilder/s)",
 	"mode": "Modus", "bands": "Bänder", "sensitivity": "Empfindlichkeit (%)", "decay": "Abklingen", "rainbow": "Regenbogenfarben",
 	"low": "Untere Farbe", "high": "Obere Farbe",
@@ -911,6 +978,9 @@ func (e *Engine) patchLighting(p LightingPatch) (LightingView, error) {
 	if p.Enabled != nil && *p.Enabled && !e.Acks().AckLighting {
 		return LightingView{}, fmt.Errorf("%w: confirm the lighting notice in the CaseHUD window first", ErrAckRequired)
 	}
+	if p.Enabled != nil && *p.Enabled && !e.lightingOn() {
+		return LightingView{}, lightErr("lighting is switched off in the settings")
+	}
 	if p.TL != nil && e.Demo && *p.TL {
 		return LightingView{}, lightErr("TL fans are not available in the demo")
 	}
@@ -930,7 +1000,7 @@ func (e *Engine) patchLighting(p LightingPatch) (LightingView, error) {
 		}
 		l.mu.Lock()
 		running := l.eng != nil
-		need := (running && (!wantEnabled || wantTL != tl)) || (wantEnabled && !running)
+		need := (running && (!wantEnabled || wantTL != tl)) || (wantEnabled && !running && e.lightingOn())
 		if need && !exclusive {
 			l.mu.Unlock()
 			l.lifeMu.RUnlock()
@@ -946,6 +1016,8 @@ func (e *Engine) patchLighting(p LightingPatch) (LightingView, error) {
 		}
 		if err == nil {
 			v.Preset = e.ActiveLightingPreset() // after the locks: it reads the config again
+			e.syncTLPorts()                     // the change may move what the TL ports derive
+			e.fillTLPorts(&v)
 		}
 		return v, err
 	}
@@ -1176,7 +1248,7 @@ func (e *Engine) patchLightingLocked(p LightingPatch, wantEnabled, wantTL, need 
 		l.mu.Unlock()
 		locked = false
 		stopLightEngine(old) // device I/O outside l.mu
-		if wantEnabled {
+		if wantEnabled && e.lightingOn() {
 			e.startLightEngine(cfg, wantTL)
 		}
 		l.mu.Lock()
@@ -1315,6 +1387,14 @@ func (e *Engine) lightingMarker(device, zone string, c LightingCalib, timeout ti
 	return nil
 }
 
+// LightingIdentify makes one whole zone blink white for a while, so the user
+// can see which parts hang on it (DELETE /api/lighting/calibrate ends it
+// earlier). Nothing is stored or written to a device permanently.
+func (e *Engine) LightingIdentify(device, zone string) error {
+	return e.lightingMarker(device, zone, LightingCalib{Device: device, Zone: zone, Identify: true}, lightCalibTimeout,
+		func(eng *leds.Engine) error { return eng.Identify(device, zone) })
+}
+
 // LightingEndCalibration returns to the effect.
 func (e *Engine) LightingEndCalibration() {
 	l := &e.light
@@ -1387,6 +1467,14 @@ func (t lightTopology) Fans() []FanPos {
 		l.topoBusy = true
 		go t.e.refreshTopology(tap)
 	}
+	return append([]FanPos(nil), l.topo...)
+}
+
+// CachedFans is the list read last, without asking the controller.
+func (t lightTopology) CachedFans() []FanPos {
+	l := &t.e.light
+	l.topoMu.Lock()
+	defer l.topoMu.Unlock()
 	return append([]FanPos(nil), l.topo...)
 }
 
@@ -1615,7 +1703,7 @@ func (d *tapDevice) Configure(p leds.Params) error {
 		return nil
 	}
 	decl := c.Settings()
-	clean, err := cleanParams(decl, migrateLightSettings(p))
+	clean, err := cleanParams(decl, dropStalePortSettings(decl, migrateLightSettings(p)))
 	if err == nil {
 		err = c.Configure(paramsWithDefaults(decl, clean))
 	}
@@ -1665,7 +1753,7 @@ func (d *tapDevice) Close() error {
 // resizable header, RAM, a fan controller and a keyboard that another RGB
 // program (simulated) is driving.
 func demoLightBackend(report func(id string, err error)) []leds.Backend {
-	fans := &fake.Device{DeviceID: "demo:fans", DeviceName: "Demo fan controller", ZoneList: []leds.Zone{
+	fans := &fake.Device{DeviceID: demoFansID, DeviceName: "Demo fan controller", ZoneList: []leds.Zone{
 		{ID: "port2", Name: "Port 2", Count: 2, Max: 2, Order: "RGB"},
 		{ID: "port3", Name: "Port 3", Count: 6, Max: 6, Order: "RGB"},
 	}}

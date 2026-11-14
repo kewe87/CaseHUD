@@ -135,3 +135,32 @@ func TestCaptureRevokeRoute(t *testing.T) {
 		t.Fatalf("v1 after revocation: %d", c)
 	}
 }
+
+func TestBootLogoRemoveNeedsConfirmAndStyleIsChecked(t *testing.T) {
+	_, ts := testServerAck(t, nil, true)
+	do := func(method, path, body string) int {
+		req, _ := http.NewRequest(method, ts.URL+path, strings.NewReader(body))
+		req.Header.Set("X-Token", "secret")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	if c := do("POST", "/api/boot-logo/remove", `{}`); c != http.StatusConflict {
+		t.Fatalf("without confirm: %d", c)
+	}
+	if c := do("POST", "/api/boot-logo/remove", `{"confirm":true,"path":"/"}`); c >= 500 {
+		t.Fatalf("with confirm: %d", c)
+	}
+	if c := do("GET", "/api/boot-logo", ""); c != 200 {
+		t.Fatalf("status: %d", c)
+	}
+	if c := do("PUT", "/api/tl-start-image", `{"style":"bogus"}`); c != http.StatusBadRequest {
+		t.Fatalf("bad style: %d", c)
+	}
+	if c := do("PUT", "/api/tl-start-image", `{"style":"neutral"}`); c != 200 {
+		t.Fatalf("neutral: %d", c)
+	}
+}

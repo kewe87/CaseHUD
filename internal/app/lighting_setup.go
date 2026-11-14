@@ -261,7 +261,8 @@ type LightingTemplateView struct {
 	Name        textMap                `json:"name"`
 	Description textMap                `json:"description,omitempty"`
 	Zones       []LightingTemplateInfo `json:"zones"`
-	TLSync      bool                   `json:"tlSync"` // the fan controller is set to follow the header
+	TLSync      bool                   `json:"tlSync"`             // the fan controller is set to follow the header
+	SyncZone    string                 `json:"syncZone,omitempty"` // name of that header on this system
 }
 
 // LightingTemplateInfo is one zone a template will set.
@@ -386,7 +387,16 @@ func (e *Engine) LightingTemplates() []LightingTemplateView {
 		if !templateMatches(t, devs) {
 			continue
 		}
-		v := LightingTemplateView{ID: t.ID, Name: t.Name, Description: t.Description, Zones: []LightingTemplateInfo{}, TLSync: t.TLSync != "" && tlThere}
+		v := LightingTemplateView{ID: t.ID, Name: t.Name, Description: t.Description, Zones: []LightingTemplateInfo{}}
+		if t.TLSync != "" && tlThere {
+			backend, zone, _ := strings.Cut(t.TLSync, "/")
+			if _, sz, ok := zoneTarget(devs, backend, zone); ok {
+				v.TLSync, v.SyncZone = true, sz.Name
+				if v.SyncZone == "" {
+					v.SyncZone = sz.ID
+				}
+			}
+		}
 		for _, z := range t.Zones {
 			d, dz, ok := zoneTarget(devs, z.Backend, z.Zone)
 			if !ok || (!dz.Resizable && len(z.Segments) == 0) {
@@ -422,6 +432,9 @@ func (e *Engine) ApplyLightingTemplate(id, lang string) (LightingTemplateResult,
 	if eng == nil {
 		return LightingTemplateResult{}, lightErr("lighting is off")
 	}
+	if lang != "de" && lang != "en" {
+		lang = e.Language()
+	}
 	e.loadLibraryComponents()
 	devs := eng.Devices()
 	if !templateMatches(*tpl, devs) {
@@ -431,6 +444,9 @@ func (e *Engine) ApplyLightingTemplate(id, lang string) (LightingTemplateResult,
 	res := LightingTemplateResult{Applied: []string{}, Skipped: []string{}}
 	patch := LightingPatch{Devices: map[string]LightingDevicePatch{}}
 	label := func(z LightingTemplateZone) string {
+		if s := z.Label[lang]; s != "" {
+			return s
+		}
 		if s := z.Label["de"]; s != "" {
 			return s
 		}
@@ -439,11 +455,11 @@ func (e *Engine) ApplyLightingTemplate(id, lang string) (LightingTemplateResult,
 	for _, z := range tpl.Zones {
 		d, dz, ok := zoneTarget(devs, z.Backend, z.Zone)
 		if !ok {
-			res.Skipped = append(res.Skipped, label(z)+": Zone nicht gefunden")
+			res.Skipped = append(res.Skipped, label(z)+pick(lang, ": Zone nicht gefunden", ": zone not found"))
 			continue
 		}
 		if d.State != leds.StateOK {
-			res.Skipped = append(res.Skipped, label(z)+": Gerät nicht aktiv")
+			res.Skipped = append(res.Skipped, label(z)+pick(lang, ": Gerät nicht aktiv", ": device not active"))
 			continue
 		}
 		var segs []leds.Segment
@@ -453,7 +469,7 @@ func (e *Engine) ApplyLightingTemplate(id, lang string) (LightingTemplateResult,
 			for i, s := range z.Segments {
 				if _, known := leds.LookupComponent(s.Component); s.Shape == "component" && !known {
 					s.Shape, s.Component = "line", ""
-					res.Skipped = append(res.Skipped, label(z)+": Bauteil nicht geladen, als Linie angelegt (Library aktualisieren)")
+					res.Skipped = append(res.Skipped, label(z)+pick(lang, ": Bauteil nicht geladen, als Linie angelegt (Library aktualisieren)", ": part not loaded, created as a line (update the library)"))
 				}
 				segs[i] = s
 			}
@@ -463,7 +479,7 @@ func (e *Engine) ApplyLightingTemplate(id, lang string) (LightingTemplateResult,
 			continue // a fixed zone has its count already
 		}
 		if n := templateSegmentLEDs(segs); dz.Max > 0 && n > dz.Max {
-			res.Skipped = append(res.Skipped, fmt.Sprintf("%s: höchstens %d LEDs", label(z), dz.Max))
+			res.Skipped = append(res.Skipped, fmt.Sprintf(pick(lang, "%s: höchstens %d LEDs", "%s: at most %d LEDs"), label(z), dz.Max))
 			continue
 		}
 		dp := patch.Devices[d.ID]
@@ -504,10 +520,10 @@ func (e *Engine) ApplyLightingTemplate(id, lang string) (LightingTemplateResult,
 						d.ID: {Settings: map[string]any{"syncSource": src}}}})
 				}
 				if err != nil {
-					res.Skipped = append(res.Skipped, "Lüfter-Controller: "+err.Error())
+					res.Skipped = append(res.Skipped, pick(lang, "Lüfter-Controller: ", "Fan controller: ")+err.Error())
 				} else {
 					view = v
-					res.Applied = append(res.Applied, "Lüfter-Controller folgt "+zone)
+					res.Applied = append(res.Applied, pick(lang, "Lüfter-Controller folgt ", "Fan controller follows ")+zone)
 				}
 			}
 		}

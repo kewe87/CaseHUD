@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -75,17 +76,47 @@ func TestRingBootNotifierDebouncesAndLatestWins(t *testing.T) {
 }
 
 func TestRingBootNotifierSkipsUnchangedAndLogsOnce(t *testing.T) {
-	calls := 0
+	var calls atomic.Int32
 	n := &ringBootNotifier{
 		wait:  time.Millisecond,
 		state: func() ringBootState { return ringBootState{mode: enram.RingBootNone} },
-		send:  func(string, uint8, uint8, uint8) error { calls++; return errors.New("boom") },
+		send:  func(string, uint8, uint8, uint8) error { calls.Add(1); return errors.New("boom") },
 	}
 	for i := 0; i < 3; i++ {
 		n.poke()
 		time.Sleep(20 * time.Millisecond)
 	}
-	if calls != 1 {
-		t.Fatalf("calls %d", calls)
+	if c := calls.Load(); c != 1+ringBootRetries { // the report and its retries, then left alone
+		t.Fatalf("calls %d", c)
+	}
+}
+
+func TestRingBootNotifierRetriesAndNeverOverlaps(t *testing.T) {
+	var calls, running, maxRunning atomic.Int32
+	n := &ringBootNotifier{
+		wait:  time.Millisecond,
+		state: func() ringBootState { return ringBootState{mode: enram.RingBootOff} },
+		send: func(string, uint8, uint8, uint8) error {
+			r := running.Add(1)
+			defer running.Add(-1)
+			if r > maxRunning.Load() {
+				maxRunning.Store(r)
+			}
+			time.Sleep(15 * time.Millisecond) // longer than the wait
+			if calls.Add(1) == 1 {
+				return errors.New("pipe closed")
+			}
+			return nil
+		},
+	}
+	n.poke()
+	time.Sleep(5 * time.Millisecond)
+	n.poke() // arrives while the first report is still going out
+	time.Sleep(120 * time.Millisecond)
+	if maxRunning.Load() != 1 {
+		t.Fatalf("%d reports at once", maxRunning.Load())
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("calls %d, want the failed one and one retry", calls.Load())
 	}
 }

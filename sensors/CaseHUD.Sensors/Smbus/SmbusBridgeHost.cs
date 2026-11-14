@@ -171,6 +171,8 @@ namespace CaseHUD.Sensors.Smbus
         private readonly long _idleMs;
         private readonly int _sweepMs;
         private readonly ConnectionTracker _tracker;
+        private readonly Func<int, bool> _clientAllowed;
+        private int _refused;
         private readonly ManualResetEvent _stop = new ManualResetEvent(false);
         private Thread _accept;
         private Timer _sweepTimer;
@@ -178,8 +180,10 @@ namespace CaseHUD.Sensors.Smbus
         private int _errors;
 
         public NamedPipeBridgeServer(string name, Action<Stream> serve, Action<string> log,
-            int maxConnections = MaxConnections, int maxPerProcess = MaxPerProcess, long idleMs = IdleMs, int sweepMs = SweepMs)
+            int maxConnections = MaxConnections, int maxPerProcess = MaxPerProcess, long idleMs = IdleMs, int sweepMs = SweepMs,
+            Func<int, bool> clientAllowed = null)
         {
+            _clientAllowed = clientAllowed;
             _name = name;
             _serve = serve;
             _log = log;
@@ -313,7 +317,15 @@ namespace CaseHUD.Sensors.Smbus
 
         private void Accept(NamedPipeServerStream pipe)
         {
-            Stream stream = _tracker.TryAdd(pipe, ClientProcessId(pipe));
+            int pid = ClientProcessId(pipe);
+            if (_clientAllowed != null && !_clientAllowed(pid))
+            {
+                // Before the connection takes a slot or reads a byte.
+                if (++_refused <= 3 || _refused % 100 == 0) _log("SMBus bridge: refused a client (process " + pid + ", " + _refused + " so far): not a program of this installation");
+                pipe.Dispose();
+                return;
+            }
+            Stream stream = _tracker.TryAdd(pipe, pid);
             if (stream == null)
             {
                 pipe.Dispose(); // limit reached or shutting down

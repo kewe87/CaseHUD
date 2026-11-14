@@ -3,15 +3,18 @@
 // ---------- API ----------
 const TOKEN = new URLSearchParams(location.search).get("t") || "";
 
-async function api(method, path, body, raw) {
-  const opts = { method, headers: { "X-Token": TOKEN } };
+async function api(method, path, body, raw, headers) {
+  const opts = { method, headers: { "X-Token": TOKEN, ...headers } };
   if (body instanceof FormData) opts.body = body;
   else if (body !== undefined) {
     opts.body = JSON.stringify(body);
     opts.headers["Content-Type"] = "application/json";
   }
   const res = await fetch(path, opts);
-  if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
+  if (!res.ok) {
+    const msg = (await res.text()).trim() || res.statusText;
+    throw Object.assign(new Error(srvMsg(msg)), { status: res.status, raw: msg });
+  }
   if (raw) return res;
   return res.status === 204 ? null : res.json();
 }
@@ -126,10 +129,11 @@ async function refresh() {
   if (state.language && state.language !== LANG && !langPending && lg === langGen) setLang(state.language);
   renderAll();
   if (typeof checkDisclaimer === "function") checkDisclaimer();
+  if (typeof checkWizard === "function") checkWizard();
 }
 function renderAll() {
-  renderStatus(); renderPanels(); renderArrange(); renderDesigns(); renderLayouts(); renderMedia(); renderSettings(); if (typeof renderDevices === "function") renderDevices(); loadRotation();
-  if (drawerId) renderDrawer();
+  renderModules(); renderStatus(); renderPanels(); renderArrange(); renderDesigns(); renderLayouts(); renderMedia(); renderSettings(); if (typeof renderDevices === "function") renderDevices(); if (typeof coolRelang === "function") coolRelang(); loadRotation();
+  if (drawerId) renderDisplayDrawer();
 }
 
 const designById = (id) => state.designs.find((d) => d.id === id);
@@ -165,13 +169,58 @@ $("#status-pill").addEventListener("click", () => $('[data-tab="settings"]').cli
 // ---------- tabs / header ----------
 for (const b of $$("#tabs button")) {
   b.addEventListener("click", () => {
-    if (drawerId) closeDrawer();
+    if (drawerId) closeDisplayDrawer();
     $$("#tabs button").forEach((x) => x.classList.toggle("active", x === b));
     $$(".tab").forEach((tab) => tab.classList.toggle("active", tab.id === "tab-" + b.dataset.tab));
     b.scrollIntoView({ block: "nearest", inline: "nearest" });
   });
 }
 const showTab = (name) => $('[data-tab="' + name + '"]').click();
+
+// ---------- core areas ----------
+// Display, lighting and cooling run on their own; whatever belongs to an area
+// that is off disappears. The cooling tab also follows the controller (cooling.js).
+function modulesNow() {
+  return { display: true, lighting: true, cooling: true, ...(state.modules || {}) };
+}
+function ensureTabShown() {
+  const cur = $("#tabs button.active");
+  if (cur && !cur.hidden && !cur.classList.contains("area-off")) return;
+  const next = $$("#tabs button").find((b) => !b.hidden && !b.classList.contains("area-off"));
+  if (next) next.click();
+}
+function renderModules() {
+  const m = modulesNow();
+  for (const e of $$("[data-area]")) e.classList.toggle("area-off", !m[e.dataset.area]);
+  const left = Object.values(m).filter(Boolean).length;
+  for (const cb of $$("[data-mod]")) {
+    cb.checked = !!m[cb.dataset.mod];
+    cb.disabled = cb.checked && left === 1; // the last active area stays on
+  }
+  $("#mod-hint").hidden = left > 1;
+  if (!m.cooling) $('[data-tab="cooling"]').hidden = true;
+  ensureTabShown();
+}
+// Another window or the API may have switched an area.
+setInterval(async () => {
+  if (document.hidden) return;
+  try {
+    const m = await api("GET", "/api/modules");
+    if (JSON.stringify(m) === JSON.stringify(modulesNow())) return;
+    state.modules = m;
+    renderModules();
+    refresh().catch(() => {});
+  } catch { /* offline: the next round asks again */ }
+}, 2000);
+for (const cb of $$("[data-mod]")) {
+  cb.addEventListener("change", async () => {
+    const next = { ...modulesNow(), [cb.dataset.mod]: cb.checked };
+    cb.disabled = true;
+    try { state.modules = await api("PUT", "/api/modules", next); toast(t("saved")); }
+    catch (e) { toast(e.message, true); }
+    try { await refresh(); } catch { renderModules(); }
+  });
+}
 $("#btn-rescan").addEventListener("click", async () => {
   const b = $("#btn-rescan");
   b.disabled = true;
@@ -241,7 +290,9 @@ function renderPanels() {
     // A category, not the device name again: the card below carries that.
     const title = g.tl ? t("group.tl", { port: g.port }) : g.panels.every(isWideP) ? t("group.wide") : t("group.other");
     const head = el("h3", { class: "section" }, el("span", {}, title,
-      g.tl ? el("span", { class: "count" }, t("group.tlCount", { n: g.panels.length })) : null));
+      el("span", { class: "count" }, g.tl
+        ? (g.panels.length === 1 ? t("group.tlCount1") : t("group.tlCount", { n: g.panels.length }))
+        : (g.panels.length === 1 ? t("group.dispCount1") : t("group.dispCount", { n: g.panels.length })))));
     if (g.tl && g.panels.length >= 2) {
       head.append(el("span", { class: "actions" },
         el("button", { class: "ghost", "data-menu": "1",
@@ -275,7 +326,7 @@ const panelNumber = (p) => p.number || state.panels.findIndex((x) => x.id === p.
 
 function panelCard(p) {
   const cfg = p.config;
-  return el("button", { class: "panel-card" + (isWideP(p) ? " wide" : "") + (isTallP(p) ? " tall" : "") + (drawerId === p.id ? " selected" : ""), "data-panel": p.id, onclick: () => openDrawer(p.id) },
+  return el("button", { class: "panel-card" + (isWideP(p) ? " wide" : "") + (isTallP(p) ? " tall" : "") + (drawerId === p.id ? " selected" : ""), "data-panel": p.id, onclick: () => openDisplayDrawer(p.id) },
     el("div", { class: "well" },
       el("span", { class: "num-badge", title: t("btn.identify") }, String(panelNumber(p))),
       el("div", { class: "screen" + (p.round ? " round" : "") + (isTallP(p) ? " tall" : ""), style: { aspectRatio: ratio(p.width, p.height) } }, el("img", { alt: "", "data-preview": p.id }))),
@@ -340,7 +391,7 @@ async function setPanelNow(id, patch, quiet, job) {
       const changed = !sameJSON(cur.config, res);
       replaceConfig(cur, res);
       showPill(cur);
-      if (changed && drawerId === id) renderDrawer();
+      if (changed && drawerId === id) renderDisplayDrawer();
     }
   } catch (e) {
     toast(e.message, true);
@@ -365,7 +416,7 @@ async function resyncPanel(id) {
     replaceConfig(cur, fresh.config);
     showPill(cur);
     renderPanels();
-    if (drawerId === id) renderDrawer();
+    if (drawerId === id) renderDisplayDrawer();
   } catch { /* the next state poll fixes it */ }
 }
 // Brightness and rotation are stored in the device's flash memory: they are
@@ -586,7 +637,7 @@ new MutationObserver(() => {
 let drawerId = null;
 let drawerHint = () => {}; // redraws the colour scheme hint of the open drawer
 let drawerOpener = null; // what had the focus before the drawer opened, to give it back
-function openDrawer(id) {
+function openDisplayDrawer(id) {
   const wasOpen = !$("#drawer").hidden;
   if (!wasOpen) drawerOpener = document.activeElement;
   drawerId = id;
@@ -594,11 +645,11 @@ function openDrawer(id) {
   $("#scrim").hidden = false;
   document.body.classList.add("drawer-open");
   $$(".panel-card").forEach((c) => c.classList.toggle("selected", c.dataset.panel === id));
-  renderDrawer();
+  renderDisplayDrawer();
   pollState(); // another window or the API may have changed this display, or a scene took it over, since the last state
   $("#drawer").focus({ preventScroll: true }); // keyboard and screen reader users land in the dialog
 }
-function closeDrawer() {
+function closeDisplayDrawer() {
   const id = drawerId;
   const inside = !document.activeElement || document.activeElement === document.body || $("#drawer").contains(document.activeElement);
   drawerId = null;
@@ -613,8 +664,8 @@ function closeDrawer() {
   }
   drawerOpener = null;
 }
-$("#dr-close").addEventListener("click", closeDrawer);
-$("#scrim").addEventListener("click", closeDrawer);
+$("#dr-close").addEventListener("click", closeDisplayDrawer);
+$("#scrim").addEventListener("click", closeDisplayDrawer);
 // Escape closes the topmost thing: menu, then an editor, then the drawer
 // (native dialogs close themselves).
 document.addEventListener("keydown", (e) => {
@@ -623,13 +674,13 @@ document.addEventListener("keydown", (e) => {
   else if (document.querySelector("dialog[open]")) return;
   else if (!$("#editor").hidden) closeEditor();
   else if (!$("#layout-editor").hidden) closeLayoutEditor(false);
-  else if (drawerId) closeDrawer();
+  else if (drawerId) closeDisplayDrawer();
 });
 
-function renderDrawer() {
+function renderDisplayDrawer() {
   const p = state.panels.find((x) => x.id === drawerId);
   if ($("#dr-content").dataset.for !== drawerId) { delete $("#dr-content").dataset.scrolled; $("#dr-content").dataset.for = drawerId; }
-  if (!p) { closeDrawer(); return; }
+  if (!p) { closeDisplayDrawer(); return; }
   // The drawer works on the display's own config object: every change goes
   // through setPanel, which updates it at once and sends only that change.
   const cfg = p.config;
@@ -642,7 +693,7 @@ function renderDrawer() {
   // What is being typed stays, whatever redraws the drawer meanwhile.
   if (document.activeElement !== label) label.value = cfg.name || "";
   label.onchange = () => {
-    setPanel(p.id, { name: label.value.trim() }, true).then(() => { renderPanels(); if (document.activeElement !== label) renderDrawer(); });
+    setPanel(p.id, { name: label.value.trim() }, true).then(() => { renderPanels(); if (document.activeElement !== label) renderDisplayDrawer(); });
   };
   $("#dr-identify").onclick = () => api("POST", `/api/panels/${encodeURIComponent(p.id)}/identify`).then(() => toast(t("identify.done"))).catch((e) => toast(e.message, true));
   $("#dr-meta").textContent = `${deviceLabel(p).replace(/ \(.*\)$/, "")} · ${p.width}×${p.height}`;
@@ -929,7 +980,7 @@ function fieldEditor(p, cfg, change) {
 /** @type {Set<string> & { touched?: boolean }} */
 const openSets = new Set();
 function renderDrawerContent(p, cfg, change) {
-  change = change || ((patch) => { setPanel(p.id, patch); renderDrawer(); });
+  change = change || ((patch) => { setPanel(p.id, patch); renderDisplayDrawer(); });
   const box = $("#dr-content");
   box.replaceChildren();
   if (isBarP(p) && cfg.mode === "design") {
@@ -997,7 +1048,7 @@ function renderTarget(box, p, cfg, change) {
   } else if (cfg.mode === "media") {
     if (!state.media.length) {
       box.append(el("p", { class: "muted" }, t("media.none"),
-        el("button", { class: "link", onclick: () => { closeDrawer(); $('[data-tab="media"]').click(); } }, t("media.addLink"))));
+        el("button", { class: "link", onclick: () => { closeDisplayDrawer(); $('[data-tab="media"]').click(); } }, t("media.addLink"))));
     } else {
       box.append(el("div", { class: "field" }, el("span", {}, t("field.file")),
         el("div", { class: "pick-grid" }, state.media.map((m) => {
@@ -2402,14 +2453,14 @@ Object.assign(STRINGS.de, {
   "theme.hint.reset": "Felder mit eigenem Farbschema werden beim Umschalten ebenfalls auf dieses Schema gestellt.",
   "applied.partial": "{ok} von {n} Displays aktualisiert, {fail} fehlgeschlagen",
   "ed.discard": "Änderungen am Design verwerfen?",
-  "live.busy": "Live-Vorschau nicht verfügbar: Es sind zu viele CaseHUD-Fenster offen. Schließe andere Fenster, der Versuch wird wiederholt.",
+  "live.busy": "Live-Vorschau nicht verfügbar: zu viele CaseHUD-Fenster offen. Andere Fenster schließen; es wird erneut versucht.",
   "int.half": "0,5 s",
 });
 Object.assign(STRINGS.en, {
   "theme.hint.reset": "Fields with their own color scheme are set to this scheme as well when you switch.",
   "applied.partial": "{ok} of {n} displays updated, {fail} failed",
   "ed.discard": "Discard changes to this design?",
-  "live.busy": "Live preview unavailable: too many CaseHUD windows are open. Close other windows; it will try again.",
+  "live.busy": "Live preview unavailable: too many CaseHUD windows open. Close other windows; a retry follows.",
   "int.half": "0.5 s",
 });
 
@@ -2450,13 +2501,16 @@ function pollState() {
       }
       s.panels = old;
     }
+    // the areas arrive here too: render them now, or the modules check below sees them as shown already
+    const modsChanged = JSON.stringify(s.modules || null) !== JSON.stringify(state.modules || null);
     state = s;
+    if (modsChanged && !changed) renderModules();
     renderStatus();
     renderUpdate();
     if (changed) renderAll();
     else if (cfgChanged.size) {
       renderPanels();
-      if (drawerId && cfgChanged.has(drawerId)) renderDrawer();
+      if (drawerId && cfgChanged.has(drawerId)) renderDisplayDrawer();
     }
     if (heldChanged) drawerHint();
   }).catch(() => {});

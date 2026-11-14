@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -148,6 +149,7 @@ const (
 
 var (
 	trayReady atomic.Bool // systray's onReady ran: the icon exists
+	alarmBox  atomic.Bool // a cooling alarm's box is on screen
 	mainTID   uint32
 )
 
@@ -163,7 +165,8 @@ var (
 // runs and Shell_TrayWnd is polled every 10 s; when explorer shows up the loop
 // ends and systray.Run takes the thread. (After that the library re-adds the
 // icon itself on "TaskbarCreated", i.e. when explorer restarts.) noTray skips
-// the tray entirely.
+// the tray until a "TaskbarCreated" arrives (see taskbar_windows.go), which
+// also ends the wait above sooner than the 10 s poll.
 func runUI(guiURL string, openNow, noTray bool) {
 	mainTID = windows.GetCurrentThreadId()
 	var msg winMsg
@@ -185,17 +188,29 @@ func runUI(guiURL string, openNow, noTray bool) {
 		procPostThreadMessageW.Call(uintptr(mainTID), wmQuit, 0, 0) // ends whichever loop runs
 	}()
 
+	// A taskbar that appears later (shell switch, explorer restart) starts the
+	// tray, also after --no-tray. With the tray running the library takes over.
+	watchTaskbar(func() {
+		if startTrayOnTaskbar(trayStarted.Load()) {
+			log.Println("taskbar created, adding the tray icon")
+			procPostThreadMessageW.Call(uintptr(mainTID), wmTaskOK, 0, 0)
+		}
+	})
+
 	if noTray {
-		log.Println("tray disabled (--no-tray)")
-		plainLoop(nil)
-		return
-	}
-	if !taskbarPresent() {
+		// With a taskbar present at start nothing changes: no tray. Only a
+		// "TaskbarCreated" after the start switches it on.
+		log.Println("tray disabled (--no-tray) until the taskbar is created")
+		if !plainLoop(func(m *winMsg) bool { return m.message == wmTaskOK }) {
+			return
+		}
+	} else if !taskbarPresent() {
 		log.Println("no taskbar found, running without tray icon (retrying every 10 s)")
 		if !waitForTaskbar() {
 			return
 		}
 	}
+	trayStarted.Store(true)
 	systray.Run(func() {
 		systray.SetIcon(icon.ICO(16, 32, 48))
 		systray.SetTitle("CaseHUD")
@@ -302,6 +317,33 @@ func setWindowIcon(hwnd windows.HWND) {
 			procSendMessageW.Call(uintptr(hwnd), wmSetIcon, uintptr(s.kind), h)
 		}
 	}
+}
+
+// showCoolingAlarm shows an alarm where it is seen with no CaseHUD window open: in
+// a box in front of everything and in the tray icon's tooltip. A second alarm
+// waits behind an open box only in the tooltip and the window's banner.
+func showCoolingAlarm(a app.CoolingAlarm) {
+	german := false
+	if langs, err := windows.GetUserPreferredUILanguages(windows.MUI_LANGUAGE_NAME); err == nil && len(langs) > 0 {
+		german = strings.HasPrefix(strings.ToLower(langs[0]), "de")
+	}
+	tip := "CaseHUD"
+	if a.Kind != "" {
+		tip = a.Message(german)
+	}
+	if trayReady.Load() {
+		systray.SetTooltip(tip)
+	}
+	if a.Kind == "" || !alarmBox.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		defer alarmBox.Store(false)
+		t, _ := windows.UTF16PtrFromString("CaseHUD")
+		m, _ := windows.UTF16PtrFromString(tip)
+		const mbIconWarning, mbSetForeground, mbTopmost = 0x30, 0x10000, 0x40000
+		procMessageBoxW.Call(0, uintptr(unsafe.Pointer(m)), uintptr(unsafe.Pointer(t)), mbIconWarning|mbSetForeground|mbTopmost)
+	}()
 }
 
 func showError(msg string) {

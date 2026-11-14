@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -129,7 +131,10 @@ type winDevice struct {
 	h      windows.Handle
 	outLen int
 	inLen  int
+	stuck  atomic.Bool // a request ignored its cancel
 }
+
+var errStuck = errors.New("hid: request does not end")
 
 func open(info Info) (Device, error) {
 	_, caps, err := query(info.Path)
@@ -143,31 +148,57 @@ func open(info Info) (Device, error) {
 	return &winDevice{h: h, outLen: int(caps.OutputReportByteLength), inLen: int(caps.InputReportByteLength)}, nil
 }
 
-// overlapped runs one async ReadFile/WriteFile with a timeout.
-func (d *winDevice) overlapped(timeoutMS int, start func(ov *windows.Overlapped, n *uint32) error) (int, error) {
+// request is one overlapped read or write. Windows keeps the addresses of both
+// fields until the request ends, so they may not live on a goroutine stack: the
+// stack moves when it grows or shrinks, and the cancel would then name an address
+// Windows does not know, with the request and whoever waits for it left hanging.
+type request struct {
+	ov  windows.Overlapped
+	buf []byte
+}
+
+// abandoned keeps requests alive that never ended, because Windows may still
+// write to them.
+var (
+	abandonedMu sync.Mutex
+	abandoned   []*request
+)
+
+// cancelWaitMS bounds the wait for a cancelled request.
+const cancelWaitMS = 1000
+
+// overlapped runs one async ReadFile/WriteFile on buf and always comes back
+// within timeoutMS + cancelWaitMS. A request that ignores its cancel leaves the
+// device unusable until it is opened again.
+func (d *winDevice) overlapped(timeoutMS int, start func(windows.Handle, []byte, *uint32, *windows.Overlapped) error, buf []byte) (int, error) {
+	if d.stuck.Load() {
+		return 0, errStuck
+	}
 	ev, err := windows.CreateEvent(nil, 1, 0, nil)
 	if err != nil {
 		return 0, err
 	}
 	defer windows.CloseHandle(ev)
-	ov := windows.Overlapped{HEvent: ev}
+	r := &request{ov: windows.Overlapped{HEvent: ev}, buf: buf}
 	var n uint32
-	if err := start(&ov, &n); err != nil && !errors.Is(err, windows.ERROR_IO_PENDING) {
+	if err := start(d.h, r.buf, &n, &r.ov); err != nil && !errors.Is(err, windows.ERROR_IO_PENDING) {
 		return 0, err
 	}
-	ev2, err := windows.WaitForSingleObject(ev, uint32(timeoutMS))
-	if err != nil {
-		return 0, err
+	if w, _ := windows.WaitForSingleObject(ev, uint32(timeoutMS)); w == windows.WAIT_OBJECT_0 {
+		if err := windows.GetOverlappedResult(d.h, &r.ov, &n, false); err != nil {
+			return 0, err
+		}
+		return int(n), nil
 	}
-	if ev2 == uint32(windows.WAIT_TIMEOUT) {
-		windows.CancelIoEx(d.h, &ov)
-		windows.GetOverlappedResult(d.h, &ov, &n, true)
-		return 0, ErrTimeout
+	windows.CancelIoEx(d.h, &r.ov)
+	if w, _ := windows.WaitForSingleObject(ev, cancelWaitMS); w != windows.WAIT_OBJECT_0 {
+		d.stuck.Store(true)
+		abandonedMu.Lock()
+		abandoned = append(abandoned, r)
+		abandonedMu.Unlock()
+		return 0, errStuck
 	}
-	if err := windows.GetOverlappedResult(d.h, &ov, &n, false); err != nil {
-		return 0, err
-	}
-	return int(n), nil
+	return 0, ErrTimeout
 }
 
 func (d *winDevice) Write(buf []byte) (int, error) {
@@ -180,9 +211,7 @@ func (d *winDevice) Write(buf []byte) (int, error) {
 		out = make([]byte, d.outLen)
 		copy(out, buf)
 	}
-	n, err := d.overlapped(1000, func(ov *windows.Overlapped, n *uint32) error {
-		return windows.WriteFile(d.h, out, n, ov)
-	})
+	n, err := d.overlapped(1000, windows.WriteFile, out)
 	if n > len(buf) {
 		n = len(buf)
 	}
@@ -190,13 +219,8 @@ func (d *winDevice) Write(buf []byte) (int, error) {
 }
 
 func (d *winDevice) Read(buf []byte, timeoutMS int) (int, error) {
-	in := buf
-	if d.inLen > len(buf) {
-		in = make([]byte, d.inLen)
-	}
-	n, err := d.overlapped(timeoutMS, func(ov *windows.Overlapped, n *uint32) error {
-		return windows.ReadFile(d.h, in, n, ov)
-	})
+	in := make([]byte, max(len(buf), d.inLen))
+	n, err := d.overlapped(timeoutMS, windows.ReadFile, in)
 	if err != nil {
 		return 0, err
 	}

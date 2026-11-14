@@ -10,7 +10,8 @@ func rateSetup(t *testing.T, interval time.Duration) {
 	t.Helper()
 	old := tlMinInterval
 	tlMinInterval = interval
-	t.Cleanup(func() { tlMinInterval = old; tlNow = time.Now })
+	resetTLRateMemory()
+	t.Cleanup(func() { tlMinInterval = old; tlNow = time.Now; resetTLRateMemory() })
 }
 
 func nSettings(f *echoHID) int {
@@ -108,5 +109,50 @@ func TestTLSerialSwitchOff(t *testing.T) {
 	p.start()
 	if len(serialWrites(&h.fakeHID)) != 0 || strings.Contains(p.serial, "-") {
 		t.Fatal("serial written although switched off")
+	}
+}
+
+func resetTLRateMemory() {
+	tlRateMu.Lock()
+	tlRateMem = map[string]tlRateSnap{}
+	tlRateMu.Unlock()
+}
+
+// A new object for the same fan (rescan, re-plug) keeps the day count and the cap.
+func TestTLRateSurvivesNewObject(t *testing.T) {
+	rateSetup(t, 0)
+	h := newFanHID(tlSerial("RATE1", 0, 0))
+	p := &tlLCD{dev: h, brightness: 50}
+	if err := p.start(); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 5; i++ {
+		p.SetBrightness(10 + i)
+	}
+	used := p.rate.count
+	if used < 5 {
+		t.Fatalf("count %d", used)
+	}
+	h2 := newFanHID(tlSerial("RATE1", 0, 0))
+	q := &tlLCD{dev: h2, brightness: 50}
+	if err := q.start(); err != nil {
+		t.Fatal(err)
+	}
+	if q.rate.count < used {
+		t.Fatalf("new object starts at %d, want at least %d", q.rate.count, used)
+	}
+	q.rate.count = tlDailyMax
+	q.rate.remember()
+	r := &tlLCD{dev: newFanHID(tlSerial("RATE1", 0, 0)), brightness: 50}
+	if err := r.start(); err != nil {
+		t.Fatal(err)
+	}
+	if r.rate.count != tlDailyMax {
+		t.Fatalf("count %d after replacement", r.rate.count)
+	}
+	// Another fan is not affected.
+	o := &tlLCD{dev: newFanHID(tlSerial("OTHER", 0, 1)), brightness: 50}
+	if err := o.start(); err != nil || o.rate.count >= tlDailyMax {
+		t.Fatalf("other fan: %v count %d", err, o.rate.count)
 	}
 }

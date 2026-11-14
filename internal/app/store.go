@@ -81,7 +81,7 @@ func (c PanelConfig) Clone() PanelConfig {
 // Config is persisted as config.json.
 type Config struct {
 	LHMURL   string `json:"lhm_url,omitempty"`
-	Language string `json:"language,omitempty"` // "de" (default) or "en"
+	Language string `json:"language,omitempty"` // "de" or "en"; empty follows the system language
 	// NoUpdateCheck disables the daily GitHub release check.
 	NoUpdateCheck bool `json:"no_update_check,omitempty"`
 	// FWUpdateCheck asks the manufacturer's download page once per start for
@@ -104,6 +104,16 @@ type Config struct {
 	// Fahrenheit shows temperatures in °F, Clock12h clocks with AM/PM.
 	Fahrenheit bool `json:"fahrenheit,omitempty"`
 	Clock12h   bool `json:"clock_12h,omitempty"`
+	// NoDisplay, NoLighting and NoCooling switch a core area off. None set (the
+	// default) means everything runs; at least one area always stays on.
+	NoDisplay  bool `json:"no_display,omitempty"`
+	NoLighting bool `json:"no_lighting,omitempty"`
+	NoCooling  bool `json:"no_cooling,omitempty"`
+	// FirstRun is set when the configuration is created and cleared once the
+	// setup dialog was answered or closed. A configuration written by an
+	// earlier version has no such key, so an existing installation is never
+	// asked.
+	FirstRun bool `json:"first_run,omitempty"`
 	// ScreensaverOff blanks the LCDs (brightness 0) while the screen saver runs.
 	ScreensaverOff bool `json:"screensaver_off,omitempty"`
 	// Rotation changes the displays by themselves (scenes or conveyor).
@@ -125,6 +135,8 @@ type Config struct {
 	AckLighting     bool          `json:"ack_lighting,omitempty"`
 	// AckCapture records the confirmation for the screen and audio effects.
 	AckCapture bool `json:"ack_capture,omitempty"`
+	// AIHintOff: the one-time hint about installed AI apps was dismissed.
+	AIHintOff bool `json:"ai_hint_off,omitempty"`
 	// Awtrix lists AWTRIX 3 pixel clocks that show CaseHUD apps.
 	Awtrix []AwtrixDevice `json:"awtrix,omitempty"`
 	// NoAnimation turns off gliding values (on by default).
@@ -157,6 +169,9 @@ type Config struct {
 	// tl_start_image_off is ignored); TLStartImages is the hash of the image
 	// last written to each fan (see tlpersist.go).
 	TLStartImageOn bool `json:"tl_start_image_on,omitempty"`
+	// TLStartImageStyle picks the picture: "" or "logo" (CaseHUD logo) or
+	// "neutral" (plain picture without a logo).
+	TLStartImageStyle string `json:"tl_start_image_style,omitempty"`
 	// TLStartImageOff is the former opt-out flag. It is ignored on load and
 	// rewritten before every save as !TLStartImageOn, so an older version
 	// reading this file stays off unless the user switched the logo on.
@@ -214,7 +229,15 @@ func defaultConfigFor(sz image.Point, round bool) PanelConfig {
 //	media/        uploaded images, GIFs and videos
 type Store struct {
 	Dir string
+
+	presets presetsCache // the cooling presets as last read, see readCoolingPresets
+
+	// hasCoolant tells whether the PC has a coolant sensor; the ready-made
+	// compositions leave coolant out when not (nil: present).
+	hasCoolant func() bool
 }
+
+func (s *Store) coolant() bool { return s.hasCoolant == nil || s.hasCoolant() }
 
 // DefaultDir is %APPDATA%\casehud on Windows, ~/.config/casehud on Linux.
 func DefaultDir() string {
@@ -234,6 +257,7 @@ func (s *Store) LoadConfig() (Config, error) {
 	c := Config{Panels: map[string]PanelConfig{}}
 	b, err := os.ReadFile(s.path("config.json"))
 	if os.IsNotExist(err) {
+		c.FirstRun = true
 		migrateTLSerial(&c)
 		return c, nil
 	}
@@ -258,6 +282,7 @@ func (s *Store) LoadConfig() (Config, error) {
 	}
 	dropBootPending(&c)
 	migrateTLSerial(&c)
+	normalizeModules(&c)
 	return c, nil
 }
 

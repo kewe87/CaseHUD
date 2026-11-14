@@ -13,6 +13,10 @@ var ErrUnsupported = errors.New("hid: not supported on this platform")
 // ErrTimeout is returned when a read or write does not complete in time.
 var ErrTimeout = errors.New("hid: timeout")
 
+// ErrStuck is returned when a request timed out and did not even end after being
+// cancelled. The Device stays unusable until it is closed and opened again.
+var ErrStuck = errors.New("hid: request does not end")
+
 // DeviceInfo describes one HID top-level collection.
 type DeviceInfo struct {
 	Path       string

@@ -14,12 +14,13 @@
 <header>
   <div class="brand"><img src="logo.svg" alt="" class="logo"><span>CaseHUD</span></div>
   <nav id="tabs">
-    <button data-tab="displays" data-i18n-title="tab.displays" class="active"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span data-i18n="tab.displays"></span></button>
-    <button data-tab="scenes" data-i18n-title="tab.scenes"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg><span data-i18n="tab.scenes"></span></button>
-    <button data-tab="light" data-i18n-title="tab.light"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg><span data-i18n="tab.light"></span></button>
-    <button data-tab="designs" data-i18n-title="tab.designs"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20z"/><path d="M14 7l3 3"/></svg><span data-i18n="tab.designs"></span></button>
-    <button data-tab="media" data-i18n-title="tab.media"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg><span data-i18n="tab.media"></span></button>
-    <button data-tab="settings" data-i18n-title="tab.settings"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span data-i18n="tab.settings"></span></button>
+    <button data-tab="displays" data-area="display" data-i18n-title="tab.displays" class="active"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span data-i18n="tab.displays"></span></button>
+    <button data-tab="scenes" data-area="display" data-i18n-title="tab.scenes"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg><span data-i18n="tab.scenes"></span></button>
+    <button data-tab="light" data-area="lighting" data-i18n-title="tab.light"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg><span class="tab-long" data-i18n="tab.light"></span><span class="tab-short" aria-hidden="true" data-i18n="tab.light.short"></span></button>
+    <button data-tab="cooling" data-i18n-title="tab.cooling" hidden><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2"/><path d="M12 10c0-4 1-7 4-7s3 4 0 6l-4 1zM14 12c4 0 7 1 7 4s-4 3-6 0l-1-4zM12 14c0 4-1 7-4 7s-3-4 0-6l4-1zM10 12c-4 0-7-1-7-4s4-3 6 0l1 4z"/></svg><span data-i18n="tab.cooling"></span></button>
+    <button data-tab="designs" data-area="display" data-i18n-title="tab.designs"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20z"/><path d="M14 7l3 3"/></svg><span data-i18n="tab.designs"></span></button>
+    <button data-tab="media" data-area="display" data-i18n-title="tab.media"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg><span data-i18n="tab.media"></span></button>
+    <button data-tab="settings" data-i18n-title="tab.settings" data-i18n-aria="tab.settings"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.08 4.85 L10.17 2.58 L13.83 2.58 L13.92 4.85 L15.7 5.59 L17.37 4.04 L19.96 6.63 L18.41 8.3 L19.15 10.08 L21.42 10.17 L21.42 13.83 L19.15 13.92 L18.41 15.7 L19.96 17.37 L17.37 19.96 L15.7 18.41 L13.92 19.15 L13.83 21.42 L10.17 21.42 L10.08 19.15 L8.3 18.41 L6.63 19.96 L4.04 17.37 L5.59 15.7 L4.85 13.92 L2.58 13.83 L2.58 10.17 L4.85 10.08 L5.59 8.3 L4.04 6.63 L6.63 4.04 L8.3 5.59Z"/><circle cx="12" cy="12" r="3"/></svg><span class="tab-long" data-i18n="tab.settings"></span><span class="tab-short tab-gap" aria-hidden="true"></span></button>
   </nav>
   <div class="status">
     <button id="status-pill" class="pill" data-i18n-title="status.title"><span class="dot"></span><span id="status-text"></span></button>
@@ -43,11 +44,21 @@
   <button id="update-close" class="icon-btn" data-i18n-aria="btn.close" aria-label="Close">✕</button>
 </div>
 <pre id="update-notes" class="update-notes" hidden></pre>
+<div id="ai-hint" class="update-banner" role="status" hidden>
+  <span class="dot"></span><span id="ai-hint-text"></span>
+  <button id="ai-hint-open" class="button primary" data-i18n="ai.hint.open"></button>
+  <button id="ai-hint-off" class="button" data-i18n="ai.hint.off"></button>
+  <button id="ai-hint-close" class="icon-btn" data-i18n-aria="btn.close" aria-label="Close">✕</button>
+</div>
+<div id="cool-alarm-banner" class="cool-alarm-banner" role="alert" hidden>
+  <span class="dot"></span><span id="cool-alarm-text"></span>
+  <button id="cool-alarm-open" class="button" data-i18n="cool.alarmOpen"></button>
+</div>
 <main>
   <!-- Displays -->
   <section id="tab-displays" class="tab active">
     <div class="page-head">
-      <div><h1 data-i18n="tab.displays"></h1><p class="sub" id="panel-count"></p></div>
+      <div><h1 data-i18n="tab.displays" data-help="displays"></h1><p class="sub" id="panel-count"></p></div>
       <div class="actions-row">
         <button id="btn-arrange" class="ghost" data-i18n="btn.arrange"></button>
         <button id="btn-identify-all" class="ghost" data-i18n="btn.identifyAll"></button>
@@ -79,7 +90,7 @@
       </div>
     </div>
     <button id="state-chip" class="state-chip" type="button" hidden></button>
-    <button id="light-chip" class="state-chip warn" type="button" hidden></button>
+    <button id="light-chip" class="state-chip warn" type="button" data-area="lighting" hidden></button>
     <div id="scan-error" class="banner error" hidden></div>
     <div id="monitor-mode" class="banner" hidden>
       <b data-i18n="mm.title"></b>
@@ -112,12 +123,12 @@
   <!-- Scenes, automation, rotation -->
   <section id="tab-scenes" class="tab">
     <div class="page-head">
-      <div><h1 data-i18n="tab.scenes"></h1><p class="sub" data-i18n="scenes.page.sub"></p></div>
+      <div><h1 data-i18n="tab.scenes" data-help="scenes"></h1><p class="sub" data-i18n="scenes.page.sub"></p></div>
     </div>
     <div id="scenes-empty" class="empty" hidden><p data-i18n="scenes.nopanels"></p></div>
     <div id="scenes-body">
     <section id="auto-part" class="part">
-      <div class="part-head"><h2 data-i18n="part.scenes"></h2><p class="sub" data-i18n="part.scenes.sub"></p></div>
+      <div class="part-head"><h2 data-i18n="part.scenes" data-help="scenes.list"></h2><p class="sub" data-i18n="part.scenes.sub"></p></div>
       <div class="card stack" id="scene-card">
         <div id="scene-list" class="scene-list"></div>
         <div class="inline-form">
@@ -130,7 +141,7 @@
     </section>
 
     <section id="part-auto" class="part">
-      <div class="part-head"><h2 data-i18n="part.auto"></h2><p class="sub" data-i18n="part.auto.sub"></p></div>
+      <div class="part-head"><h2 data-i18n="part.auto" data-help="scenes.automation"></h2><p class="sub" data-i18n="part.auto.sub"></p></div>
       <div class="card stack" id="auto-card">
         <div class="card-head">
           <input type="checkbox" class="switch" id="auto-enabled" data-i18n-title="auto.enable">
@@ -163,7 +174,7 @@
     </section>
 
     <section id="part-rotation" class="part">
-      <div class="part-head"><h2 data-i18n="part.rotation"></h2><p class="sub" data-i18n="part.rotation.sub"></p></div>
+      <div class="part-head"><h2 data-i18n="part.rotation" data-help="scenes.rotation"></h2><p class="sub" data-i18n="part.rotation.sub"></p></div>
       <div class="card stack" id="rot-card">
       <div class="card-head">
         <input type="checkbox" class="switch" id="rot-enabled" data-i18n-title="rot.enable">
@@ -195,7 +206,7 @@
   <!-- Lighting -->
   <section id="tab-light" class="tab">
     <div class="page-head">
-      <div><h1 data-i18n="tab.light"></h1><p class="sub" data-i18n="light.sub"></p></div>
+      <div><h1 data-i18n="tab.light" data-help="lighting"></h1><p class="sub" data-i18n="light.sub"></p></div>
     </div>
 
     <div id="sketch-view" class="sketch" hidden>
@@ -220,10 +231,11 @@
       <div class="sk-main">
         <aside class="sk-palette card" id="sk-palette" data-i18n-aria="sk.palette">
           <div class="sk-pal-head">
-            <h3 data-i18n="sk.palette"></h3>
+            <div id="sk-ptabs" class="seg small" role="tablist" data-i18n-aria="sk.palette"></div>
             <input id="sk-search" type="text" autocomplete="off" data-i18n-placeholder="sk.search" data-i18n-aria="sk.search">
           </div>
           <div id="sk-pal-list" class="sk-pal-list"></div>
+          <div id="sk-layers" class="sk-pal-list sk-layers" hidden></div>
         </aside>
         <section class="sk-stage-card card" data-i18n-aria="sk.stage">
           <div class="sk-toolbar">
@@ -253,8 +265,38 @@
         <aside class="sk-inspector card" id="sk-inspector" data-i18n-aria="sk.inspector"></aside>
       </div>
     </div>
-    <section class="part">
-      <div class="card stack">
+    <section class="lh" id="light-hero">
+      <div class="lh-stage card">
+        <div class="lh-bar">
+          <div class="lh-head"><h2 class="lh-title" data-i18n="lh.title" data-help="lighting.case"></h2><p class="sub" data-i18n="lh.sub"></p></div>
+          <div class="lh-bar-end">
+            <span id="light-live" class="lh-live" role="status" hidden></span>
+            <button id="sketch-open" class="ghost" data-i18n="sk.open"></button>
+          </div>
+        </div>
+        <div id="light-stage" class="lh-box">
+          <div id="light-pv" class="lh-pv"></div>
+          <div id="light-empty" class="lh-empty" hidden></div>
+          <p id="light-note" class="lh-note" role="status" hidden></p>
+          <div id="light-tip" class="lh-tip" role="tooltip" hidden></div>
+          <div id="light-bind" class="lh-bind" role="dialog" data-i18n-aria="lh.bind" hidden></div>
+          <div id="light-find" class="lh-bind lh-find" role="dialog" data-i18n-aria="lh.find.start" hidden></div>
+          <div id="light-orient" class="lh-bind lh-find lh-orient" role="dialog" data-i18n-aria="lh.or" hidden></div>
+        </div>
+        <div id="light-auto-sum" class="lh-auto" role="status" tabindex="-1" hidden></div>
+        <div class="lh-foot">
+          <div class="lh-foot-row">
+            <span id="light-caption" class="lh-cap"></span>
+            <span id="sketch-entry-info" class="lh-cap"></span>
+            <span class="lh-legend" aria-hidden="true"><i class="lh-key bound"></i><span data-i18n="lh.legend.bound"></span><i class="lh-key unbound"></i><span data-i18n="lh.legend.unbound"></span></span>
+          </div>
+          <div class="lh-foot-row lh-foot-acts">
+            <button id="light-unbound" class="lh-chip" type="button" hidden></button>
+            <button id="light-auto" class="ghost lh-auto-btn" type="button" data-i18n="lh.auto" data-i18n-title="lh.auto.title" hidden></button>
+          </div>
+        </div>
+      </div>
+      <aside class="lh-ctl card" data-i18n-aria="light.look">
         <div class="card-head">
           <input type="checkbox" class="switch" id="light-enabled" data-i18n-title="light.master" data-i18n-aria="light.master">
           <div><h3 class="card-title" data-i18n="light.master"></h3><p class="sub" id="light-status"></p></div>
@@ -262,19 +304,32 @@
         <p class="sub warn" id="light-warn" hidden></p>
         <p class="sub warn" id="light-reset" hidden></p>
         <div id="light-look" class="light-look">
-          <div class="lp-grid">
-            <div class="lp"><label class="lp-head" for="light-brightness"><span class="lp-name" data-i18n="light.brightness"></span><span class="lp-val" id="light-brightness-val"></span></label>
-              <input type="range" id="light-brightness" min="0" max="100" step="1" value="100"></div>
+          <div class="lp-grid lh-one">
             <div class="lp"><label class="lp-head" for="light-effect"><span class="lp-name" data-i18n="light.effect"></span></label>
               <select id="light-effect"></select></div>
-            <div class="lp"><label class="lp-head" for="light-exit"><span class="lp-name" data-i18n="light.exit"></span></label>
-              <select id="light-exit"><option value="off" data-i18n="light.exit.off"></option><option value="keep" data-i18n="light.exit.keep"></option><option value="device" data-i18n="light.exit.device"></option></select>
-              <small class="sub" data-i18n="light.exit.hint"></small></div>
+            <div class="lp"><label class="lp-head" for="light-brightness"><span class="lp-name" data-i18n="light.brightness"></span><span class="lp-val" id="light-brightness-val"></span></label>
+              <input type="range" id="light-brightness" min="0" max="100" step="1" value="100"></div>
           </div>
           <h4 class="light-sub" id="light-params-head" data-i18n="light.effect.params"></h4>
-          <div class="lp-grid" id="light-params"></div>
+          <div class="lp-grid lh-one" id="light-params"></div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="part" id="light-flow-part">
+      <div class="part-head part-head-row">
+        <div><h2 data-i18n="lf.title" data-help="lighting.source"></h2><p class="sub" data-i18n="lf.sub"></p></div>
+        <div class="lf-actions">
+          <button id="light-adopt" class="ghost" data-i18n="lf.adopt"></button>
+          <button id="light-rescan" class="ghost" data-i18n="light.rescan"></button>
         </div>
       </div>
+      <div id="light-setup" class="lf-setup" hidden></div>
+      <div id="light-flow-wrap" class="cool-layout lf-wrap">
+        <div id="light-flow" class="cool-board lf-board"></div>
+        <aside id="light-drawer" class="cool-panel lf-drawer" data-i18n-aria="lf.devices" hidden></aside>
+      </div>
+      <div id="light-ram" class="card lf-ram" hidden></div>
     </section>
 
     <section class="part" id="light-presets-part">
@@ -294,47 +349,40 @@
       </details>
     </section>
 
-    <section class="part">
-      <div class="part-head part-head-row">
-        <div><h2 data-i18n="light.devices"></h2><p class="sub" data-i18n="light.devices.sub"></p></div>
-        <button id="light-rescan" class="ghost" data-i18n="light.rescan"></button>
-      </div>
-      <div id="light-devices" class="light-devices"></div>
-    </section>
-
-    <section class="part" id="sketch-entry">
-      <div class="part-head part-head-row">
-        <div><h2 data-i18n="sk.entry.title"></h2><p class="sub" data-i18n="sk.entry.sub"></p><p class="sub sk-entry-info" id="sketch-entry-info"></p></div>
-        <button id="sketch-open" class="ghost" data-i18n="sk.open"></button>
-      </div>
-    </section>
-
-    <section class="part" id="light-layout" hidden>
-      <div class="part-head"><h2 data-i18n="light.layout"></h2><p class="sub" data-i18n="light.layout.sub"></p></div>
-      <div class="card stack">
-        <div id="light-canvas-box" class="light-canvas-box"></div>
-        <div id="light-unplaced" class="unplaced" hidden></div>
-        <div class="legend" id="light-legend"></div>
-      </div>
-    </section>
-
-    <section class="part" id="light-tl-part" hidden>
-      <div class="card stack">
-        <div class="card-head">
-          <input type="checkbox" class="switch" id="light-tl" data-i18n-aria="light.tl">
-          <div><h3 class="card-title" data-i18n="light.tl"></h3></div>
+    <section class="part" id="light-more-part">
+      <details class="card stack presets" id="light-more">
+        <summary><span class="presets-title" data-i18n="light.more.title"></span></summary>
+        <div class="lp-grid lh-more">
+          <div class="lp"><label class="lp-head" for="light-exit"><span class="lp-name" data-i18n="light.exit"></span></label>
+            <select id="light-exit"><option value="off" data-i18n="light.exit.off"></option><option value="keep" data-i18n="light.exit.keep"></option><option value="device" data-i18n="light.exit.device"></option></select>
+            <small class="sub" data-i18n="light.exit.hint"></small></div>
         </div>
-        <p class="sub" data-i18n="light.tl.sub"></p>
-      </div>
+        <div id="light-tl-part" class="lh-tl" hidden>
+          <label class="check-row" for="light-tl">
+            <input type="checkbox" class="switch" id="light-tl" data-i18n-aria="light.tl">
+            <span><b data-i18n="light.tl"></b><small data-i18n="light.tl.sub"></small></span>
+          </label>
+        </div>
+      </details>
     </section>
   </section>
 
   <!-- Designs -->
+  <section id="tab-cooling" class="tab">
+    <div class="page-head">
+      <div><h1 data-i18n="tab.cooling" data-help="cooling"></h1><p id="cool-sub" class="sub" data-i18n="cool.sub"></p></div>
+    </div>
+    <div id="cool-presets" class="cool-presets" hidden></div>
+    <p id="cool-msg" class="sub"></p>
+    <div id="cool-measure" class="cool-measure" hidden></div>
+    <div id="cool-setup" class="cool-setup"></div>
+  </section>
+
   <section id="tab-designs" class="tab">
     <div class="page-head">
-      <div><h1 data-i18n="tab.designs"></h1><p class="sub" data-i18n="designs.sub"></p></div>
+      <div><h1 data-i18n="tab.designs" data-help="designs"></h1><p class="sub" data-i18n="designs.sub"></p></div>
       <div class="head-actions">
-        <div class="seg" id="designs-view"></div>
+        <div class="seg small" id="designs-view"></div>
         <span class="head-group" id="designs-actions">
           <span class="seg-label" data-i18n="designs.preview"></span><div class="seg small" id="gallery-theme" role="group" data-i18n-aria="designs.preview"></div>
           <button id="btn-community" class="ghost" data-i18n="btn.community"></button>
@@ -350,7 +398,7 @@
       <div id="designs-custom" class="grid designs"></div>
     </div>
     <div id="layouts-pane" hidden>
-      <h2 class="pane-title" data-i18n="layouts.title"></h2>
+      <h2 class="pane-title" data-i18n="layouts.title" data-help="designs.layouts"></h2>
       <p class="sub layouts-intro" data-i18n="layouts.sub"></p>
       <div id="layouts-list"></div>
     </div>
@@ -359,7 +407,7 @@
   <!-- Media -->
   <section id="tab-media" class="tab">
     <div class="page-head">
-      <div><h1 data-i18n="tab.media"></h1><p class="sub" data-i18n="media.sub"></p></div>
+      <div><h1 data-i18n="tab.media" data-help="media"></h1><p class="sub" data-i18n="media.sub"></p></div>
       <label class="button primary"><span data-i18n="btn.add"></span><input id="media-file" type="file" accept="image/png,image/jpeg,image/gif,video/*" multiple hidden></label>
     </div>
     <div id="ffmpeg-hint" class="banner" hidden data-i18n-html="ffmpeg.hint"></div>
@@ -376,21 +424,36 @@
   <!-- Settings -->
   <section id="tab-settings" class="tab">
     <div class="page-head">
-      <div><h1 data-i18n="tab.settings"></h1><p class="sub" data-i18n="set.page.sub"></p></div>
+      <div><h1 data-i18n="tab.settings" data-help="settings"></h1><p class="sub" data-i18n="set.page.sub"></p></div>
     </div>
     <div class="settings">
       <nav class="set-nav" id="set-nav" data-i18n-aria="set.nav">
-        <button type="button" data-target="set-general" class="active" data-i18n="set.g.general"></button>
+        <button type="button" data-target="set-modules" class="active" data-i18n="mod.title"></button>
+        <button type="button" data-target="set-general" data-i18n="set.g.general"></button>
         <button type="button" data-target="set-sources" data-i18n="set.g.sources"></button>
         <button type="button" data-target="set-devices" data-i18n="set.g.devices"></button>
-        <button type="button" data-target="set-display" class="expert" data-i18n="set.g.display"></button>
+        <button type="button" data-target="set-display" data-area="display" class="expert" data-i18n="set.g.display"></button>
         <button type="button" data-target="set-api" class="expert" data-i18n="set.g.api"></button>
+        <button type="button" data-target="set-ai" id="set-nav-ai" data-i18n="ai.title"></button>
+        <button type="button" data-target="set-access" class="expert" data-i18n="acc.title"></button>
         <button type="button" data-target="set-info" data-i18n="set.g.info"></button>
       </nav>
       <div class="set-body">
 
+        <section class="set-group" id="set-modules">
+          <h2 class="group-title" data-i18n="mod.title" data-help="settings.areas"></h2>
+          <div class="card rows">
+            <p class="row-block sub" data-i18n="mod.sub"></p>
+            <label class="row"><div class="row-text"><b data-i18n="mod.display"></b><small data-i18n="mod.display.sub"></small></div><input type="checkbox" class="switch" id="set-mod-display" data-mod="display"></label>
+            <label class="row"><div class="row-text"><b data-i18n="mod.lighting"></b><small data-i18n="mod.lighting.sub"></small></div><input type="checkbox" class="switch" id="set-mod-lighting" data-mod="lighting"></label>
+            <label class="row"><div class="row-text"><b data-i18n="mod.cooling"></b><small data-i18n="mod.cooling.sub"></small></div><input type="checkbox" class="switch" id="set-mod-cooling" data-mod="cooling"></label>
+            <label class="row row-sub" id="row-cool-live" data-area="cooling"><div class="row-text"><b data-i18n="cool.modeLive"></b><small data-i18n="mod.cooling.live.sub"></small></div><input type="checkbox" class="switch" id="set-cool-live"></label>
+            <p class="row-block sub" id="mod-hint" data-i18n="mod.last" hidden></p>
+          </div>
+        </section>
+
         <section class="set-group" id="set-general">
-          <h2 class="group-title" data-i18n="set.g.general"></h2>
+          <h2 class="group-title" data-i18n="set.g.general" data-help="settings.general"></h2>
           <div class="card rows">
             <label class="row"><div class="row-text"><b data-i18n="set.expert"></b><small data-i18n="set.expert.sub"></small></div><input type="checkbox" class="switch" id="set-expert"></label>
             <label class="row" id="row-autostart"><div class="row-text"><b data-i18n="set.autostart"></b><small data-i18n="set.autostart.sub"></small></div><input type="checkbox" class="switch" id="set-autostart"></label>
@@ -398,16 +461,16 @@
               <select id="set-temp"><option value="c">°C (Celsius)</option><option value="f">°F (Fahrenheit)</option></select></div>
             <div class="row"><div class="row-text"><b data-i18n="set.clock"></b><small data-i18n="set.clock.sub"></small></div>
               <select id="set-clock"><option value="24">24 h · 23:45</option><option value="12">12 h · 11:45 PM</option></select></div>
-            <div class="row"><div class="row-text"><b data-i18n="arr.title"></b><small data-i18n="set.arrange.sub"></small></div>
+            <div class="row" data-area="display"><div class="row-text"><b data-i18n="arr.title"></b><small data-i18n="set.arrange.sub"></small></div>
               <button id="set-open-arrange" class="ghost" data-i18n="arr.open"></button></div>
-            <label class="row"><div class="row-text"><b data-i18n="set.saver"></b><small data-i18n="set.saver.sub"></small></div><input type="checkbox" class="switch" id="set-saver"></label>
+            <label class="row" data-area="display"><div class="row-text"><b data-i18n="set.saver"></b><small data-i18n="set.saver.sub"></small></div><input type="checkbox" class="switch" id="set-saver"></label>
             <label class="row"><div class="row-text"><b data-i18n="set.updates"></b><small data-i18n="set.updates.sub"></small></div><input type="checkbox" class="switch" id="set-updates"></label>
             <label class="row"><div class="row-text"><b data-i18n="set.fwcheck"></b><small data-i18n="set.fwcheck.sub"></small></div><input type="checkbox" class="switch" id="set-fwcheck"></label>
           </div>
         </section>
 
         <section class="set-group" id="set-sources">
-          <h2 class="group-title" data-i18n="set.g.sources"></h2>
+          <h2 class="group-title" data-i18n="set.g.sources" data-help="settings.sources"></h2>
           <div class="card rows" id="lhm-card">
             <div class="card-head">
               <div><h3 data-i18n="lhm.title"></h3><p class="sub" id="lhm-status"></p></div>
@@ -441,7 +504,7 @@
         </section>
 
         <section class="set-group" id="set-devices">
-          <h2 class="group-title" data-i18n="set.g.devices"></h2>
+          <h2 class="group-title" data-i18n="set.g.devices" data-help="settings.devices"></h2>
           <div class="card rows" id="exp-card">
             <p class="row-block sub" data-i18n="dev.exp.desc"></p>
             <label class="row"><div class="row-text"><b data-i18n="dev.exp"></b><small data-i18n="dev.exp.sub"></small></div><input type="checkbox" class="switch" id="set-exp"></label>
@@ -449,15 +512,17 @@
             <div class="row"><div class="row-text"><small data-i18n="dev.exp.report"></small></div>
               <a class="ghost button" id="exp-report" href="https://github.com/kewe87/CaseHUD/issues/new?template=hardware_report.yml" target="_blank" rel="noopener" data-i18n="dev.report"></a></div>
           </div>
-          <div class="card rows" id="tls-card">
+          <div class="card rows" id="tls-card" data-area="display">
             <label class="row"><div class="row-text"><b data-i18n="tls.title"></b><small data-i18n="tls.sub"></small></div><input type="checkbox" class="switch" id="set-tls"></label>
+            <div class="row"><div class="row-text"><b data-i18n="tls.style"></b><small data-i18n="tls.style.sub"></small></div><select id="set-tls-style"><option value="logo" data-i18n="tls.style.logo"></option><option value="neutral" data-i18n="tls.style.neutral"></option></select></div>
             <label class="row"><div class="row-text"><b data-i18n="tls.serial"></b><small data-i18n="tls.serial.sub"></small></div><input type="checkbox" class="switch" id="set-tls-serial"></label>
-            <div class="row"><div class="row-text"><small data-i18n="tls.again.sub"></small></div><button id="tls-again" class="ghost" data-i18n="tls.again"></button></div>
+            <div class="row"><div class="row-text"><b data-i18n="tls.again.title"></b><small data-i18n="tls.again.sub"></small><small id="tls-again-why" data-i18n="tls.again.off"></small></div><button id="tls-again" class="ghost" data-i18n="tls.again"></button></div>
+            <div class="row" id="boot-row" hidden><div class="row-text"><b data-i18n="boot.title"></b><small data-i18n="boot.sub"></small></div><button id="boot-remove" class="ghost" data-i18n="boot.btn"></button></div>
           </div>
         </section>
 
-        <section class="set-group expert" id="set-display">
-          <h2 class="group-title" data-i18n="set.g.display"></h2>
+        <section class="set-group expert" id="set-display" data-area="display">
+          <h2 class="group-title" data-i18n="set.g.display" data-help="settings.display"></h2>
           <div class="card rows">
             <div class="row"><div class="row-text"><b data-i18n="set.interval"></b><small data-i18n="set.interval.sub"></small></div>
               <select id="set-interval">
@@ -473,7 +538,7 @@
         </section>
 
         <section class="set-group expert" id="set-api">
-          <h2 class="group-title" data-i18n="set.g.api"></h2>
+          <h2 class="group-title" data-i18n="set.g.api" data-help="settings.api"></h2>
           <div class="card rows">
             <label class="row"><div class="row-text"><b data-i18n="set.mcp"></b><small data-i18n="set.mcp.sub"></small></div><input type="checkbox" class="switch" id="set-mcp"></label>
             <div class="row row-top" id="row-mcp" hidden><div class="row-text grow"><small data-i18n="set.mcp.how"></small><pre id="mcp-snippet" class="snippet"></pre></div>
@@ -482,18 +547,34 @@
           </div>
         </section>
 
+        <section class="set-group" id="set-ai">
+          <h2 class="group-title" data-i18n="ai.title" data-help="settings.ai"></h2>
+          <div id="ai-msg" class="banner" hidden></div>
+          <div class="card rows">
+            <p class="sub card-intro" data-i18n="ai.sub"></p>
+            <div id="ai-list" class="rows-inner"></div>
+          </div>
+          <div class="card rows">
+            <div class="row"><div class="row-text"><b data-i18n="ai.other"></b><small data-i18n="ai.other.sub"></small></div>
+              <button id="btn-ai-token" class="ghost" data-i18n="ai.other.btn"></button></div>
+          </div>
+        </section>
+
+        <section class="set-group expert" id="set-access">
+          <h2 class="group-title" data-i18n="acc.title" data-help="settings.access"></h2>
+          <div class="card rows" id="access-list"></div>
+        </section>
+
         <section class="set-group" id="set-info">
-          <h2 class="group-title" data-i18n="set.g.info"></h2>
+          <h2 class="group-title" data-i18n="set.g.info" data-help="settings.info"></h2>
           <div class="card rows">
             <div class="row"><div class="row-text"><b data-i18n="set.version"></b><small id="set-version"></small></div><a class="ghost button" href="https://github.com/kewe87/casehud" target="_blank" rel="noopener">GitHub</a></div>
             <div class="row expert"><div class="row-text"><b data-i18n="set.log"></b><small data-i18n="set.log.sub"></small></div><button id="btn-open-log" class="ghost" data-i18n="btn.open"></button></div>
-            <div class="row row-top" id="row-diag">
-              <div class="row-text grow">
-                <b data-i18n="diag.title"></b><small data-i18n="diag.sub"></small>
-                <label class="check-row diag-trace"><input type="checkbox" class="switch" id="diag-trace"><span><b data-i18n="diag.trace"></b><small data-i18n="diag.trace.sub"></small></span></label>
-                <small id="diag-status" class="diag-status" role="status" aria-live="polite"></small>
-              </div>
+            <div class="row" id="row-diag">
+              <div class="row-text"><b data-i18n="diag.title"></b><small data-i18n="diag.sub"></small></div>
               <button id="btn-diag" class="ghost" data-i18n="diag.export"></button>
+              <label class="check-row diag-trace"><input type="checkbox" class="switch" id="diag-trace"><span><b data-i18n="diag.trace"></b><small data-i18n="diag.trace.sub"></small></span></label>
+              <small id="diag-status" class="diag-status" role="status" aria-live="polite"></small>
             </div>
             <div class="row expert"><div class="row-text"><b data-i18n="set.datadir"></b><small id="set-datadir" class="path"></small></div><button id="btn-open-data" class="ghost" data-i18n="btn.open"></button></div>
             <div class="row"><div class="row-text"><b data-i18n="set.oss"></b><small data-i18n="set.oss.sub"></small></div><button id="btn-oss-2" class="ghost" data-i18n="btn.open"></button></div>
@@ -650,10 +731,24 @@
   <div id="community-body" class="community-body"></div>
 </dialog>
 
+<dialog id="light-suggest" class="oss lh-sug">
+  <div class="oss-head">
+    <div class="oss-heart community-icon" aria-hidden="true">✦</div>
+    <div><h2 data-i18n="lh.sug.title"></h2><p class="sub" data-i18n="lh.sug.sub"></p></div>
+    <button class="icon-btn" id="light-suggest-close" data-i18n-aria="btn.close" aria-label="Close">✕</button>
+  </div>
+  <div id="light-suggest-body" class="lh-sug-body"></div>
+  <div class="notice-actions">
+    <button class="ghost" id="light-suggest-no" data-i18n="lh.sug.no"></button>
+    <button class="primary" id="light-suggest-ok" data-i18n="lh.sug.ok"></button>
+  </div>
+</dialog>
+
 <dialog id="notice" class="oss notice">
   <div class="oss-head">
-    <div class="oss-heart notice-icon" aria-hidden="true">!</div>
+    <div class="oss-heart notice-icon" id="notice-icon" aria-hidden="true">!</div>
     <div><h2 id="notice-title"></h2><p class="sub" id="notice-sub"></p></div>
+    <button class="icon-btn" id="notice-x" data-i18n-aria="btn.close" aria-label="Close">✕</button>
   </div>
   <div class="notice-body" id="notice-body"></div>
   <div class="notice-actions">
@@ -662,16 +757,65 @@
   </div>
 </dialog>
 
+<dialog id="access-req" class="oss notice" aria-labelledby="access-title">
+  <div class="oss-head">
+    <div class="oss-heart notice-icon" aria-hidden="true">?</div>
+    <div><h2 id="access-title"></h2><p class="sub" id="access-sub"></p></div>
+  </div>
+  <div class="notice-body">
+    <p id="access-hint"></p>
+    <label class="check-row check-sub" id="access-system-row"><input type="checkbox" class="switch" id="access-system"><span><b data-i18n="acc.sys"></b><small data-i18n="acc.sys.sub"></small></span></label>
+    <label class="check-row"><input type="checkbox" class="switch" id="access-remember"><span><b data-i18n="acc.remember"></b><small data-i18n="acc.remember.sub"></small></span></label>
+    <small id="access-count" class="sub"></small>
+  </div>
+  <div class="notice-actions">
+    <button class="ghost" id="access-deny" data-i18n="acc.req.deny"></button>
+    <button class="ghost" id="access-read" data-i18n="acc.scope.read"></button>
+    <button class="primary" id="access-control" data-i18n="acc.scope.control"></button>
+  </div>
+</dialog>
+
+<dialog id="setup" class="oss setup" aria-labelledby="setup-title">
+  <div class="oss-head">
+    <div class="oss-heart setup-icon" aria-hidden="true"><svg class="ti" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div>
+    <div><h2 id="setup-title" data-i18n="setup.title"></h2><p class="sub" data-i18n="setup.sub"></p></div>
+    <button class="icon-btn" id="setup-close" data-i18n-aria="btn.close" aria-label="Close">✕</button>
+  </div>
+  <div class="setup-body">
+    <div class="setup-cards" id="setup-cards">
+      <label class="setup-card"><input type="checkbox" class="switch" data-setup="display" checked>
+        <svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+        <b data-i18n="mod.display"></b><small data-i18n="mod.display.sub"></small></label>
+      <label class="setup-card"><input type="checkbox" class="switch" data-setup="lighting" checked>
+        <svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>
+        <b data-i18n="mod.lighting"></b><small data-i18n="mod.lighting.sub"></small></label>
+      <label class="setup-card"><input type="checkbox" class="switch" data-setup="cooling" checked>
+        <svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2"/><path d="M12 10c0-4 1-7 4-7s3 4 0 6l-4 1zM14 12c4 0 7 1 7 4s-4 3-6 0l-1-4zM12 14c0 4-1 7-4 7s-3-4 0-6l4-1zM10 12c-4 0-7-1-7-4s4-3 6 0l1 4z"/></svg>
+        <b data-i18n="mod.cooling"></b><small data-i18n="mod.cooling.sub"></small></label>
+    </div>
+    <p class="sub setup-hint" id="setup-hint" data-i18n="setup.hint"></p>
+  </div>
+  <div class="notice-actions">
+    <button class="ghost" id="setup-skip" data-i18n="setup.skip"></button>
+    <button class="primary" id="setup-ok" data-i18n="setup.ok"></button>
+  </div>
+</dialog>
+
 <div id="menu" class="menu" role="menu" hidden></div>
 <datalist id="sensor-list"></datalist>
 <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 <script src="i18n.js"></script>
+<script src="help.js"></script>
 <script src="app.js"></script>
 <script src="disclaimer.js"></script>
+<script src="setup.js"></script>
+<script src="access.js"></script>
+<script src="aiconnect.js"></script>
 <script src="lighting.js"></script>
 <script src="devices.js"></script>
 <script src="tlstart.js"></script>
 <script src="conflicts.js"></script>
+<script src="cooling.js"></script>
 <script src="sketch.js"></script>
 </body>
 </html>

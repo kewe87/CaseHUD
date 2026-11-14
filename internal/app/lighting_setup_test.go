@@ -251,6 +251,9 @@ func TestApplyTemplateOnDemo(t *testing.T) {
 	if len(list) != 1 || list[0].ID != "test-board-template" || !list[0].TLSync {
 		t.Fatalf("matching templates: %+v", list)
 	}
+	if list[0].SyncZone == "" {
+		t.Errorf("the header the fan controller follows has no name: %+v", list[0])
+	}
 	for _, z := range list[0].Zones {
 		if z.Zone == "onboard" || z.Zone == "argb3" {
 			t.Errorf("zone %s is not in the demo or fixed without layout", z.Zone)
@@ -306,7 +309,7 @@ func TestUntrustedBridgeIsTranslated(t *testing.T) {
 	var notes ramNotes
 	g := newRAMBackend(inner, func() bool { return true }, &notes)
 	_, err := g.Discover(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "vertrauenswürdig") || strings.Contains(err.Error(), "not trusted") {
+	if err == nil || !strings.Contains(err.Error(), "not trusted") || strings.Contains(err.Error(), "SMBus bridge refused") {
 		t.Fatalf("error: %v", err)
 	}
 }

@@ -1,6 +1,10 @@
 package app
 
-import "github.com/kewe87/casehud/internal/lcd"
+import (
+	"slices"
+
+	"github.com/kewe87/casehud/internal/lcd"
+)
 
 // Sensor source expressions shared by the built-in designs.
 const (
@@ -8,8 +12,8 @@ const (
 	srcCPUTemp   = "Temperatures/CPU Package|Temperatures/Core (Tctl/Tdie)|Temperatures/Core (Tctl)"
 	srcGPULoad   = "Load/GPU Core|Load/D3D 3D"
 	srcGPUTemp   = "Temperatures/GPU Core|Temperatures/GPU Package"
-	srcCoolant   = "Temperatures/T Sensor|Temperatures/Coolant|Temperatures/Water|Temperatures/Liquid"
-	srcPump      = "Fans/Pump|Fans/AIO Pump|Fans/W_PUMP+"
+	srcCoolant   = lcd.SourceCoolant
+	srcPump      = lcd.SourcePump
 	srcFPS       = "FPS/Framerate"
 	srcFrametime = "FPS/Frametime"
 	srcLatency   = "FPS/Latency"
@@ -432,13 +436,32 @@ var BuiltinOrder = append([]string{
 }, append(iconDesignOrder(), tileDesignOrder()...)...)
 
 // FanSets are one-click trios for a row of LCD fans (CPU, GPU, coolant),
-// one per design set so all fans share a style.
+// one per design set so all fans share a style. Without a coolant sensor the
+// third design is the total power instead, see FanSetsFor.
 var FanSets = map[string][]string{
 	"clean":     {"cpu-temp", "gpu-temp", "loop"},
 	"neon":      {"neon-cpu", "neon-gpu", "neon-loop"},
 	"retro":     {"retro-cpu", "retro-gpu", "retro-loop"},
 	"cyberpunk": {"cyber-cpu", "cyber-gpu", "cyber-loop"},
 }
+
+// FanSetsFor returns FanSets for a PC with or without a coolant sensor: without
+// one, the coolant design gives way to the total power.
+func FanSetsFor(coolant bool) map[string][]string {
+	if coolant {
+		return FanSets
+	}
+	out := make(map[string][]string, len(FanSets))
+	for set, trio := range FanSets {
+		t := slices.Clone(trio)
+		t[2] = squareRoles["power"][set]
+		out[set] = t
+	}
+	return out
+}
+
+// FanSets returns the one-click trios that fit this PC's sensors.
+func (e *Engine) FanSets() map[string][]string { return FanSetsFor(e.HasCoolant()) }
 
 // neonClock: a glowing seconds ring in magenta around white digits.
 func neonClock() lcd.Layout {

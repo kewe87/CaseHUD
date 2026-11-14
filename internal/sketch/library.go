@@ -89,6 +89,8 @@ func ParseCase(data []byte) (CaseTemplate, error) {
 		Areas       []Area              `json:"areas"`
 		GPUSlots    []GPUSlot           `json:"gpu_slots"`
 		Approximate bool                `json:"approximate"`
+		Orientation Orientation         `json:"orientation"`
+		Lighting    []libLight          `json:"integrated_lighting"`
 	}
 	if err := json.Unmarshal(data, &f); err != nil {
 		return CaseTemplate{}, err
@@ -104,6 +106,9 @@ func ParseCase(data []byte) (CaseTemplate, error) {
 	}
 	if !printable(f.Vendor, maxLibName) || !printable(f.Model, maxLibName) || f.Model == "" {
 		return CaseTemplate{}, errors.New("vendor or model not printable text")
+	}
+	if err := f.Orientation.validate(); err != nil {
+		return CaseTemplate{}, err
 	}
 	if len(f.Views) > 2 {
 		return CaseTemplate{}, errors.New("too many views")
@@ -185,11 +190,89 @@ func ParseCase(data []byte) (CaseTemplate, error) {
 	if f.Vendor != "" {
 		name = f.Vendor + " " + f.Model
 	}
-	return CaseTemplate{
+	t := CaseTemplate{
 		ID: f.ID, Name: name, Dims: Dims{W: f.Dims.W, H: f.Dims.H, D: f.Dims.D},
 		Vendor: f.Vendor, Approximate: f.Approximate, Views: f.Views,
 		Mounts: f.Mounts, Areas: f.Areas, GPUSlots: f.GPUSlots,
-	}, nil
+		Orientation: f.Orientation,
+	}
+	if f.Orientation.FrontOnSideLeft() {
+		t.flipSideView()
+	}
+	t.Lighting = caseLights(f.Lighting, t.Dims, f.Orientation) // converts its side view data itself
+	return t, nil
+}
+
+// flipSideView converts the side view data of a template that draws the front
+// on the left to the model convention (z = 0 at the rear, on the left): every
+// side view coordinate u becomes D - u. The slices are copied; the parsed
+// input is not shared.
+func (t *CaseTemplate) flipSideView() {
+	d := t.Dims.D
+	if v, ok := t.Views[ViewSide]; ok {
+		out := make(map[string]CaseView, len(t.Views))
+		for k, cv := range t.Views {
+			out[k] = cv
+		}
+		v.Outline = flipShapes(v.Outline, d)
+		out[ViewSide] = v
+		t.Views = out
+	}
+	t.Mounts = append([]Mount(nil), t.Mounts...)
+	for i, m := range t.Mounts {
+		if m.View != ViewSide {
+			continue
+		}
+		m.Region = flipShape(m.Region, d)
+		layouts := make([]MountLayout, len(m.Layouts))
+		for j, l := range m.Layouts {
+			snap := make([][2]float64, len(l.Snap))
+			for k, q := range l.Snap {
+				snap[k] = [2]float64{d - q[0], q[1]}
+			}
+			l.Snap = snap
+			layouts[j] = l
+		}
+		m.Layouts = layouts
+		t.Mounts[i] = m
+	}
+	t.Areas = append([]Area(nil), t.Areas...)
+	for i, a := range t.Areas {
+		if a.View == ViewSide {
+			t.Areas[i].Shape = flipShape(a.Shape, d)
+		}
+	}
+	t.GPUSlots = append([]GPUSlot(nil), t.GPUSlots...)
+	for i, g := range t.GPUSlots {
+		if g.View == ViewSide {
+			t.GPUSlots[i].Region = flipShape(g.Region, d)
+		}
+	}
+}
+
+func flipShapes(ss []Shape, d float64) []Shape {
+	out := make([]Shape, len(ss))
+	for i, s := range ss {
+		out[i] = flipShape(s, d)
+	}
+	return out
+}
+
+// flipShape mirrors a shape about the vertical line x = d/2 (x -> d - x).
+func flipShape(s Shape, d float64) Shape {
+	switch s.Type {
+	case "rect":
+		s.X = d - s.X - s.W
+	case "circle", "ring":
+		s.CX = d - s.CX
+	case "polygon":
+		pts := make([][2]float64, len(s.Points))
+		for i, q := range s.Points {
+			pts[i] = [2]float64{d - q[0], q[1]}
+		}
+		s.Points = pts
+	}
+	return s
 }
 
 // AddCase adds a library case. It refuses duplicates (the built-in custom box

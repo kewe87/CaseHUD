@@ -286,3 +286,23 @@ func TestCoversMonitor(t *testing.T) {
 		}
 	}
 }
+
+func TestUnconnectedCoolantProbeIsIgnored(t *testing.T) {
+	rs := []Reading{
+		{Key: "a", Path: "Board/Temperatures/T Sensor", Value: -128},
+		{Key: "b", Path: "Board/Fans/W_PUMP+", Value: 0},
+	}
+	if r, ok := Match(rs, "Temperatures/Coolant|Temperatures/T Sensor"); ok {
+		t.Fatalf("an unconnected probe must not count: %+v", r)
+	}
+	if r, ok := Match(rs, "Fans/Pump|Fans/W_PUMP+"); !ok || r.Value != 0 {
+		t.Fatalf("a pump that stands stays visible as 0 rpm: %+v", r)
+	}
+	rs = []Reading{{Key: "a", Path: "Board/Temperatures/T Sensor", Value: 31.5}, {Key: "b", Path: "Board/Fans/W_PUMP+", Value: 2400}}
+	if _, ok := Match(rs, "Temperatures/Coolant|Temperatures/T Sensor"); !ok {
+		t.Error("a probe that reads a temperature counts")
+	}
+	if _, ok := Match(rs, "Fans/Pump|Fans/W_PUMP+"); !ok {
+		t.Error("a pump header that reads a speed counts")
+	}
+}

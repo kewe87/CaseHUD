@@ -51,6 +51,7 @@ func (e *Engine) conflictSystem() conflicts.System {
 
 // conflictSettings is what the user chose, as the manager reads it.
 func (e *Engine) conflictSettings() conflicts.Settings {
+	cool := e.coolingSnapshot().configured // before e.mu: keeps the lock order
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	s := conflicts.Settings{Ask: !e.cfg.ConflictsAskOff, Ignored: map[string]bool{}, Active: map[string]bool{}}
@@ -64,6 +65,10 @@ func (e *Engine) conflictSettings() conflicts.Settings {
 		for _, d := range conflicts.LightingDevices {
 			s.Active[d] = true
 		}
+	}
+	if cool && !e.cfg.NoCooling {
+		s.Active[conflicts.DevFan] = true
+		s.Active[conflicts.DevFanHint] = true
 	}
 	return s
 }

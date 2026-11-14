@@ -95,7 +95,7 @@ func TestRAMUnknownStickBusyDenied(t *testing.T) {
 		t.Fatalf("unknown stick: %d devices, err %v", len(devs), err)
 	}
 	u := devs[0]
-	if !strings.HasPrefix(u.ID(), unsupportedPref) || len(u.Zones()) != 0 || !strings.Contains(u.Name(), "nicht unterstützt") {
+	if !strings.HasPrefix(u.ID(), unsupportedPref) || len(u.Zones()) != 0 || !strings.Contains(u.Name(), "AUMA-E8K4") {
 		t.Fatalf("placeholder: %s %q", u.ID(), u.Name())
 	}
 	if err := u.SetFrame(map[string][]color.RGBA{"x": {{R: 1}}}); err != nil {
@@ -112,7 +112,7 @@ func TestRAMUnknownStickBusyDenied(t *testing.T) {
 	}
 	inner.err = enram.ErrDenied
 	_, err = g.Discover(context.Background())
-	if err == nil || !strings.Contains(softLightErr(err), "refused") || !strings.Contains(notes.get(), "abgelehnt") {
+	if err == nil || !strings.Contains(softLightErr(err), "refused") || notes.get() != ramNoteDenied {
 		t.Fatalf("denied: %v note=%q", err, notes.get())
 	}
 }
@@ -125,7 +125,7 @@ func TestRingOnlyTouchesTheFrame(t *testing.T) {
 	if err != nil || len(devs) != 1 || devs[0].ID() != ringDeviceID || devs[0].Name() != ringName {
 		t.Fatalf("devices: %v %v", devs, err)
 	}
-	if !strings.Contains(ringName, "LED-Rahmen") {
+	if !strings.Contains(ringName, "LED frame") {
 		t.Fatal(ringName)
 	}
 }

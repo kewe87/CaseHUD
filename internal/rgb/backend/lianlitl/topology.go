@@ -70,13 +70,7 @@ func (d *device) Topology() (Topology, error) {
 	if err != nil {
 		return Topology{}, err
 	}
-	rpm := map[fan]int{}
-	if len(d.raw) > offLen {
-		for i := 0; i < int(d.raw[offLen])/3 && offPayload+3*i+2 < len(d.raw); i++ {
-			e := d.raw[offPayload+3*i:]
-			rpm[fan{port: int(e[0]>>4) & 3, index: int(e[0] & 0x0F)}] = int(e[1])<<8 | int(e[2])
-		}
-	}
+	rpm := reportedRPM(d.raw)
 	t := Topology{DeviceID: d.ID()}
 	for _, f := range fans {
 		fi := FanInfo{Port: f.port + 1, Index: f.index + 1, RPM: rpm[f]}

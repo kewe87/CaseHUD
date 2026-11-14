@@ -5,8 +5,9 @@ import (
 	"sync"
 )
 
-// DemoSystem is a made-up process list for the demo mode: two programs of the
-// catalog "run", one can be closed, one is a service. Nothing real is touched.
+// DemoSystem is a made-up process list for the demo mode: three programs of the
+// catalog "run": two can be closed (one of them regulates fans), one is a
+// service. Nothing real is touched.
 type DemoSystem struct {
 	mu    sync.Mutex
 	procs []Proc
@@ -16,6 +17,7 @@ type DemoSystem struct {
 func NewDemoSystem() *DemoSystem {
 	return &DemoSystem{procs: []Proc{
 		{PID: 4242, Exe: "L-Connect 3.exe", Path: `C:\Demo\L-Connect 3.exe`, Created: 1},
+		{PID: 4444, Exe: "FanControl.exe", Path: `C:\Demo\FanControl.exe`, Created: 3},
 		{PID: 4343, Exe: "L-Connect-Service.exe", Path: `C:\Demo\L-Connect-Service.exe`, Created: 2, Service: true, Restricted: true},
 	}}
 }

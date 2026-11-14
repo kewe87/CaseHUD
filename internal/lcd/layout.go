@@ -95,6 +95,15 @@ type Widget struct {
 	Size float64 `json:"size,omitempty"` // font size in px, 0 = auto
 }
 
+// Default sources for the coolant temperature and the pump speed. The
+// generic names come first; the mainboard headers (T Sensor, W_PUMP+) are only
+// a last resort, and the sensor match ignores T Sensor while it reads nothing
+// plausible (an unconnected probe).
+const (
+	SourceCoolant = "Temperatures/Coolant|Temperatures/Water|Temperatures/Liquid|Temperatures/T Sensor"
+	SourcePump    = "Fans/Pump|Fans/AIO Pump|Fans/Water Pump|Fans/W_PUMP+"
+)
+
 // DefaultLayout is a 480x480 dashboard for a water-cooled system, using
 // LibreHardwareMonitor sensor names that work across Intel/AMD CPUs and
 // NVIDIA/AMD/Intel GPUs.
@@ -116,14 +125,14 @@ func DefaultLayout() Layout {
 				Source: "Load/GPU Core|Load/D3D 3D", Unit: "%", Min: 0, Max: 100, Warn: 85, Crit: 95, Color: "#76e04a",
 				SubSource: "Temperatures/GPU Core|Temperatures/GPU Package", SubUnit: "°"},
 			{Type: "value", X: 12, Y: 246, W: 148, H: 110, Label: "COOLANT",
-				Source: "Temperatures/T Sensor|Temperatures/Coolant|Temperatures/Water|Temperatures/Liquid", Unit: "°", Decimals: 1,
+				Source: SourceCoolant, Unit: "°", Decimals: 1,
 				Warn: 38, Crit: 42, Color: "#3b82f6"},
 			{Type: "value", X: 166, Y: 246, W: 148, H: 110, Label: "PUMP",
-				Source: "Fans/Pump|Fans/AIO Pump|Fans/W_PUMP+", Unit: "rpm", Color: "#a78bfa"},
+				Source: SourcePump, Unit: "rpm", Color: "#a78bfa"},
 			{Type: "value", X: 320, Y: 246, W: 148, H: 110, Label: "GPU POWER",
 				Source: "Powers/GPU Package|Powers/GPU Power|Powers/GPU Core", Unit: "W", Color: "#76e04a"},
 			{Type: "graph", X: 12, Y: 368, W: 456, H: 100, Label: "COOLANT",
-				Source: "Temperatures/T Sensor|Temperatures/Coolant|Temperatures/Water|Temperatures/Liquid", Unit: "°", Decimals: 1,
+				Source: SourceCoolant, Unit: "°", Decimals: 1,
 				Min: 20, Max: 45, Warn: 38, Crit: 42, Color: "#3b82f6"},
 		},
 	}

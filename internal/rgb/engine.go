@@ -45,6 +45,7 @@ type Engine struct {
 
 	mu          sync.Mutex
 	cfg         Config
+	overlay     map[string]Params // per device: settings on top of the stored ones (SetDeviceOverlay)
 	onChange    func(Config)
 	paused      bool
 	accent      color.RGBA
@@ -52,6 +53,8 @@ type Engine struct {
 	layoutDirty bool
 	calib       *calibration
 	devices     []*deviceEntry
+	live        map[string]map[string][]color.RGBA // last frame sent per device and zone (copy, guarded by mu)
+	tap         canvasTap                          // preview of the effect canvas for the GUI (own lock)
 	running     bool
 	cancel      context.CancelFunc
 	done        chan struct{}
@@ -402,6 +405,70 @@ func (e *Engine) SetAccent(c color.RGBA) {
 	e.mu.Unlock()
 }
 
+// SetDeviceOverlay sets settings that are passed to the device's Configure
+// on top of its stored settings (nil or empty: none). They are not part of
+// the configuration: Config and OnConfigChange never see them, so values the
+// host derives (for example from the effect and the case sketch) are applied
+// without being stored. The device is configured again only when the overlay
+// changed.
+func (e *Engine) SetDeviceOverlay(id string, p Params) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if len(p) == 0 && len(e.overlay[id]) == 0 {
+		return
+	}
+	if len(p) > 0 && sameParams(e.overlay[id], p) {
+		return
+	}
+	if len(p) == 0 {
+		delete(e.overlay, id)
+	} else {
+		if e.overlay == nil {
+			e.overlay = map[string]Params{}
+		}
+		cp := make(Params, len(p))
+		for k, v := range p {
+			cp[k] = v
+		}
+		e.overlay[id] = cp
+	}
+	e.layoutDirty = true
+}
+
+// DeviceOverlay returns a copy of the overlay of a device (nil: none).
+func (e *Engine) DeviceOverlay(id string) Params {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if len(e.overlay[id]) == 0 {
+		return nil
+	}
+	cp := make(Params, len(e.overlay[id]))
+	for k, v := range e.overlay[id] {
+		cp[k] = v
+	}
+	return cp
+}
+
+// Accent returns the accent color effects use (SetAccent).
+func (e *Engine) Accent() color.RGBA {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.accent
+}
+
+func sameParams(a, b Params) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		w, ok := b[k]
+		if !ok || fmt.Sprint(v) != fmt.Sprint(w) {
+			return false
+		}
+	}
+	return true
+}
+
 // SetDeviceConfig replaces the configuration of one device (layout, enable, ...).
 func (e *Engine) SetDeviceConfig(id string, dc DeviceConfig) {
 	e.update(func(c *Config) { c.Devices[id] = dc }, func() { e.layoutDirty = true })
@@ -572,7 +639,11 @@ func (e *Engine) loop(ctx context.Context) {
 
 	canvas := image.NewRGBA(image.Rect(0, 0, CanvasWidth, CanvasHeight))
 	var (
-		effect      Effect
+		effect Effect
+		// pvEffect draws a Scalable effect a second time, at preview size,
+		// while the GUI asks for the picture (nil otherwise)
+		pvEffect    Effect
+		pvCanvas    *image.RGBA
 		start, prev = time.Now(), time.Now()
 		n           uint64
 		fps         int
@@ -587,6 +658,7 @@ func (e *Engine) loop(ctx context.Context) {
 			ticker.Stop()
 		}
 		closeEffect(effect)
+		closeEffect(pvEffect)
 		if rescanning { // its devices were never applied: release them
 			d := <-rescanDone
 			closeAll(d.devices)
@@ -662,7 +734,16 @@ func (e *Engine) loop(ctx context.Context) {
 				e.opt.Logf("leds: effect %s: %v", rebuildInfo.Name, err)
 			} else {
 				closeEffect(effect)
-				effect, start, n = eff, now, 0
+				closeEffect(pvEffect)
+				effect, start, n, pvEffect = eff, now, 0, nil
+				if rebuildInfo.Scalable {
+					if pe, err := rebuildInfo.New(rebuildParams); err == nil {
+						pvEffect = pe
+						if pvCanvas == nil {
+							pvCanvas = image.NewRGBA(image.Rect(0, 0, PreviewWidth, PreviewHeight))
+						}
+					}
+				}
 			}
 		}
 
@@ -671,10 +752,19 @@ func (e *Engine) loop(ctx context.Context) {
 			if e.opt.Sensors != nil {
 				s = e.opt.Sensors()
 			}
-			effect.Render(Frame{T: now.Sub(start), Dt: now.Sub(prev), N: n, Sensors: s, Accent: accent}, canvas)
+			fr := Frame{T: now.Sub(start), Dt: now.Sub(prev), N: n, Sensors: s, Accent: accent}
+			effect.Render(fr, canvas)
+			if pvEffect != nil && e.tap.due(now) {
+				pvEffect.Render(fr, pvCanvas) // the same moment, sharper
+			}
 			n++
 		}
 		prev = now
+		if pvEffect != nil && !paused {
+			e.tap.take(pvCanvas, bright, now)
+		} else {
+			e.tap.take(canvas, bright, now)
+		}
 
 		for _, d := range devices {
 			e.mu.Lock()
@@ -704,7 +794,7 @@ func (e *Engine) loop(ctx context.Context) {
 							z.buf[i] = color.RGBA{A: 255}
 						}
 					}
-					d.worker.submit(d.frame)
+					e.submitFrame(d, d.frame)
 					d.offSent, d.lit = true, false
 				}
 				continue
@@ -731,7 +821,7 @@ func (e *Engine) loop(ctx context.Context) {
 			if calib.device == d.dev.ID() {
 				frame = calibrationFrame(d, calib)
 			}
-			d.worker.submit(frame)
+			e.submitFrame(d, frame)
 			d.lit = !paused
 		}
 	}
@@ -803,7 +893,17 @@ func (e *Engine) driveOff(d *deviceEntry, ps PersistentOff, want bool, now time.
 func (e *Engine) buildLayoutLocked(d *deviceEntry) {
 	dc := e.cfg.Devices[d.dev.ID()]
 	if c, ok := d.dev.(Configurable); ok {
-		if err := c.Configure(paramsWithDefaults(c.Settings(), dc.Settings)); err != nil {
+		p := dc.Settings
+		if ov := e.overlay[d.dev.ID()]; len(ov) > 0 {
+			p = make(Params, len(dc.Settings)+len(ov))
+			for k, v := range dc.Settings {
+				p[k] = v
+			}
+			for k, v := range ov {
+				p[k] = v
+			}
+		}
+		if err := c.Configure(paramsWithDefaults(c.Settings(), p)); err != nil {
 			e.opt.Logf("leds: %s: settings: %v", d.dev.ID(), err)
 		}
 	}

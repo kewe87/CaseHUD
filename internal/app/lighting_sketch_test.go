@@ -18,7 +18,8 @@ func testSketch(parts ...sketch.Placement) sketch.Sketch {
 }
 
 func fanAt(id string, x float64, bind *sketch.Binding) sketch.Placement {
-	return sketch.Placement{ID: id, Part: "generic-fan-120", View: "side", X: x, Y: 40, Bind: bind}
+	// a 120 mm fan flat in the side view with its top left corner at (x, 40)
+	return sketch.Placement{ID: id, Part: "generic-fan-120", Facing: sketch.FacingSide, Pos: sketch.Vec3{X: 12.5, Y: 100, Z: x + 60}, Bind: bind}
 }
 
 func bindTo(zone string, order int) *sketch.Binding {
@@ -137,10 +138,10 @@ func TestSketchRejectedChangesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, s := range map[string]sketch.Sketch{
-		"unknown part":   testSketch(sketch.Placement{ID: "x", Part: "nope", View: "side"}),
+		"unknown part":   testSketch(sketch.Placement{ID: "x", Part: "nope", Facing: sketch.FacingSide}),
 		"unknown device": testSketch(fanAt("a", 10, &sketch.Binding{Device: "nope", Zone: "argb1"}), fanAt("b", 100, nil)),
 		"unknown zone":   testSketch(fanAt("a", 10, &sketch.Binding{Device: "demo:board", Zone: "nope"}), fanAt("b", 100, nil)),
-		"nan":            testSketch(sketch.Placement{ID: "x", Part: "generic-fan-120", X: math.NaN()}),
+		"nan":            testSketch(sketch.Placement{ID: "x", Part: "generic-fan-120", Facing: sketch.FacingSide, Pos: sketch.Vec3{X: math.NaN()}}),
 	} {
 		_, err := e.SetSketch(s)
 		if err == nil || !strings.Contains(err.Error(), "sketch") {

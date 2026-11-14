@@ -42,10 +42,13 @@ func (l Layout) clone() Layout {
 }
 
 // BuiltinLayouts are the ready-made compositions in every design set.
-func BuiltinLayouts() []Layout {
+func BuiltinLayouts() []Layout { return builtinLayoutsFor(true) }
+
+// builtinLayoutsFor is BuiltinLayouts for a PC with or without a coolant sensor.
+func builtinLayoutsFor(coolant bool) []Layout {
 	var out []Layout
 	for _, set := range SetOrder {
-		for _, t := range GridTemplates(set) {
+		for _, t := range GridTemplatesFor(set, coolant) {
 			out = append(out, Layout{ID: t.ID + "-" + set, Grid: t.Grid, Tiles: t.Tiles, Builtin: true, Tpl: t.ID, Set: set})
 		}
 	}
@@ -63,7 +66,7 @@ func builtinLayout(id string) (Layout, bool) {
 
 // Layouts lists the ready-made and the stored layouts (stored ones last, by name).
 func (s *Store) Layouts() []Layout {
-	out := BuiltinLayouts()
+	out := builtinLayoutsFor(s.coolant())
 	var mine []Layout
 	files, _ := filepath.Glob(s.path("layouts", "*.json"))
 	for _, f := range files {
@@ -97,7 +100,16 @@ func (s *Store) Layout(id string) (Layout, bool) {
 	if !ValidID(id) {
 		return Layout{}, false
 	}
+	// Explicitly asked for, a composition is returned as drawn even where the
+	// listing leaves it out; only its coolant fields follow the sensors.
 	if l, ok := builtinLayout(id); ok {
+		if !s.coolant() {
+			for _, b := range builtinLayoutsFor(false) {
+				if b.ID == id {
+					return b, true
+				}
+			}
+		}
 		return l, true
 	}
 	l, err := s.loadLayout(id)

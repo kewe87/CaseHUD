@@ -2,17 +2,15 @@
 body.sketching main { max-width: none; padding-bottom: var(--s5); }
 #tab-light.sketching > :not(#sketch-view) { display: none; }
 .sk-entry-info { color: var(--muted); }
-.badge.warn { color: var(--warn); border-color: rgba(250, 176, 5, .5); }
-.badge.sk-b { height: 18px; padding: 0 8px; font-size: 11px; }
+.badge.sk-b { height: 18px; padding: 0 var(--s2); font-size: 12px; }
 
 .sketch { display: flex; flex-direction: column; gap: var(--s3); height: calc(100vh - var(--header-h) - 120px); min-height: 600px; }
 .sk-btn { height: 32px; padding: 0 var(--s3); font-size: 13px; }
 .sk-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s4); }
 .sk-title { display: flex; align-items: center; gap: var(--s3); min-width: 0; flex-wrap: wrap; }
-.sk-title h1 { font-size: 22px; }
 .sk-title .sub { margin-top: 0; max-width: 64ch; }
 .sk-actions { align-items: center; }
-.sk-dirty { color: var(--warn); border-color: rgba(250, 176, 5, .5); height: 24px; }
+.sk-dirty { color: var(--warn); border-color: var(--warn-line); height: 24px; }
 #sketch-view > .banner { margin: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
 #sketch-view > .banner > span:first-child { overflow-wrap: anywhere; white-space: pre-wrap; }
 .sk-banner-btns { display: flex; align-items: center; gap: var(--s2); flex: none; }
@@ -23,13 +21,11 @@ body.sketching main { max-width: none; padding-bottom: var(--s5); }
 .sk-inspector { overflow-y: auto; overscroll-behavior: contain; }
 
 /* palette */
-.sk-pal-head { display: flex; flex-direction: column; gap: var(--s2); padding: var(--s3) var(--s3) var(--s3) var(--s4); border-bottom: 1px solid var(--border); }
+.sk-pal-head { display: flex; flex-direction: column; gap: var(--s2); padding: var(--s3); border-bottom: 1px solid var(--border); }
 .sk-pal-list { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: var(--s2) var(--s3) var(--s3); }
 .sk-cat > summary { cursor: pointer; list-style: none; user-select: none; display: flex; align-items: center; gap: 6px; padding: var(--s2) var(--s1); font-weight: 600; font-size: 13px; color: var(--muted); border-radius: 8px; }
 .sk-cat > summary:hover { color: var(--text); }
 .sk-cat > summary::-webkit-details-marker { display: none; }
-.sk-cat > summary::before { content: "›"; font-size: 18px; width: 12px; line-height: 1; transition: transform .15s; }
-.sk-cat[open] > summary::before { transform: rotate(90deg); }
 .sk-cat > summary span { flex: 1; }
 .sk-items { display: grid; gap: 6px; padding: 2px 0 var(--s2); }
 .sk-item { height: auto; width: 100%; justify-content: flex-start; align-items: center; gap: 10px; padding: 8px; text-align: left; white-space: normal; font-weight: 400; background: var(--surface-2); border-radius: var(--r-md); cursor: grab; }
@@ -47,9 +43,10 @@ body.sketching main { max-width: none; padding-bottom: var(--s5); }
 
 /* stage */
 .sk-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s3); padding: var(--s2) var(--s3); border-bottom: 1px solid var(--border); }
-#sk-views { min-width: 270px; }
-#sk-views button { gap: 6px; }
-.sk-count { color: var(--muted); font-size: 11px; background: var(--surface-2); border-radius: 99px; padding: 0 6px; line-height: 16px; }
+#sk-views { min-width: 0; max-width: 100%; }
+#sk-views button { gap: 6px; flex: 1 1 auto; min-width: 0; padding: 0 var(--s2); }
+.sk-count { color: var(--muted); font-size: 12px; font-weight: 600; background: var(--surface-2); border-radius: 99px; padding: 0 var(--s2); line-height: 18px; font-variant-numeric: tabular-nums; }
+.sk-count.zero { opacity: .55; }
 .seg button.active .sk-count { background: var(--surface); }
 .sk-cv { flex: none; color: var(--accent); }
 .sk-tools { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
@@ -62,7 +59,7 @@ body.sketching main { max-width: none; padding-bottom: var(--s5); }
 .sk-ruler-y { border-right: 1px solid var(--border); }
 .sk-tick { stroke: var(--faint-deco); stroke-width: 1; }
 .sk-tick.cur { stroke: var(--accent); stroke-width: 1.5; }
-.sk-tick-label { fill: var(--muted); font: 10px var(--font); }
+.sk-tick-label { fill: var(--muted); font: 11px var(--font); font-variant-numeric: tabular-nums; }
 .sk-stage { position: relative; overflow: hidden; background: var(--bg); min-width: 0; min-height: 0; }
 .sk-stage.drop { box-shadow: inset 0 0 0 2px var(--accent); }
 .sk-svg { position: absolute; inset: 0; display: block; touch-action: none; user-select: none; outline: none; cursor: default; }
@@ -71,7 +68,7 @@ body.sketching main { max-width: none; padding-bottom: var(--s5); }
 .sk-svg.panning { cursor: grabbing; }
 .sk-status { display: flex; justify-content: space-between; align-items: center; gap: var(--s4); padding: 6px var(--s3); border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
 .sk-readout { font-variant-numeric: tabular-nums; white-space: nowrap; }
-.sk-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; min-width: 0; }
+.sk-hint { margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; min-width: 0; }
 .sk-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .sk-empty { position: absolute; left: 50%; bottom: var(--s5); transform: translateX(-50%); width: min(440px, calc(100% - 32px)); display: flex; flex-direction: column; align-items: center; gap: var(--s2); text-align: center; padding: var(--s4) var(--s5); border: 1px solid var(--border-strong); border-radius: var(--r-lg); background: color-mix(in srgb, var(--surface-2) 94%, transparent); color: var(--muted); font-size: 13px; pointer-events: none; box-shadow: 0 12px 40px rgba(0, 0, 0, .35); }
 .sk-empty b { color: var(--text); font-size: 15px; }
@@ -89,7 +86,8 @@ body.sketching main { max-width: none; padding-bottom: var(--s5); }
 .sk-chamber.c0 { fill: color-mix(in srgb, var(--accent) 6%, transparent); }
 .sk-chamber.c1 { fill: color-mix(in srgb, var(--accent-2) 7%, transparent); }
 .sk-divider { stroke: var(--accent-2); stroke-width: 1.5px; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; pointer-events: none; }
-.sk-area-label, .sk-front-label { fill: var(--muted); font-family: var(--font); pointer-events: none; opacity: .85; }
+.sk-area-label, .sk-front-label { fill: var(--muted); font-family: var(--font); pointer-events: none; opacity: .85; letter-spacing: .02em; }
+.sk-front-label.front { fill: var(--accent); opacity: 1; font-weight: 600; }
 .sk-case .sk-r-area { fill: color-mix(in srgb, var(--surface-3) 70%, transparent); stroke: var(--border-strong); stroke-dasharray: 3 3; }
 .sk-case .sk-r-mount { fill: color-mix(in srgb, var(--accent) 7%, transparent); stroke: var(--accent); stroke-dasharray: 5 4; opacity: .8; }
 .sk-mount-dot { fill: none; stroke: var(--accent); stroke-width: 1px; stroke-dasharray: 2 3; vector-effect: non-scaling-stroke; opacity: .35; pointer-events: none; }
@@ -101,6 +99,9 @@ body.sketching main { max-width: none; padding-bottom: var(--s5); }
 .sk-part .sk-hit { fill: transparent; stroke: none; }
 .sk-part:hover .sk-sh.sk-r-body { stroke: var(--muted); }
 .sk-part.sel .sk-sh { stroke: var(--accent); }
+.sk-part.away { opacity: .5; }
+.sk-part.away .sk-sh.sk-r-lit { fill: none; }
+.sk-part.edge .sk-edge { fill: var(--surface-3); }
 .sk-part.sel .sk-sh.sk-r-frame { stroke: var(--accent); opacity: .6; }
 .sk-part.missing .sk-sh { stroke: var(--danger); stroke-dasharray: 4 3; fill: transparent; }
 .sk-leds { --led: var(--muted); }
@@ -108,6 +109,11 @@ body.sketching main { max-width: none; padding-bottom: var(--s5); }
 .sk-led.first { stroke: var(--text); stroke-width: 1.5px; }
 .sk-led.test { stroke: var(--warn); stroke-width: 3px; }
 .sk-led:hover { stroke: var(--text); stroke-width: 2px; }
+.sk-cl-strip { fill: none; stroke: var(--surface-3); stroke-linecap: round; stroke-linejoin: round; }
+.sk-part.caselight { cursor: pointer; }
+.sk-part.caselight:hover .sk-cl-strip { stroke: color-mix(in srgb, var(--muted) 45%, var(--surface-3)); }
+.sk-part.caselight.sel .sk-cl-strip { stroke: color-mix(in srgb, var(--accent) 35%, var(--surface-3)); }
+.sk-cl-note { margin-top: var(--s1); }
 .sk-wire { fill: none; stroke: var(--led); stroke-width: 1px; opacity: .4; vector-effect: non-scaling-stroke; pointer-events: none; }
 .sk-arrow { fill: var(--led); stroke: var(--bg); stroke-width: 1px; vector-effect: non-scaling-stroke; pointer-events: none; }
 .sk-part:not(.sel):not(:hover) .sk-part-label { display: none; }
@@ -127,9 +133,14 @@ body.sketching main { max-width: none; padding-bottom: var(--s5); }
 .sk-dims { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s2); }
 .sk-dims .field { gap: 4px; }
 .sk-dims .field > span { font-weight: 400; font-size: 12px; }
-.sk-xy { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); }
-.sk-xy label { display: flex; align-items: center; gap: var(--s2); }
-.sk-xy small { width: 10px; color: var(--muted); }
+.sk-xyz { display: flex; flex-direction: column; gap: var(--s2); }
+.sk-axis { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: var(--s3); }
+.sk-axis label { display: flex; align-items: center; gap: var(--s2); }
+.sk-axis label small { width: 10px; color: var(--muted); }
+.sk-wall { white-space: pre-line; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; line-height: 1.35; }
+.sk-quick { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.seg.wrap { height: auto; flex-wrap: wrap; }
+.seg.wrap button { flex: 1 0 28%; }
 .sk-rotrow { display: flex; align-items: center; gap: var(--s2); }
 .sk-rotrow .seg { flex: 1; min-width: 0; }
 .sk-rotrow .seg button { padding: 0 6px; font-size: 13px; }
@@ -163,7 +174,41 @@ body.sketching main { max-width: none; padding-bottom: var(--s5); }
 .sk-warns li .link { height: auto; text-align: left; white-space: normal; font-weight: 400; color: inherit; }
 .sk-warns li .link:hover { text-decoration: underline; }
 
-@media (max-width: 1180px) { .sk-main { grid-template-columns: 236px minmax(0, 1fr) 280px; } .sk-hint { display: none; } }
+/* groups, collisions, selection frame */
+.sk-part.collide .sk-sh { stroke: var(--danger); stroke-width: 1.5px; }
+.sk-part.collide .sk-sh.sk-r-body, .sk-part.collide.edge .sk-edge { fill: color-mix(in srgb, var(--danger) 14%, var(--surface-3)); }
+.sk-part.grouped:not(.sel):hover .sk-sh.sk-r-body { stroke: var(--accent-2); }
+.sk-svg.blocked { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--danger) 70%, transparent); }
+.sk-band { fill: color-mix(in srgb, var(--accent) 10%, transparent); stroke: var(--accent); stroke-width: 1px; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+.sk-collide { border-color: var(--danger-line, var(--danger)); color: var(--danger); }
+.sk-collide:hover { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.sk-groupbox { display: flex; flex-direction: column; gap: var(--s2); padding: var(--s3); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-2); }
+.sk-quick .danger-text { color: var(--danger); }
+
+/* layers panel */
+.sk-pal-head #sk-ptabs { width: 100%; }
+.sk-pal-head #sk-ptabs button { flex: 1; }
+.sk-layers { display: flex; flex-direction: column; gap: 4px; }
+.sk-layers[hidden], .sk-pal-list[hidden] { display: none; }
+.sk-lhint { margin: 0 0 var(--s2); color: var(--muted); font-size: 12px; line-height: 1.4; }
+.sk-lrow, .sk-lhead { display: flex; align-items: center; gap: 2px; min-width: 0; padding: 2px 4px 2px 2px; border-radius: var(--r-md); }
+.sk-lrow { background: var(--surface-2); border: 1px solid transparent; }
+.sk-lrow.sel, .sk-lgroup.sel > .sk-lhead { border-color: var(--accent); }
+.sk-lrow.off .sk-lname, .sk-lgroup.off > .sk-lhead .sk-lname { opacity: .5; }
+.sk-lrow.in { margin-left: var(--s3); }
+.sk-lgroup { display: flex; flex-direction: column; gap: 4px; padding: 4px; border: 1px solid var(--border); border-radius: var(--r-lg); background: color-mix(in srgb, var(--surface-2) 40%, transparent); }
+.sk-lgroup.sel { border-color: color-mix(in srgb, var(--accent) 60%, var(--border)); }
+.sk-lhead { border: 1px solid transparent; }
+.sk-lname { flex: 1; min-width: 0; height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 6px; background: transparent; border: 0; color: var(--text); font-weight: 400; text-align: left; white-space: nowrap; }
+.sk-lname span, .sk-lname b { overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
+.sk-lname b { font-weight: 600; }
+.sk-lname small { color: var(--muted); font-size: 12px; margin-left: 4px; }
+.sk-lnum { min-width: 22px; text-align: center; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.sk-lrow .icon-btn, .sk-lhead .icon-btn { width: 26px; height: 26px; flex: none; }
+.sk-lrow .icon-btn svg, .sk-lhead .icon-btn svg { width: 16px; height: 16px; }
+.sk-eye[aria-pressed="false"] { color: var(--muted); }
+
+@media (max-width: 1180px) { .sk-count { display: none; } .sk-main { grid-template-columns: 236px minmax(0, 1fr) 280px; } .sk-hint { display: none; } }
 @media (max-width: 900px) {
   .sketch { height: auto; }
   .sk-main { grid-template-columns: minmax(0, 1fr); }

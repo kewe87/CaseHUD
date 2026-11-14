@@ -146,7 +146,7 @@ func TestWidePanelDefaults(t *testing.T) {
 		t.Fatalf("square default: %q", c.Design)
 	}
 	for set, want := range map[string]string{"clean": "water-wide", "neon": "neon-wide", "retro": "retro-wide", "cyberpunk": "cyber-wide"} {
-		if d, _ := setDesign(set, false, true, 0); d != want {
+		if d, _ := setDesign(set, false, true, 0, true); d != want {
 			t.Errorf("%s on a bar: %q, want %q", set, d, want)
 		}
 	}

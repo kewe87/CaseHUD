@@ -31,6 +31,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/kewe87/casehud/internal/access"
+	"github.com/kewe87/casehud/internal/aiconnect"
 	"github.com/kewe87/casehud/internal/app"
 	"github.com/kewe87/casehud/internal/autostart"
 	"github.com/kewe87/casehud/internal/awtrix"
@@ -57,6 +59,11 @@ type Server struct {
 	OnShow func() error
 	// OnQuit shuts the whole app down; POST /api/v1/quit calls it.
 	OnQuit func()
+	// ending is set once the app is shutting down. From then on this server no
+	// longer answers a second start's ping (/api/show, /api/state): that start
+	// waits for the lock and takes over, instead of handing its work to a
+	// process that is about to end.
+	ending atomic.Bool
 	// token is the GUI's session token, clientToken the one handed to other
 	// programs through api.json. Only the GUI token opens the internal /api/.
 	token       string
@@ -65,15 +72,31 @@ type Server struct {
 	// APIFileDir is where api.json lives ("" = no discovery file).
 	apiMu      sync.RWMutex
 	clientGen  chan struct{} // closed when the client token is revoked
+	pairGen    chan struct{} // closed when the API is switched off, for paired programs
+	mcpGen     chan struct{} // closed when MCP is switched off, for MCP connections
 	syncMu     sync.Mutex    // serialises SyncAPI, so api.json follows the last change
 	APIFileDir string
+	// AccessFile is where the paired programs are kept ("" = only until the app
+	// ends). Set it before Serve.
+	AccessFile string
+	accOnce    sync.Once
+	// AI finds and sets up AI apps (nil = not offered). DataDir is where the
+	// tokens handed to them are kept.
+	AI         *aiconnect.Env
+	DataDir    string
+	aiMu       sync.Mutex
+	accMgr     *access.Manager
+	defaultUse atomic.Int64 // when the token of api.json was last used (unix ns)
+	guiPolled  atomic.Int64 // when the window last asked for access requests (unix ns)
 
 	// Shared status snapshot for the event streams, and their count.
 	statusMu     sync.Mutex
 	statusBuf    []byte
 	statusAt     time.Time
 	eventClients atomic.Int32
-	liveClients  atomic.Int32 // open /api/live streams
+	eventMu      sync.Mutex
+	eventBy      map[string]int // open event streams per program
+	liveClients  atomic.Int32   // open /api/live streams
 
 	updMu   sync.Mutex
 	update  *update.Release // newer release, if any
@@ -127,7 +150,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("/", securityHeaders(http.FileServer(http.FS(sub))))
 
 	api := http.NewServeMux()
-	api.HandleFunc("GET /api/state", s.state)
+	api.HandleFunc("GET /api/state", s.unlessEnding(s.state))
 	api.HandleFunc("POST /api/rescan", s.rescan)
 	api.HandleFunc("PUT /api/panels/{id}", s.putPanel)
 	api.HandleFunc("PATCH /api/panels/{id}", s.patchPanel)
@@ -140,6 +163,10 @@ func (s *Server) Handler() http.Handler {
 	s.monitorBackRoutes(api)
 	s.tlStartRoutes(api)
 	s.conflictRoutes(api)
+	s.coolingRoutes(api)
+	s.modulesRoutes(api)
+	s.accessRoutes(api)
+	s.aiRoutes(api)
 	api.HandleFunc("POST /api/panels/{id}/identify", func(w http.ResponseWriter, r *http.Request) {
 		if err := s.Engine.Identify(r.PathValue("id")); err != nil {
 			fail(w, http.StatusBadRequest, err)
@@ -290,7 +317,7 @@ func (s *Server) Handler() http.Handler {
 	api.HandleFunc("POST /api/awtrix/test", s.testAwtrix)
 	api.HandleFunc("POST /api/awtrix/discover", s.discoverAwtrix)
 	api.HandleFunc("GET /api/awtrix/preview.png", s.awtrixPreview)
-	api.HandleFunc("POST /api/show", func(w http.ResponseWriter, r *http.Request) {
+	api.HandleFunc("POST /api/show", s.unlessEnding(func(w http.ResponseWriter, r *http.Request) {
 		if s.OnShow != nil {
 			// Asynchronous: opening can take seconds and the second instance
 			// that pings here only waits one.
@@ -301,13 +328,14 @@ func (s *Server) Handler() http.Handler {
 			}()
 		}
 		w.WriteHeader(http.StatusNoContent)
-	})
+	}))
 	// The first-start dialog offers "Quit" before anything runs.
 	api.HandleFunc("POST /api/quit", func(w http.ResponseWriter, r *http.Request) {
 		if s.OnQuit == nil {
 			fail(w, http.StatusServiceUnavailable, errors.New("quit is not available"))
 			return
 		}
+		s.SetEnding()
 		w.WriteHeader(http.StatusNoContent)
 		go func() {
 			time.Sleep(200 * time.Millisecond) // let the answer leave first
@@ -317,6 +345,20 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("/api/", s.auth(limitBody(api)))
 	mux.Handle("/api/v1/", s.authV1(limitBody(s.apiV1())))
 	return mux
+}
+
+// SetEnding marks the app as shutting down, see Server.ending. It is not undone.
+func (s *Server) SetEnding() { s.ending.Store(true) }
+
+// unlessEnding answers 503 instead of h once the app is shutting down.
+func (s *Server) unlessEnding(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.ending.Load() {
+			fail(w, http.StatusServiceUnavailable, errors.New("CaseHUD is shutting down"))
+			return
+		}
+		h(w, r)
+	}
 }
 
 // limitBody caps request bodies at 1 MiB (the media upload sets its own limit).
@@ -381,7 +423,7 @@ func (s *Server) state(w http.ResponseWriter, r *http.Request) {
 		"autostart":      map[string]bool{"supported": autostart.Supported(), "enabled": autostart.Enabled()},
 		"dataDir":        e.Store.Dir,
 		"language":       e.Language(),
-		"fanSets":        app.FanSets,
+		"fanSets":        e.FanSets(),
 		"presentmon":     e.Provider().PresentMonStatus(),
 		"sensorSource":   sensorSourceName(e.Provider().SensorSource()),
 		"updateCheck":    e.UpdateCheck(),
@@ -394,9 +436,11 @@ func (s *Server) state(w http.ResponseWriter, r *http.Request) {
 		"backgrounds":    lcd.BackgroundEffects,
 		"setBackgrounds": lcd.SetBackgrounds,
 		"transitions":    app.Transitions,
-		"gridTemplates":  gridTemplates(),
+		"gridTemplates":  gridTemplates(e.HasCoolant()),
 		"layouts":        e.Layouts(),
 		"lighting":       e.LightingBrief(),
+		"modules":        e.Modules(),
+		"setupPending":   e.SetupPending(),
 		"monitorMode":    e.MonitorModeDevices(),
 		"acks":           e.Acks(),
 		"barGrids":       lcd.GridPresets(1920, 480),
@@ -605,6 +649,7 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request) {
 func (s *Server) writePNG(w http.ResponseWriter, l lcd.Layout, r *http.Request) {
 	l = lcd.ApplyTheme(l, r.URL.Query().Get("theme"))
 	wd, ht := size(r, l.Width)
+	wd = max(1, min(wd, 2048)) // the layout's own width may be larger
 	if r.URL.Query().Get("h") == "" {
 		ht = wd * l.Height / l.Width
 	}
@@ -903,6 +948,9 @@ func (s *Server) awtrixPreview(w http.ResponseWriter, r *http.Request) {
 	w.Write(b)
 }
 
+// MCPCommand is the path of casehud-cli next to the running app.
+func MCPCommand() string { return mcpCommand() }
+
 // mcpCommand is the path of casehud-cli next to the running app, for the
 // MCP setup snippet shown in the settings.
 func mcpCommand() string {
@@ -1055,10 +1103,10 @@ func securityHeaders(next http.Handler) http.Handler {
 }
 
 // gridTemplates are the ready-made grid compositions per design set.
-func gridTemplates() map[string][]app.GridTemplate {
+func gridTemplates(coolant bool) map[string][]app.GridTemplate {
 	out := map[string][]app.GridTemplate{}
 	for _, set := range app.SetOrder {
-		out[set] = app.GridTemplates(set)
+		out[set] = app.GridTemplatesFor(set, coolant)
 	}
 	return out
 }

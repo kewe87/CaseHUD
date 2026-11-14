@@ -10,9 +10,11 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"image/draw"
 	"image/jpeg"
 	"log"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -37,6 +39,10 @@ const (
 	tlStartSize = 400
 	// tlStartVersion is part of the hash: raise it when the drawing changes.
 	tlStartVersion = "1"
+
+	// Pictures of the start image: the logo (default) or a plain neutral one.
+	TLStyleLogo    = "logo"
+	TLStyleNeutral = "neutral"
 )
 
 // tlpState is the per-run bookkeeping of the start image writes.
@@ -65,12 +71,14 @@ func (e *Engine) endStartImages() {
 
 // startImagePixels draws the start image: the logo on a dark background, in
 // the middle of the round safe area, the name below it.
-func startImagePixels() (*image.RGBA, error) {
+func startImagePixels(style string) (*image.RGBA, error) {
 	l := lcd.DefaultLayout()
 	l.Width, l.Height = tlStartSize, tlStartSize
 	l.Background, l.Panel, l.Round = "#0b0f14", "", true
-	l.Widgets = []lcd.Widget{
-		{Type: "text", X: 100, Y: 296, W: 200, H: 40, Text: "CaseHUD", Size: 34, Align: "center", Color: "#e6edf3"},
+	if style != TLStyleNeutral {
+		l.Widgets = []lcd.Widget{
+			{Type: "text", X: 100, Y: 296, W: 200, H: 40, Text: "CaseHUD", Size: 34, Align: "center", Color: "#e6edf3"},
+		}
 	}
 	r, err := lcd.NewRenderer(l)
 	if err != nil {
@@ -80,17 +88,39 @@ func startImagePixels() (*image.RGBA, error) {
 	if img.Bounds().Dx() != tlStartSize || img.Bounds().Dy() != tlStartSize {
 		return nil, fmt.Errorf("start image has size %v", img.Bounds())
 	}
+	if style == TLStyleNeutral {
+		drawNeutralMark(img)
+		return img, nil
+	}
 	const logo = 220
 	at := image.Pt((tlStartSize-logo)/2, 52)
 	draw.Draw(img, image.Rectangle{Min: at, Max: at.Add(image.Pt(logo, logo))}, icon.Image(logo), image.Point{}, draw.Over)
 	return img, nil
 }
 
-// StartImage returns the JPEG to write and its hash. The hash covers the
-// pixels, not the encoder's output, so a toolchain update does not trigger
-// a new write.
-func StartImage() (jpg []byte, hash string, err error) {
-	img, err := startImagePixels()
+// drawNeutralMark draws a thin ring with a centre dot, no text and no logo.
+func drawNeutralMark(img *image.RGBA) {
+	c := color.RGBA{R: 0x2a, G: 0x33, B: 0x40, A: 0xff}
+	mid := float64(tlStartSize) / 2
+	for y := 0; y < tlStartSize; y++ {
+		for x := 0; x < tlStartSize; x++ {
+			dx, dy := float64(x)+0.5-mid, float64(y)+0.5-mid
+			d := math.Sqrt(dx*dx + dy*dy)
+			if d <= 8 || (d >= 84 && d <= 90) {
+				img.SetRGBA(x, y, c)
+			}
+		}
+	}
+}
+
+// StartImage returns the JPEG of the logo picture and its hash.
+func StartImage() (jpg []byte, hash string, err error) { return StartImageFor(TLStyleLogo) }
+
+// StartImageFor returns the JPEG to write for a style and its hash. The hash
+// covers the pixels, not the encoder's output, so a toolchain update does not
+// trigger a new write.
+func StartImageFor(style string) (jpg []byte, hash string, err error) {
+	img, err := startImagePixels(style)
 	if err != nil {
 		return nil, "", err
 	}
@@ -105,6 +135,44 @@ func StartImage() (jpg []byte, hash string, err error) {
 	h.Write([]byte("casehud-tl-start-image-" + tlStartVersion + "\n"))
 	h.Write(img.Pix)
 	return b.Bytes(), hex.EncodeToString(h.Sum(nil))[:32], nil
+}
+
+// TLStartImageStyle returns the picture style: TLStyleLogo or TLStyleNeutral.
+func (e *Engine) TLStartImageStyle() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.cfg.TLStartImageStyle == TLStyleNeutral {
+		return TLStyleNeutral
+	}
+	return TLStyleLogo
+}
+
+// SetTLStartImageStyle picks the picture. With the start image switched on, a
+// changed style writes to the fans that do not have it yet.
+func (e *Engine) SetTLStartImageStyle(style string) error {
+	if style != TLStyleLogo && style != TLStyleNeutral {
+		return fmt.Errorf("unknown start image style %q", style)
+	}
+	if style == e.TLStartImageStyle() {
+		return nil
+	}
+	e.mu.Lock()
+	e.cfg.TLStartImageStyle = style
+	if style == TLStyleLogo {
+		e.cfg.TLStartImageStyle = ""
+	}
+	on := e.cfg.TLStartImageOn
+	e.mu.Unlock()
+	e.tlp.mu.Lock()
+	e.tlp.tried = nil // the picture changed: earlier attempts do not count
+	e.tlp.mu.Unlock()
+	if err := e.persist(); err != nil {
+		return err
+	}
+	if on {
+		e.startImagesAfterScan(e.connectedPanels())
+	}
+	return nil
 }
 
 // TLStartImage reports whether the start image is written (default off).
@@ -227,7 +295,7 @@ func (e *Engine) writeStartImages(ps []panel.Panel, force bool) {
 		}
 		if jpg == nil {
 			var err error
-			if jpg, hash, err = StartImage(); err != nil {
+			if jpg, hash, err = StartImageFor(e.TLStartImageStyle()); err != nil {
 				log.Println("start image:", err)
 				return
 			}

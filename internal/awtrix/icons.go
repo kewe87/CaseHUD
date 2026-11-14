@@ -290,7 +290,7 @@ func icon8(id string) image.Image {
 
 func icon16(id string) image.Image {
 	c := newCanvas(16, 16)
-	label := map[string]string{"cpu": "CPU", "gpu": "GPU", "load": "LOAD", "coolant": "H2O", "fps": "FPS"}[id]
+	label := map[string]string{"cpu": "CPU", "gpu": "GPU", "load": "LOAD", "coolant": "COOL", "fps": "FPS"}[id]
 	labelCol := cWhite
 	switch id {
 	case "cpu":

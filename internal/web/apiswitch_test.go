@@ -97,7 +97,7 @@ func TestAPISwitch(t *testing.T) {
 }
 
 func TestAPISwitchNotViaV1(t *testing.T) {
-	_, ts := testServer(t)
+	s, ts := testServer(t)
 	for _, path := range []string{"/api/v1/settings", "/api/v1/settings/advanced", "/api/settings/advanced"} {
 		for _, m := range []string{"PUT", "PATCH", "POST"} {
 			req, _ := http.NewRequest(m, ts.URL+path, bytes.NewBufferString(`{"api":false}`))
@@ -107,10 +107,17 @@ func TestAPISwitchNotViaV1(t *testing.T) {
 				t.Fatal(err)
 			}
 			resp.Body.Close()
+			// PATCH /settings exists, but its whitelist does not know "api".
+			if path == "/api/v1/settings" && m == "PATCH" && resp.StatusCode == 400 {
+				continue
+			}
 			if resp.StatusCode != 404 && resp.StatusCode != 403 && resp.StatusCode != 405 {
 				t.Fatalf("%s %s with client token: %d", m, path, resp.StatusCode)
 			}
 		}
+	}
+	if !s.Engine.APIEnabled() {
+		t.Fatal("the API switch was changed through /api/v1")
 	}
 }
 

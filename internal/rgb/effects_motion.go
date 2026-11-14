@@ -61,12 +61,29 @@ func palette(p Params, n int) []color.RGBA {
 type field struct {
 	path        string
 	mirror, rev bool
+	ox, oy      float64 // centre of around and radial, fraction of the canvas
 	w, h        int
 	u           []float64
 }
 
 func newField(p Params) *field {
-	return &field{path: p.String("path"), mirror: p.Bool("mirror"), rev: p.Bool("reverse")}
+	f := &field{path: p.String("path"), mirror: p.Bool("mirror"), rev: p.Bool("reverse"), ox: 0.5, oy: 0.5}
+	if v, ok := p["originX"].(float64); ok {
+		f.ox = math.Max(0, math.Min(100, v)) / 100
+	}
+	if v, ok := p["originY"].(float64); ok {
+		f.oy = math.Max(0, math.Min(100, v)) / 100
+	}
+	return f
+}
+
+// originParams place the centre of the around and radial paths, so a point
+// can circle around or start from a corner of the case.
+func originParams() []Param {
+	return []Param{
+		{Key: "originX", Label: "Centre X (%)", Type: ParamNumber, Min: 0, Max: 100, Default: 50.0},
+		{Key: "originY", Label: "Centre Y (%)", Type: ParamNumber, Min: 0, Max: 100, Default: 50.0},
+	}
 }
 
 func (f *field) coords(c *image.RGBA) []float64 {
@@ -76,33 +93,73 @@ func (f *field) coords(c *image.RGBA) []float64 {
 	}
 	f.w, f.h = w, h
 	f.u = make([]float64, w*h)
-	cx, cy := float64(w)/2, float64(h)/2
-	maxR := math.Hypot(cx, cy)
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
-			px, py := float64(x)+0.5, float64(y)+0.5
-			var u float64
-			switch f.path {
-			case "horizontal":
-				u = px / float64(w)
-			case "vertical":
-				u = py / float64(h)
-			case "radial":
-				u = math.Hypot(px-cx, py-cy) / maxR
-			default: // around: clockwise from the top
-				a := math.Atan2(px-cx, -(py - cy)) // 0 at the top, clockwise positive
-				u = math.Mod(a/(2*math.Pi)+1, 1)
-			}
-			if f.mirror {
-				u = 1 - math.Abs(2*u-1) // 0 at both ends, 1 in the middle
-			}
-			if f.rev {
-				u = 1 - u
-			}
-			f.u[y*w+x] = u
+			f.u[y*w+x] = f.at(float64(x)+0.5, float64(y)+0.5, float64(w), float64(h))
 		}
 	}
 	return f.u
+}
+
+// at is the path coordinate of the point (px, py) on a w x h canvas.
+func (f *field) at(px, py, w, h float64) float64 {
+	cx, cy := f.ox*w, f.oy*h
+	var u float64
+	switch f.path {
+	case "horizontal":
+		u = px / w
+	case "vertical":
+		u = py / h
+	case "radial":
+		// 1 at the canvas corner farthest from the centre
+		u = math.Hypot(px-cx, py-cy) / math.Hypot(math.Max(cx, w-cx), math.Max(cy, h-cy))
+	default: // around: clockwise from the top
+		a := math.Atan2(px-cx, -(py - cy)) // 0 at the top, clockwise positive
+		u = math.Mod(a/(2*math.Pi)+1, 1)
+	}
+	if f.mirror {
+		u = 1 - math.Abs(2*u-1) // 0 at both ends, 1 in the middle
+	}
+	if f.rev {
+		u = 1 - u
+	}
+	return u
+}
+
+// MotionField describes how an effect moves over the canvas, for hardware
+// that runs its own effect and only needs to know the direction (the TL fan
+// controller): u(x, y) is the coordinate along which the pattern travels at
+// a canvas point (x, y normalised to 0..1), growing in the direction of
+// travel. Circular: u wraps around at 1 (path "around" without mirror). ok
+// is false for effects that do not move across the canvas (solid, breathing,
+// color cycle, sensor, screen and audio effects).
+func MotionField(effect string, p Params) (u func(x, y float64) float64, circular, ok bool) {
+	w, h := float64(CanvasWidth), float64(CanvasHeight)
+	switch effect {
+	case "rainbow", "wave": // the hue (the wave) moves to growing x, or y
+		if p.Bool("vertical") {
+			return func(_, y float64) float64 { return y }, false, true
+		}
+		return func(x, _ float64) float64 { return x }, false, true
+	case "fire": // flames rise towards the top
+		return func(_, y float64) float64 { return 1 - y }, false, true
+	}
+	if _, has := p["path"].(string); !has {
+		return nil, false, false
+	}
+	f := newField(p)
+	sign := 1.0
+	if effect == "rainbow-gaps" { // its pattern runs against the path
+		sign = -1
+	}
+	circular = f.path != "horizontal" && f.path != "vertical" && f.path != "radial" && !f.mirror
+	return func(x, y float64) float64 {
+		u := f.at(x*w, y*h, w, h)
+		if sign < 0 {
+			u = 1 - u
+		}
+		return u
+	}, circular, true
 }
 
 // paint fills the canvas from a function of the path coordinate.
@@ -148,7 +205,7 @@ func motionEffects() []EffectInfo {
 	mk := func(name, label string, colors int, defaults []string, extra []Param, build func(p Params, f *field, cols []color.RGBA) func(t float64, c *image.RGBA)) EffectInfo {
 		params := append(paletteParams(colors, defaults...), pathParams()...)
 		params = append(params, extra...)
-		return EffectInfo{Name: name, Label: label, Params: params, New: func(p Params) (Effect, error) {
+		return EffectInfo{Name: name, Label: label, Params: params, Scalable: true, New: func(p Params) (Effect, error) {
 			f := newField(p)
 			return funcEffect(build(p, f, palette(p, colors))), nil
 		}}
@@ -387,8 +444,9 @@ func motionEffects() []EffectInfo {
 					})
 				}
 			}),
+		orbitEffect(),
 		{
-			Name: "rainbow-gaps", Label: "Rainbow with gaps",
+			Name: "rainbow-gaps", Label: "Rainbow with gaps", Scalable: true,
 			Params: append(pathParams(), Param{Key: "gaps", Label: "Gaps", Type: ParamNumber, Min: 1, Max: 20, Default: 5.0}),
 			New: func(p Params) (Effect, error) {
 				f, r, n := newField(p), rate(p, 0.05, 1), math.Max(1, p.Float("gaps"))
@@ -403,6 +461,49 @@ func motionEffects() []EffectInfo {
 			},
 		},
 	}
+}
+
+// orbitEffect: one point with a soft tail runs over a steady background,
+// always on in the same direction (around: in circles, other paths: it starts
+// again at the beginning). Unlike shuttle it never turns back.
+func orbitEffect() EffectInfo {
+	params := []Param{
+		{Key: "background", Label: "Background", Type: ParamColor, Default: "#1a0830"},
+		{Key: "color", Label: "Color", Type: ParamColor, Default: "#00f0ff"},
+	}
+	params = append(params, pathParams()...)
+	params = append(params, originParams()...)
+	params = append(params,
+		Param{Key: "dot", Label: "Dot size", Type: ParamNumber, Min: 1, Max: 50, Default: 6.0},
+		Param{Key: "tail", Label: "Tail length", Type: ParamNumber, Min: 0, Max: 100, Default: 20.0},
+		Param{Key: "dots", Label: "Number of dots", Type: ParamNumber, Min: 1, Max: 8, Default: 1.0})
+	for i := range params {
+		if params[i].Key == "speed" {
+			params[i].Default = 30.0
+		}
+	}
+	return EffectInfo{Name: "orbit", Label: "Orbit", Params: params, Scalable: true, New: func(p Params) (Effect, error) {
+		f := newField(p)
+		r := rate(p, 0.05, 1)
+		bg, fg := p.Color("background"), p.Color("color")
+		size, tail := p.Float("dot")/100, p.Float("tail")/100
+		// dots evenly spaced on the path; dot and tail are shares of
+		// the stretch between two dots
+		n := math.Max(1, math.Min(8, math.Round(p.Float("dots"))))
+		return funcEffect(func(t float64, c *image.RGBA) {
+			head := math.Mod(t*r, 1)
+			f.paint(c, func(u float64) color.RGBA {
+				d := math.Mod(head-math.Mod(u*n, 1)+1, 1) // how far behind the next head, wrapping around
+				switch {
+				case d <= size:
+					return fg
+				case tail > 0 && d <= size+tail:
+					return lerp(bg, fg, math.Pow(1-(d-size)/tail, 2.2)) // fades like a sonar trace
+				}
+				return bg
+			})
+		}), nil
+	}}
 }
 
 func sat(v int) uint8 {

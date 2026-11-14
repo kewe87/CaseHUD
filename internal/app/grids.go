@@ -208,15 +208,47 @@ func templateDesign(field, set string) string {
 	return setPrefix(set) + "half-" + role
 }
 
+// noCoolantFields replace the fields that need a coolant sensor when the PC
+// has none.
+var noCoolantFields = map[string]string{
+	"card:coolant":       "card:power",
+	"combo:coolant-pump": "combo:cpu-clock",
+}
+
+// needsCoolant lists the compositions that are about the coolant and make no
+// sense without a sensor for it.
+var needsCoolant = map[string]bool{"watercooling": true}
+
+// barTiles is the four-square composition of a bar display in the given set
+// that needs no coolant sensor (the same as a new bar display starts with).
+func barTiles(set string) []Tile {
+	var out []Tile
+	for _, f := range []string{"card:cpu", "card:gpu", "card:power", "combo:system"} {
+		out = append(out, Tile{Mode: "design", Design: templateDesign(f, set)})
+	}
+	return out
+}
+
 // GridTemplates returns the ready-made compositions in the given design set.
-func GridTemplates(set string) []GridTemplate {
+func GridTemplates(set string) []GridTemplate { return GridTemplatesFor(set, true) }
+
+// GridTemplatesFor is GridTemplates for a PC with or without a coolant sensor:
+// without one, coolant fields are replaced and compositions about the coolant
+// are left out.
+func GridTemplatesFor(set string, coolant bool) []GridTemplate {
 	if _, ok := FanSets[set]; !ok {
 		set = "clean"
 	}
 	var out []GridTemplate
 	for _, t := range templateSpecs {
+		if !coolant && needsCoolant[t.id] {
+			continue
+		}
 		g := GridTemplate{ID: t.id, Grid: t.grid}
 		for _, f := range t.fields {
+			if r, ok := noCoolantFields[f]; ok && !coolant {
+				f = r
+			}
 			g.Tiles = append(g.Tiles, Tile{Mode: "design", Design: templateDesign(f, set)})
 		}
 		out = append(out, g)

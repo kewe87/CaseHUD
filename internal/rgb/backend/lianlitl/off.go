@@ -91,9 +91,9 @@ func (d *device) SetOff(off, held bool) error {
 	case off:
 		d.pending = d.pending[:0]
 	case s.motherboard:
-		d.dirty = true // the next frame connects the ports to the ARGB input again
+		d.dirty, d.dirtyPorts = true, nil // the next frame connects the ports to the ARGB input again
 	case s.hardware:
-		d.dirty = false // the effect was just written to the groups
+		d.dirty, d.dirtyPorts = false, nil // the effect was just written to the groups
 		d.pending = d.pending[:0]
 	default:
 		clear(d.sent) // canvas: the rings show the canvas again
@@ -104,19 +104,23 @@ func (d *device) SetOff(off, held bool) error {
 }
 
 // writeLights sends the light of every fan (A3) and every group (B0) with the
-// current setting and the off flag as given.
+// current setting and the off flag as given. In hardware mode without merge
+// every port keeps its own effect and direction.
 func (d *device) writeLights(off bool) error {
 	s := d.set
 	level, flag := s.brightness, byte(0)
 	if off {
 		level, flag = 0, 1
 	}
-	dir := s.direction
-	if dir >= 4 {
-		dir = 0
-	}
-	fill := func(p []byte) {
-		p[2], p[3], p[4] = s.mode, level, s.speed
+	fill := func(p []byte, port int) {
+		mode, dir := s.mode, s.direction
+		if s.hardware && !s.merge && port >= 0 {
+			mode, dir = s.portLight(port)
+		}
+		if dir >= 4 {
+			dir = 0
+		}
+		p[2], p[3], p[4] = mode, level, s.speed
 		n := min(len(s.colors), maxColors)
 		for i := 0; i < n; i++ {
 			p[5+3*i], p[6+3*i], p[7+3*i] = s.colors[i].R, s.colors[i].G, s.colors[i].B
@@ -126,7 +130,7 @@ func (d *device) writeLights(off bool) error {
 	for _, f := range d.fans {
 		p := make([]byte, lightLen)
 		p[0], p[1] = byte(f.port<<4), byte(f.port<<4|f.index&0x0F)
-		fill(p)
+		fill(p, f.port)
 		if err := d.send(cmdFanLight, p); err != nil {
 			return err
 		}
@@ -134,12 +138,23 @@ func (d *device) writeLights(off bool) error {
 	for _, g := range d.offGroups() {
 		p := make([]byte, lightLen)
 		p[1] = g
-		fill(p)
+		fill(p, groupPort(g, d.ports))
 		if err := d.send(cmdGroupLite, p); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// groupPort returns the port whose default group g is, or -1 (merged group,
+// canvas rings).
+func groupPort(g byte, ports []int) int {
+	for _, port := range ports {
+		if group(port) == g {
+			return port
+		}
+	}
+	return -1
 }
 
 // offGroups lists the groups that exist: the merged group, the canvas rings of

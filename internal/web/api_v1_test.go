@@ -619,25 +619,33 @@ func TestServerTokens(t *testing.T) {
 }
 
 func TestV1EventClientCap(t *testing.T) {
-	_, ts := testServer(t)
+	s, ts := testServer(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	open := func() *http.Response {
+	open := func(tok string) *http.Response {
 		req, _ := http.NewRequestWithContext(ctx, "GET", ts.URL+"/api/v1/events", nil)
-		req.Header.Set("X-Token", "client")
+		req.Header.Set("X-Token", tok)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
 		return resp
 	}
-	for i := 0; i < maxEventClients; i++ {
-		resp := open()
-		if resp.StatusCode != 200 {
+	// One program cannot take all the slots.
+	for i := 0; i < maxEventsPerClient; i++ {
+		if resp := open("client"); resp.StatusCode != 200 {
 			t.Fatalf("stream %d: status %d", i, resp.StatusCode)
 		}
 	}
-	wantError(t, open(), 503, "too_many_clients")
+	wantError(t, open("client"), 503, "too_many_clients")
+	// Several programs together fill the total.
+	toks := []string{"secret", pairedToken(t, s, ts, "P1", "read", false), pairedToken(t, s, ts, "P2", "read", false)}
+	for n, i := maxEventsPerClient, 0; n < maxEventClients; n, i = n+1, i+1 {
+		if resp := open(toks[(i/maxEventsPerClient)%len(toks)]); resp.StatusCode != 200 {
+			t.Fatalf("stream %d: status %d", n, resp.StatusCode)
+		}
+	}
+	wantError(t, open(toks[2]), 503, "too_many_clients")
 }
 
 func TestV1GridPatch(t *testing.T) {

@@ -3,21 +3,21 @@
 // ---------- Settings: experimental devices ----------
 Object.assign(STRINGS.de, {
   "set.g.devices": "Geräte",
-  "dev.exp.desc": "Manche Geräte hat noch niemand mit CaseHUD auf echter Hardware geprüft. Sie bleiben aus, bis du sie hier freigibst.",
-  "dev.exp": "Experimentelle Geräte", "dev.exp.sub": "Erlaubt CaseHUD, die unten genannten Geräte anzusprechen",
+  "dev.exp.desc": "Geräte ohne Prüfung auf echter Hardware bleiben bis zur Freigabe hier ausgeschaltet.",
+  "dev.exp": "Experimentelle Geräte", "dev.exp.sub": "Freigabe der unten genannten Geräte für CaseHUD",
   "dev.exp.badge": "experimentell", "dev.exp.hint": "ungetestet – Rückmeldung willkommen",
   "dev.exp.list": "Einzelne Treiber", "dev.exp.sensor": "nur lesen (Sensor)", "dev.exp.display": "Display",
-  "dev.exp.report": "Hat ein Gerät funktioniert oder nicht? Ein kurzer Bericht hilft allen.", "dev.report": "Testbericht schreiben",
-  "dev.exp.err": "Konnte nicht gespeichert werden: {e}",
+  "dev.exp.report": "Rückmeldungen zu Geräten (funktioniert / funktioniert nicht) sind willkommen.", "dev.report": "Testbericht schreiben",
+  "dev.exp.err": "Speichern fehlgeschlagen: {e}",
 });
 Object.assign(STRINGS.en, {
   "set.g.devices": "Devices",
-  "dev.exp.desc": "Some devices have not been checked with CaseHUD on real hardware yet. They stay off until you allow them here.",
-  "dev.exp": "Experimental devices", "dev.exp.sub": "Lets CaseHUD talk to the devices listed below",
+  "dev.exp.desc": "Devices not yet verified on real hardware stay off until released here.",
+  "dev.exp": "Experimental devices", "dev.exp.sub": "Release of the devices listed below for CaseHUD",
   "dev.exp.badge": "experimental", "dev.exp.hint": "untested – feedback welcome",
   "dev.exp.list": "Individual drivers", "dev.exp.sensor": "read only (sensor)", "dev.exp.display": "display",
-  "dev.exp.report": "Did a device work or not? A short report helps everyone.", "dev.report": "Write a test report",
-  "dev.exp.err": "Could not save: {e}",
+  "dev.exp.report": "Feedback on devices (works / does not work) is welcome.", "dev.report": "Write a test report",
+  "dev.exp.err": "Save failed: {e}",
 });
 applyI18n();
 

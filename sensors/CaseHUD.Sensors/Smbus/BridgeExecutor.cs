@@ -28,6 +28,8 @@ namespace CaseHUD.Sensors.Smbus
         private readonly HoldBudget _budget;
         private bool _lockErrorLogged;
         private readonly HashSet<byte> _notEneLogged = new HashSet<byte>();
+        // The last transfer error logged per address: an empty slot fails on every scan, which is not news.
+        private readonly Dictionary<byte, string> _ioLogged = new Dictionary<byte, string>();
 
         /// <summary>Addresses proven to be ENE DRAM controllers; only those may be written.</summary>
         internal EneVerifier Verifier { get; } = new EneVerifier();
@@ -74,12 +76,19 @@ namespace CaseHUD.Sensors.Smbus
                 }
                 var reads = new List<byte>();
                 foreach (BridgeOp op in req.Ops) Run(req.Addr, op, reads);
+                lock (_ioLogged) _ioLogged.Remove(req.Addr);
                 return BridgeProtocol.Ok(reads);
             }
             catch (Exception e)
             {
                 Verifier.Clear(req.Addr); // re-verify before the next write
-                _log("SMBus transfer failed: " + e.Message);
+                bool news;
+                lock (_ioLogged)
+                {
+                    news = !_ioLogged.TryGetValue(req.Addr, out string seen) || seen != e.Message;
+                    _ioLogged[req.Addr] = e.Message;
+                }
+                if (news) _log("SMBus transfer failed at 0x" + req.Addr.ToString("x2") + ": " + e.Message);
                 return BridgeProtocol.Error("io");
             }
             finally

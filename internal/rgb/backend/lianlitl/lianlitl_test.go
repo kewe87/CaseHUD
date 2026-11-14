@@ -13,14 +13,19 @@ import (
 // records every write. stale is queued before the answer (another program's
 // reply on the same device).
 type controller struct {
-	fans   []byte          // A1 entries
-	models map[byte]string // A6 model code per address
-	stale  [][]byte
-	queue  [][]byte
-	writes [][]byte
+	fans     []byte          // A1 entries
+	models   map[byte]string // A6 model code per address
+	stale    [][]byte
+	queue    [][]byte
+	writes   [][]byte
+	dropAcks bool // commands other than queries get no acknowledgement
+	writeErr error
 }
 
 func (c *controller) Write(r []byte, _ time.Duration) error {
+	if c.writeErr != nil {
+		return c.writeErr
+	}
 	c.writes = append(c.writes, append([]byte(nil), r...))
 	if r[offCmd] == cmdHandshake {
 		ans := make([]byte, reportLen)
@@ -44,7 +49,7 @@ func (c *controller) Write(r []byte, _ time.Duration) error {
 				c.queue = append(c.queue, a)
 			}
 		}
-	} else {
+	} else if !c.dropAcks && r[offCmd] != cmdFanSpeed { // the real controller does not answer AA
 		ack := make([]byte, reportLen)
 		ack[0], ack[offCmd] = reportID, r[offCmd]
 		c.queue = append(c.queue, ack)
@@ -446,6 +451,119 @@ func TestFirmwareVersion(t *testing.T) {
 	for in, want := range map[string]string{"V1.00.62": "0.62", " V1.01.05 ": "1.5", "V2": "2", "": ""} {
 		if got := firmwareVersion(in); got != want {
 			t.Errorf("firmwareVersion(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestPortOverrides(t *testing.T) {
+	d, c := newTest(t)
+	keys := map[string]bool{}
+	for _, s := range d.Settings() {
+		keys[s.Key] = true
+	}
+	for _, k := range []string{"follow", "port1Effect", "port2Direction", "port3Effect"} {
+		if !keys[k] {
+			t.Fatalf("setting %s missing", k)
+		}
+	}
+	if keys["port4Effect"] {
+		t.Fatal("setting for a port without fans")
+	}
+	base := leds.Params{"mode": "hardware", "effect": "wave", "direction": "clockwise",
+		"port2Direction": "down", "port3Effect": "breathing"}
+	configure(t, d, base)
+	cols := make([]color.RGBA, 14)
+	for i := range cols {
+		cols[i] = color.RGBA{9, 9, 9, 255}
+	}
+	for i := 0; i < 3; i++ {
+		d.SetFrame(frame(cols...))
+	}
+	l := writesOf(c, cmdGroupLite)
+	if len(l) != 3 {
+		t.Fatalf("B0 %d", len(l))
+	}
+	// port 1: effect and direction of all ports; port 2: wave down; port 3: breathing clockwise
+	want := [][2]byte{{21, 0}, {21, 3}, {4, 0}}
+	for i, w := range want {
+		if p := l[i][offPayload:]; p[2] != w[0] || p[17] != w[1] {
+			t.Fatalf("port %d: mode %d dir %d, want %v", i+1, p[2], p[17], w)
+		}
+	}
+
+	// the same settings again: no write
+	configure(t, d, base)
+	for i := 0; i < 3; i++ {
+		d.SetFrame(frame(cols...))
+	}
+	if n := len(writesOf(c, cmdGroupLite)); n != 3 {
+		t.Fatalf("unchanged settings wrote: B0 %d", n)
+	}
+
+	// only port 2 changes: only port 2 is written
+	changed := leds.Params{}
+	for k, v := range base {
+		changed[k] = v
+	}
+	changed["port2Direction"] = "up"
+	configure(t, d, changed)
+	for i := 0; i < 3; i++ {
+		d.SetFrame(frame(cols...))
+	}
+	l = writesOf(c, cmdGroupLite)
+	if len(l) != 4 || l[3][offPayload+1] != group(1) || l[3][offPayload+17] != 2 {
+		t.Fatalf("per-port change: B0 %d", len(l))
+	}
+
+	// a shared setting changes: every port is written
+	changed["speed"] = 4.0
+	configure(t, d, changed)
+	for i := 0; i < 3; i++ {
+		d.SetFrame(frame(cols...))
+	}
+	if n := len(writesOf(c, cmdGroupLite)); n != 7 {
+		t.Fatalf("shared change: B0 %d", n)
+	}
+
+	// merge ignores the overrides: one group light with the shared effect
+	changed["merge"] = true
+	configure(t, d, changed)
+	d.SetFrame(frame(cols...))
+	l = writesOf(c, cmdGroupLite)
+	if len(l) != 8 || l[7][offPayload+2] != 21 || l[7][offPayload+17] != 0 {
+		t.Fatalf("merged: B0 %d % x", len(l), l[len(l)-1][offPayload:offPayload+lightLen])
+	}
+
+	if err := d.Configure(leds.Params{"mode": "hardware", "allowFlashWrites": true, "effect": "wave", "port1Effect": "nope"}); err == nil {
+		t.Fatal("unknown port effect accepted")
+	}
+}
+
+func TestPortOverridesKeptWhenSwitchedOn(t *testing.T) {
+	d, c := newTest(t)
+	now := time.Unix(0, 0)
+	d.now = func() time.Time { return now }
+	configure(t, d, leds.Params{"mode": "hardware", "effect": "wave", "port2Effect": "meteor", "port2Direction": "gather"})
+	if err := d.SetOff(true, false); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(time.Hour)
+	c.writes = nil
+	if err := d.SetOff(false, false); err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range writesOf(c, cmdGroupLite) {
+		p := w[offPayload:]
+		if p[1] == group(1) && (p[2] != 6 || p[17] != 0) { // gather (5) is sent as 0 like every direction >= 4
+			t.Fatalf("port 2 switched on with % x", p[:lightLen])
+		}
+		if p[1] == group(0) && p[2] != 21 {
+			t.Fatalf("port 1 switched on with % x", p[:lightLen])
+		}
+	}
+	for _, w := range lights(c) {
+		if p := w[offPayload:]; p[1]>>4 == 1 && p[2] != 6 {
+			t.Fatalf("A3 of port 2 % x", p[:lightLen])
 		}
 	}
 }

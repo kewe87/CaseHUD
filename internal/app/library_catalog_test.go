@@ -75,8 +75,8 @@ func TestLibraryCatalogLoads(t *testing.T) {
 		}
 	}
 	// a sketch with a library part validates against it
-	s := sketch.Sketch{Version: 1, Case: sketch.Case{Source: "library", ID: "my-case", Dims: sketch.Dims{W: 285, H: 459, D: 465}},
-		Parts: []sketch.Placement{{ID: "a", Part: "my-fan", View: "side"}}}
+	s := sketch.Sketch{Version: sketch.Version, Case: sketch.Case{Source: "library", ID: "my-case", Dims: sketch.Dims{W: 285, H: 459, D: 465}},
+		Parts: []sketch.Placement{{ID: "a", Part: "my-fan", Facing: sketch.FacingSide}}}
 	if err := sketch.Validate(s, cat); err != nil {
 		t.Fatal(err)
 	}

@@ -141,3 +141,51 @@ The portable build does not install anything. For video backgrounds and display 
 program is started with your user rights (it never gets more, and it only receives files from
 CaseHUD's media folder). Put only a build of ffmpeg you trust there, and keep the folder
 writable for administrators only if you do not want others to swap it.
+
+## Releasing mainboard fan headers (cooling pipe)
+
+`sensors.json` has a second key, `coolingHeaders`, for the always-on cooling pipe
+(`\.\pipe\CaseHUD.Cooling`). Only the headers listed there can be set through that pipe;
+a request for any other header is refused ("denied"):
+
+```json
+{ "coolingHeaders": ["/lpc/nct6701d/0/control/6"] }
+```
+
+- Missing file, missing key, an untrusted file or directory (same rules as above, logged with
+  the prefix `cooling pipe:`) means that nothing is released. The 30-100 % duty range still applies.
+- The service re-reads the file every few seconds (at most 4 s of cache). When a header is
+  removed, the service stops accepting its repeats; the hold runs out after the silence limit
+  (15 s) and the header goes back to the board, even while CaseHUD stays connected.
+- CaseHUD does not write the file at runtime. A pump on a mainboard header shows "not released"
+  until an administrator confirms it once: the setting asks for it, Windows shows one UAC prompt,
+  and CaseHUD restarts itself elevated with `--allow-cooling-header=<key>`. That start adds the key
+  (other keys such as `smbusBridge` are kept), writes the file through a temporary file in the
+  same folder and renames it. It refuses a folder or file that is a link, a file that is not valid
+  JSON, and a missing folder (the setup creates and locks it down).
+- While a header is not released, the board keeps regulating it; CaseHUD keeps sending and
+  takes over by itself after the release.
+- Before CaseHUD regulates a pump it checks once that the header and the pump's speed sensor belong together:
+  the header's duty is raised (never below what the board had or below the pump's minimum) and the speed must
+  follow up and come back down; then the header goes back to the board. The result is kept with the pair of names
+  in `cooling_match.json` in the data folder, so the check does not run again unless a name changes or the user asks
+  ("Check again"). Without the proof, or if the speed does not follow, the board keeps the pump (`not_matched`). No
+  check runs in test mode, in the demo, during a speed measurement or while another fan program is in charge.
+
+### If the service ends without giving a header back
+
+A header stays at the duty the service wrote when the service process is killed or crashes.
+The service therefore writes a note, `cooling-holds.json` in the same folder (same trust rules,
+written by the service only), before it sets a header for the first time, and strikes the
+header from it once the board has it again. If the note cannot be written, the header is not
+set and the board keeps it.
+
+When the service starts and finds a header on the note, its previous run ended hard. The
+hardware library can only hand a header back to the board if it saw the header before its
+first write in the same run, and it cannot after a restart, so the service sets such a header
+to full speed and keeps it there until the PC restarts (a restart resets the chip; the note
+is dropped then). CaseHUD can regulate it again as usual; when it lets go, the header returns
+to full speed, not to the board. Log lines carry the prefix `cooling pipe:`.
+
+The installer sets the service to restart after 5 s, 5 s and 30 s (and 30 s for every further
+failure), also when it stops itself with an error (`sc failureflag`).

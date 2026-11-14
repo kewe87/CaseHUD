@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kewe87/casehud/internal/app"
 )
@@ -207,4 +208,44 @@ func TestQueryTokenOnlyForReads(t *testing.T) {
 	if resp.StatusCode == http.StatusForbidden {
 		t.Fatal("header token refused")
 	}
+}
+
+// An instance that is shutting down no longer takes over a second start: the
+// answer is 503, so that start waits for the lock instead of ending itself.
+func TestAShuttingDownInstanceDoesNotTakeOverASecondStart(t *testing.T) {
+	srv, ts := testServer(t)
+	shown := make(chan struct{}, 1)
+	srv.OnShow = func() error { shown <- struct{}{}; return nil }
+	if code, _ := gui(t, ts, "GET", "/api/state", "", nil); code != http.StatusOK {
+		t.Fatalf("state while running: %d", code)
+	}
+	if code, _ := gui(t, ts, "POST", "/api/show", "", nil); code != http.StatusNoContent {
+		t.Fatalf("show while running: %d", code)
+	}
+	<-shown
+	srv.SetEnding()
+	if code, _ := gui(t, ts, "GET", "/api/state", "", nil); code != http.StatusServiceUnavailable {
+		t.Fatalf("state while ending: %d", code)
+	}
+	if code, _ := gui(t, ts, "POST", "/api/show", "", nil); code != http.StatusServiceUnavailable {
+		t.Fatalf("show while ending: %d", code)
+	}
+	select {
+	case <-shown:
+		t.Fatal("the window was shown")
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestQuitMarksTheInstanceAsEnding(t *testing.T) {
+	srv, ts := testServer(t)
+	quit := make(chan struct{}, 1)
+	srv.OnQuit = func() { quit <- struct{}{} }
+	if code, _ := gui(t, ts, "POST", "/api/quit", "", nil); code != http.StatusNoContent {
+		t.Fatalf("quit: %d", code)
+	}
+	if code, _ := gui(t, ts, "GET", "/api/state", "", nil); code != http.StatusServiceUnavailable {
+		t.Fatalf("state after quit: %d", code)
+	}
+	<-quit
 }

@@ -9,6 +9,8 @@ import (
 	"os/signal"
 	"runtime"
 	"sync"
+
+	"github.com/kewe87/casehud/internal/app"
 )
 
 var (
@@ -53,3 +55,9 @@ func openBrowser(u string) {
 }
 
 func showError(msg string) { fmt.Fprintln(os.Stderr, "error:", msg) }
+
+func showCoolingAlarm(a app.CoolingAlarm) {
+	if a.Kind != "" {
+		fmt.Fprintln(os.Stderr, "cooling alarm:", a.Message(false))
+	}
+}

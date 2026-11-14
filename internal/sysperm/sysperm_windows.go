@@ -4,6 +4,7 @@ package sysperm
 
 import (
 	"fmt"
+	"os"
 	"os/user"
 	"strings"
 	"unsafe"
@@ -37,6 +38,28 @@ func AddToPerformanceLogUsers() error {
 	}
 	file, _ := windows.UTF16PtrFromString(sysDir + `\WindowsPowerShell\v1.0\powershell.exe`)
 	args, _ := windows.UTF16PtrFromString("-NoProfile -WindowStyle Hidden -Command \"" + script + "\"")
+	const swHide = 0
+	r, _, _ := procShellExecuteW.Call(0, uintptr(unsafe.Pointer(verb)), uintptr(unsafe.Pointer(file)), uintptr(unsafe.Pointer(args)), 0, swHide)
+	if r <= 32 {
+		return fmt.Errorf("setup was cancelled or failed (code %d)", r)
+	}
+	return nil
+}
+
+func allowCoolingHeader(key string) error {
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	verb, _ := windows.UTF16PtrFromString("runas")
+	file, err := windows.UTF16PtrFromString(exe)
+	if err != nil {
+		return err
+	}
+	args, err := windows.UTF16PtrFromString(CoolingHeaderFlag + key)
+	if err != nil {
+		return err
+	}
 	const swHide = 0
 	r, _, _ := procShellExecuteW.Call(0, uintptr(unsafe.Pointer(verb)), uintptr(unsafe.Pointer(file)), uintptr(unsafe.Pointer(args)), 0, swHide)
 	if r <= 32 {

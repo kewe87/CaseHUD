@@ -63,10 +63,16 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; Flags: unchecked
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Excludes: "PawnIO_setup.exe"; Flags: recursesubdirs ignoreversion
 Source: "{#SourceDir}\PawnIO_setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall skipifsourcedoesntexist
+; The cooling guard runs from this second name of the program, so that ending CaseHUD by its
+; name does not end the guard, and from a folder that only administrators can write. Setup
+; and uninstall wait for a guard that is still at work (see EndGuard).
+Source: "{#SourceDir}\CaseHUD.exe"; DestDir: "{app}"; DestName: "CaseHUD-Guard.exe"; Flags: ignoreversion
 
 [Dirs]
-; Service settings (sensors.json). Nothing in CaseHUD writes here at runtime; an admin
-; creates the files by hand. The ACL is tightened in [Run] (icacls), because Inno
+; Service settings (sensors.json). CaseHUD never writes here as a normal user. An admin
+; creates the file by hand, or approves a mainboard fan header in CaseHUD, which restarts
+; itself elevated (--allow-cooling-header) and edits this one file. The ACL is tightened
+; in [Run] (icacls), because Inno
 ; permissions only add ACEs and would keep the inherited "Users may create files".
 Name: "{commonappdata}\CaseHUD"; Flags: uninsneveruninstall
 
@@ -104,7 +110,12 @@ Filename: "{sys}\icacls.exe"; Parameters: """{app}"" /L /setowner *S-1-5-32-544 
 Filename: "{sys}\sc.exe"; Parameters: "create CaseHUDSensors binPath= ""\""{app}\sensors\CaseHUD.Sensors.exe\"""" start= auto DisplayName= ""CaseHUD Sensors"""; StatusMsg: "{cm:InstallService}"; Flags: runhidden waituntilterminated
 Filename: "{sys}\sc.exe"; Parameters: "config CaseHUDSensors binPath= ""\""{app}\sensors\CaseHUD.Sensors.exe\"""" start= auto"; Flags: runhidden waituntilterminated
 Filename: "{sys}\sc.exe"; Parameters: "description CaseHUDSensors ""Reads hardware sensors for CaseHUD (LibreHardwareMonitorLib)"""; Flags: runhidden waituntilterminated
+; The service holds a pump header while CaseHUD regulates it, so a dead service must come back
+; quickly (the first thing it does is to take the headers of the run before into its care).
+; failureflag 1: the actions also apply when the service stops itself with an error, not only
+; when its process is killed or crashes. The last action repeats for every further failure.
 Filename: "{sys}\sc.exe"; Parameters: "failure CaseHUDSensors reset= 86400 actions= restart/5000/restart/5000/restart/30000"; Flags: runhidden waituntilterminated
+Filename: "{sys}\sc.exe"; Parameters: "failureflag CaseHUDSensors 1"; Flags: runhidden waituntilterminated
 Filename: "{sys}\sc.exe"; Parameters: "start CaseHUDSensors"; Flags: runhidden waituntilterminated
 ; AWTRIX clocks answer the network search on UDP 4211 (private networks only).
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""CaseHUD AWTRIX search"""; Flags: runhidden waituntilterminated
@@ -191,6 +202,46 @@ begin
   Result := (attr = $FFFFFFFF) or ((attr and $400) = 0);
 end;
 
+// True while the guard program of the installation runs.
+function GuardRunning: Boolean;
+var
+  rc: Integer;
+begin
+  Result := Exec(ExpandConstant('{sys}\cmd.exe'),
+    '/C ""' + ExpandConstant('{sys}\tasklist.exe') + '" /FI "IMAGENAME eq CaseHUD-Guard.exe" /NH | "' +
+    ExpandConstant('{sys}\find.exe') + '" /I "CaseHUD-Guard.exe""', '', SW_HIDE, ewWaitUntilTerminated, rc) and (rc = 0);
+end;
+
+// The guard outlives CaseHUD when it was ended hard: it sets the fans to a safe speed first,
+// which takes a few seconds, and then ends. Its file can be replaced or removed only after
+// that, so wait for it (60 s at most, then end it).
+procedure EndGuard;
+var
+  i, rc: Integer;
+begin
+  for i := 1 to 120 do
+  begin
+    if not GuardRunning then
+      Exit;
+    Sleep(500);
+  end;
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM CaseHUD-Guard.exe', '', SW_HIDE, ewWaitUntilTerminated, rc);
+  Sleep(1000);
+end;
+
+// The uninstall removes files, so the app is ended and the guard waited for first.
+// Not earlier: the question to the user comes first.
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  rc: Integer;
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM CaseHUD.exe', '', SW_HIDE, ewWaitUntilTerminated, rc);
+    EndGuard;
+  end;
+end;
+
 // Stop the running app and service so their files can be replaced. CaseHUD
 // is first asked to quit cleanly (it switches displays and lights off the way
 // the user chose), as the user it runs as; it holds the mutex CaseHUD.Running
@@ -217,6 +268,7 @@ begin
     end;
   end;
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM CaseHUD.exe', '', SW_HIDE, ewWaitUntilTerminated, rc);
+  EndGuard;
   Exec(ExpandConstant('{sys}\sc.exe'), 'stop CaseHUDSensors', '', SW_HIDE, ewWaitUntilTerminated, rc);
   Sleep(1500);
   Result := '';

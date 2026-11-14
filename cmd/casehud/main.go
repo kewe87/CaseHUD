@@ -34,7 +34,7 @@ const usage = `casehud - sensor dashboard for PC case displays
 
 USAGE:
   casehud version                             print the version
-  casehud mcp [--data DIR]                    MCP server on stdio for AI assistants
+  casehud mcp [--data DIR] [--client APP]    MCP server on stdio for AI assistants
                                               (needs the CaseHUD app running with
                                               the MCP interface enabled)
   casehud devices                             list connected displays
@@ -83,10 +83,11 @@ func run(cmd string, args []string) error {
 	case "mcp":
 		mfs := flag.NewFlagSet("mcp", flag.ContinueOnError)
 		dir := mfs.String("data", app.DefaultDir(), "CaseHUD data folder")
+		client := mfs.String("client", "", "app id set up by CaseHUD (uses the token CaseHUD stored for it)")
 		if err := mfs.Parse(args); err != nil {
 			return err
 		}
-		return cmdMCP(*dir)
+		return cmdMCP(*dir, *client)
 	case "write-icon": // build helper for the installer
 		if len(args) != 1 {
 			return fmt.Errorf("usage: casehud write-icon FILE.ico")
@@ -256,20 +257,30 @@ func cmdRun(targets []target, p metrics.Provider, intervalMS int) error {
 	}
 }
 
-// cmdMCP serves MCP on stdin/stdout, forwarding to the running app. The
-// address is read per call so the app may be (re)started at any time.
-func cmdMCP(dataDir string) error {
-	api := &mcp.API{}
+// cmdMCP serves MCP on stdin/stdout, forwarding to the running app through its
+// public API. The address is read per call so the app may be (re)started at any
+// time. The server asks CaseHUD for access once (the user answers in its window)
+// and keeps the token it gets in mcp-token.json in the data folder.
+func cmdMCP(dataDir, client string) error {
+	tokenName := mcp.TokenFileName
+	if client != "" {
+		n, ok := mcp.TokenFileFor(client)
+		if !ok {
+			return fmt.Errorf("invalid --client value")
+		}
+		tokenName = n
+	}
+	api := &mcp.API{TokenFile: filepath.Join(dataDir, tokenName)}
 	resolve := func() error {
 		b, err := os.ReadFile(filepath.Join(dataDir, "instance.url"))
 		if err != nil {
 			return fmt.Errorf("CaseHUD is not running: start the CaseHUD app first")
 		}
-		a, err := mcp.NewAPI(string(b))
+		a, err := mcp.NewAPI(string(b)) // only where it listens: the window's token is not used
 		if err != nil {
 			return err
 		}
-		*api = *a
+		api.Base, api.HTTP = a.Base, a.HTTP
 		return nil
 	}
 	srv := mcp.NewCaseHUD(api, version)

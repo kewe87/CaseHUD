@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/kewe87/casehud/internal/coolguard"
 	"github.com/kewe87/casehud/internal/idle"
 	"github.com/kewe87/casehud/internal/lcd"
 	"github.com/kewe87/casehud/internal/media"
@@ -26,10 +27,40 @@ import (
 
 // Engine owns all panels and streams to them in the background.
 type Engine struct {
+	settingsMu sync.Mutex // read, change and apply of the settings as one step
+	cooling    coolingState
+	coolMu     sync.Mutex   // cooling and coolMeasure
+	release    releaseGate  // asking an administrator to release a pump header
+	modMu      sync.Mutex   // one change of the core areas at a time; taken first
+	coolOps    sync.Mutex   // one change of the control at a time; taken before coolMu
+	matchMu    sync.Mutex   // the stored pump check results
+	coolRev    atomic.Int64 // counts stored cooling configurations, see coolingRevision
+
+	coolMeasure       CoolingMeasureView
+	coolMeasureCancel context.CancelFunc
+	coolMeasureDone   chan struct{} // closed once the measured fan is back at its safe duty
+	coolDemo          *demoFans     // the simulated fans of a demo run, made on first use
+
+	// coolMeasureStopped: the user ended the run; coolMeasureKeep: the finished fans stay.
+	coolMeasureStopped, coolMeasureKeep bool
+
+	coolFansMu   sync.Mutex // held while reading the list from the controller
+	coolFansAt   time.Time
+	coolFansList []string
+
 	Store *Store
 	Demo  bool // use simulated panels and sensors instead of hardware
+	// DemoSetup lets a demo run show the setup dialog, which it hides otherwise.
+	DemoSetup bool
+	// OnCoolingAlarm hears of a cooling alarm that has lasted, and with the zero
+	// alarm of its end. Set it before Start.
+	OnCoolingAlarm func(CoolingAlarm)
 	// Topology optionally reports fans without a display for the arrangement view.
 	Topology TopologySource
+	// GuardSpawn starts the process that sets the fans to a safe duty if CaseHUD
+	// ends without cleaning up. Nil: no such process (tests, demo).
+	GuardSpawn func() (coolguard.Child, error)
+	crash      coolingCrash
 
 	rescanMu      sync.Mutex // serializes Rescan (discovery runs outside mu)
 	mu            sync.Mutex
@@ -42,6 +73,8 @@ type Engine struct {
 	manualRescans atomic.Int64 // manual searches, re-arm the watcher
 	watchGaveUp   atomic.Bool  // automatic rescans stopped after repeated failures
 	cancelFn      context.CancelFunc
+	stopPlanned   atomic.Bool // Stop was called: the program is ending on purpose
+	halted        atomic.Bool // the engine ended while the program was meant to go on
 	ctx           context.Context
 	aw            awtrixState
 	awWake        chan struct{}
@@ -54,6 +87,7 @@ type Engine struct {
 	idleOff       bool            // screens are off for the screen saver (under mu)
 	outputStarted bool            // device output was started (under mu; see disclaimer.go)
 	tlp           tlpState        // start image of the TL LCD fans (see tlpersist.go)
+	bootMu        sync.Mutex      // one boot picture removal at a time (bootlogo.go)
 	dv            devVideoState   // videos encoded for the displays (devvideo.go)
 	conf          confState       // other programs on the same devices (conflicts.go)
 
@@ -125,8 +159,12 @@ func (e *Engine) Start(ctx context.Context) error {
 		p = metrics.NewMock()
 	}
 	e.prov = NewSafeProvider(p)
+	e.Store.hasCoolant = e.HasCoolant
 	e.prov.SetGameIgnore(cfg.Automation.IgnoreGames)
 	go e.prov.Run(e.ctx, time.Second)
+	e.startCooling()
+	go e.watchCoolingAlarms(e.ctx)
+	go e.watchHalt(e.ctx)
 	e.aw = awtrixState{status: map[string]string{}, info: map[string]awtrixInfo{}, pushed: map[string]map[string]pushed{}}
 	e.awWake = make(chan struct{}, 1)
 	go e.runAwtrix(e.ctx)
@@ -213,6 +251,13 @@ func (e *Engine) APIEnabled() bool {
 	return e.cfg.API
 }
 
+// MCPEnabled tells whether the MCP interface for AI assistants is switched on.
+func (e *Engine) MCPEnabled() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.cfg.MCP
+}
+
 func refTo[T any](v T) *T { return &v }
 
 // renderSettings are the options that change what the workers draw or send.
@@ -229,6 +274,23 @@ func (e *Engine) renderSettingsLocked() renderSettings {
 // ApplySettings stores new options, rebuilds the sensor provider and
 // restarts the display workers so everything takes effect immediately.
 func (e *Engine) ApplySettings(s Settings) error {
+	e.settingsMu.Lock()
+	defer e.settingsMu.Unlock()
+	return e.applySettings(s)
+}
+
+// PatchSettings changes some of the settings: fn gets the current ones and
+// edits them, and the result is applied, all under one lock. Two patches at
+// once cannot undo each other's field (as read, change, ApplySettings would).
+func (e *Engine) PatchSettings(fn func(*Settings)) error {
+	e.settingsMu.Lock()
+	defer e.settingsMu.Unlock()
+	st := e.Settings()
+	fn(&st)
+	return e.applySettings(st)
+}
+
+func (e *Engine) applySettings(s Settings) error {
 	switch s.SensorSource {
 	case "auto", "service", "lhm":
 	case "custom":
@@ -365,9 +427,23 @@ func (e *Engine) intervalOverride() time.Duration {
 	return time.Duration(e.cfg.IntervalMS) * time.Millisecond
 }
 
-// Stop blanks nothing (panels keep their last frame) and releases devices.
+// Stop blanks nothing (panels keep their last frame) and releases devices. It is
+// the end of the program on purpose (tray, --quit, interrupt), so it raises no
+// alarm.
 func (e *Engine) Stop() {
+	e.stopPlanned.Store(true)
+	e.stop()
+}
+
+// StopUnplanned is Stop for an end that the program did not choose, such as the
+// end of the session. If the process lives on afterwards, the cooling alarm
+// "halted" says that nothing regulates the fans any more.
+func (e *Engine) StopUnplanned() { e.stop() }
+
+func (e *Engine) stop() {
 	e.cancelFn()
+	e.waitCooling()
+	e.guardFinish()
 	// Wait for a running Rescan: it sees the cancelled context and closes
 	// what it found instead of installing workers behind our back.
 	e.rescanMu.Lock()
@@ -390,6 +466,21 @@ func (e *Engine) Stop() {
 	if err := e.persist(); err != nil {
 		log.Println("save config:", err)
 	}
+}
+
+// HasCoolant reports whether a coolant temperature sensor is there. Before the
+// first sensor snapshot it is not known yet and counts as present, so nothing
+// is swapped for a neutral design on a start that has not read the sensors.
+func (e *Engine) HasCoolant() bool {
+	if e.prov == nil {
+		return true
+	}
+	rs, known := e.prov.snapshot()
+	if !known {
+		return true
+	}
+	_, ok := metrics.Match(rs, lcd.SourceCoolant)
+	return ok
 }
 
 // Provider exposes the shared sensor provider (for the design editor).
@@ -429,9 +520,12 @@ func (e *Engine) Rescan() {
 		e.mu.Unlock()
 		return
 	}
-	if e.Demo {
+	switch {
+	case !e.displayOn():
+		// The displays are off: none is opened, the read-only devices still are.
+	case e.Demo:
 		panels = demoPanels()
-	} else {
+	default:
 		panels, err = discoverPanels()
 	}
 	if !e.Demo {
@@ -763,12 +857,17 @@ func (e *Engine) SetUpdateCheck(on bool) error {
 	return e.persist()
 }
 
-// Language is the UI language, used for clock day/month names.
+// systemLanguage names the default language while none is stored: German on a
+// German Windows, English otherwise. Tests replace it.
+var systemLanguage = detectSystemLanguage
+
+// Language is the UI language, used for clock day/month names, decimal marks
+// and texts. A stored choice wins; without one it follows the system language.
 func (e *Engine) Language() string {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.cfg.Language == "" {
-		return "de"
+		return systemLanguage()
 	}
 	return e.cfg.Language
 }
@@ -844,10 +943,20 @@ func (e *Engine) clip(name string, w, h int) (*media.Clip, error) {
 		return nil, err
 	}
 	e.mu.Lock()
+	// Decoded clips hold every frame in memory: keep only a few sizes.
+	for k := range e.clips {
+		if len(e.clips) < maxClips {
+			break
+		}
+		delete(e.clips, k)
+	}
 	e.clips[key] = c
 	e.mu.Unlock()
 	return c, nil
 }
+
+// maxClips is how many decoded clips (per file and size) the engine keeps.
+const maxClips = 6
 
 // maxFPS is the panel's frame rate limit for animations (default 24).
 func maxFPS(p panel.Panel) int {
@@ -1333,6 +1442,13 @@ type SafeProvider struct {
 	p       metrics.Provider
 	lastErr string
 	ignore  []string // user list of programs that are not games
+	fresh   freshWatch
+
+	// The newest snapshot, kept apart from mu: the cooling and the views use it
+	// instead of waiting while a refresh is slow (see Fresh and Err).
+	smu  sync.Mutex
+	snap []metrics.Reading
+	serr string
 }
 
 // NewSafeProvider wraps p.
@@ -1357,10 +1473,15 @@ func (s *SafeProvider) Refresh() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	err := s.p.Refresh()
+	all := append([]metrics.Reading(nil), s.p.All()...)
+	s.fresh.observe(all, err)
 	s.lastErr = ""
 	if err != nil {
 		s.lastErr = err.Error()
 	}
+	s.smu.Lock()
+	s.snap, s.serr = all, s.lastErr
+	s.smu.Unlock()
 	return err
 }
 
@@ -1418,9 +1539,21 @@ func (s *SafeProvider) SensorSource() string {
 
 // Err is the last refresh error ("" when sensors are fine).
 func (s *SafeProvider) Err() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.lastErr
+	if s.mu.TryRLock() {
+		defer s.mu.RUnlock()
+		return s.lastErr
+	}
+	s.smu.Lock()
+	defer s.smu.Unlock()
+	return s.serr // a refresh is in progress: the one before it
+}
+
+// snapshot returns the newest readings without waiting for a refresh in
+// progress; known is false until the first refresh has run.
+func (s *SafeProvider) snapshot() (rs []metrics.Reading, known bool) {
+	s.smu.Lock()
+	defer s.smu.Unlock()
+	return s.snap, s.snap != nil
 }
 
 // Get implements metrics.Provider.

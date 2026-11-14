@@ -17,6 +17,10 @@ import (
 // ringBootWait is the least time between two reports; the latest state wins.
 const ringBootWait = 5 * time.Second
 
+// ringBootRetries is how often a failed report is repeated (one wait apart)
+// before it is left until the state changes.
+const ringBootRetries = 2
+
 // ringBootSend reports a state to the sensor service (replaced in tests).
 var ringBootSend = enram.SetRingBootState
 
@@ -61,11 +65,14 @@ type ringBootNotifier struct {
 	send  func(mode string, r, g, b uint8) error
 	wait  time.Duration
 
-	mu     sync.Mutex
-	timer  *time.Timer
-	sentAt time.Time
-	last   *ringBootState
-	warned bool
+	sendMu  sync.Mutex // one report at a time: a slow send must not overlap the next
+	mu      sync.Mutex
+	timer   *time.Timer
+	sentAt  time.Time
+	last    *ringBootState
+	warned  bool
+	fails   int // failed attempts for failFor
+	failFor ringBootState
 }
 
 func (n *ringBootNotifier) poke() {
@@ -82,6 +89,8 @@ func (n *ringBootNotifier) poke() {
 }
 
 func (n *ringBootNotifier) flush() {
+	n.sendMu.Lock()
+	defer n.sendMu.Unlock()
 	n.mu.Lock()
 	n.timer = nil
 	n.mu.Unlock()
@@ -99,6 +108,16 @@ func (n *ringBootNotifier) flush() {
 		return // not installed: nothing to tell
 	}
 	n.mu.Lock()
+	if n.failFor != s {
+		n.failFor, n.fails = s, 0
+	}
+	n.fails++
+	if n.fails <= ringBootRetries {
+		n.last = nil // not delivered: the retry sends it again
+		if n.timer == nil {
+			n.timer = time.AfterFunc(n.wait, n.flush)
+		}
+	}
 	first := !n.warned
 	n.warned = true
 	n.mu.Unlock()
@@ -109,7 +128,7 @@ func (n *ringBootNotifier) flush() {
 
 // ringBootPoke reports that the state of the ring may have changed.
 func (e *Engine) ringBootPoke() {
-	if e.Demo || !e.outputAllowed() {
+	if e.Demo || !e.outputAllowed() || !e.lightingOn() {
 		return
 	}
 	l := &e.light

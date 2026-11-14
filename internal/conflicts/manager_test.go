@@ -2,6 +2,7 @@ package conflicts
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -287,8 +288,11 @@ func TestPathMustMatchName(t *testing.T) {
 func TestDemoSystem(t *testing.T) {
 	m := &Manager{Sys: NewDemoSystem(), Roots: []string{`C:\Demo`}, Logf: func(string, ...any) {}, Poll: time.Millisecond, GraceTimeout: 20 * time.Millisecond}
 	m.Scan()
-	if m.Status().Pending != 2 {
+	if m.Status().Pending != 3 {
 		t.Fatalf("pending = %d", m.Status().Pending)
+	}
+	if res, _ := m.Close("FanControl.exe", false); res.Status != "closed" {
+		t.Errorf("res = %+v", res)
 	}
 	if res, _ := m.Close("L-Connect 3.exe", false); res.Status != "closed" {
 		t.Errorf("res = %+v", res)
@@ -402,5 +406,50 @@ func TestSoftEntriesArePruned(t *testing.T) {
 	}
 	if _, ok := m.soft[ident{2, 2}]; !ok {
 		t.Fatal("fresh entry dropped")
+	}
+}
+
+func TestFanProgramsOfTheCatalog(t *testing.T) {
+	for _, exe := range []string{"FanControl.exe", "fancontrol.EXE", "ArgusMonitor.exe", "speedfan.exe", "L-Connect 3.exe", "L-Connect.exe", "L-Connect-Service.exe"} {
+		if !IsFanProgram(exe) {
+			t.Errorf("%s is not a fan program", exe)
+		}
+	}
+	for _, exe := range []string{"OpenRGB.exe", "notepad.exe", "", "FanControl.exe.bak"} {
+		if IsFanProgram(exe) {
+			t.Errorf("%s is a fan program", exe)
+		}
+	}
+}
+
+func TestFanDeviceOnlyWhileActive(t *testing.T) {
+	sys := &fakeSys{procs: []Proc{{PID: 1, Exe: "speedfan.exe", Created: 1}}}
+	active := map[string]bool{DevTLLCD: true}
+	m := &Manager{Sys: sys, Roots: []string{`C:\Apps`}, Settings: func() Settings { return Settings{Ask: true, Active: active} }}
+	m.Scan()
+	if st := m.Status(); st.Pending != 0 {
+		t.Fatalf("pending = %d", st.Pending)
+	}
+	active[DevFan] = true
+	if st := m.Status(); st.Pending != 1 {
+		t.Fatalf("pending = %d", st.Pending)
+	}
+}
+
+func TestArmouryCrateKeepsItsLightingEntryAndOnlyHintsAtFans(t *testing.T) {
+	e, ok := Lookup("ArmouryCrate.exe")
+	if !ok || IsFanProgram(e.Exe) {
+		t.Fatalf("entry: %+v %v", e, ok)
+	}
+	for _, d := range []string{DevBoardLED, DevRAMLED, DevFanHint} {
+		if !slices.Contains(e.Devices, d) {
+			t.Errorf("device %s missing", d)
+		}
+	}
+	if slices.Contains(e.Devices, DevFan) {
+		t.Error("must not be a locking fan device")
+	}
+	if IsFanProgram("LightingService.exe") {
+		t.Error("service entry changed")
 	}
 }

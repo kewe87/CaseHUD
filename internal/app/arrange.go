@@ -222,7 +222,16 @@ func (e *Engine) ResetFanNumbers() error {
 }
 
 // Arrangement describes the controller: its ports and the fans on them.
-func (e *Engine) Arrangement() Arrangement {
+func (e *Engine) Arrangement() Arrangement { return e.arrangement(true) }
+
+// cachedFans is a TopologySource that can report its list without reading
+// the controller again.
+type cachedFans interface{ CachedFans() []FanPos }
+
+// arrangement is Arrangement; without refresh the fan list is the one read
+// last, so a frequent caller never makes the topology source ask the
+// controller.
+func (e *Engine) arrangement(refresh bool) Arrangement {
 	e.mu.Lock()
 	nums := e.numbersLocked()
 	var fans []FanPos
@@ -240,7 +249,9 @@ func (e *Engine) Arrangement() Arrangement {
 	}
 	src := e.Topology
 	e.mu.Unlock()
-	if src != nil {
+	if c, ok := src.(cachedFans); ok && !refresh {
+		fans = append(fans, c.CachedFans()...)
+	} else if src != nil {
 		fans = append(fans, src.Fans()...)
 	}
 	a := buildArrangement(fans, nums)

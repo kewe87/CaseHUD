@@ -1,0 +1,240 @@
+{
+ "version": 1,
+ "case": {
+  "source": "custom",
+  "id": "custom-box",
+  "dims": {
+   "w": 230,
+   "h": 480,
+   "d": 450
+  }
+ },
+ "canvasView": "side",
+ "parts": [
+  {
+   "id": "f1",
+   "part": "generic-fan-120",
+   "view": "side",
+   "x": 40,
+   "y": 60,
+   "rot": 0,
+   "face": "",
+   "mirror": false,
+   "flow": "",
+   "leds": 0,
+   "label": "Front fan",
+   "bind": {
+    "device": "dev",
+    "zone": "a",
+    "order": 0,
+    "parallel": false
+   }
+  },
+  {
+   "id": "f2",
+   "part": "generic-fan-140",
+   "view": "side",
+   "x": 200,
+   "y": 60,
+   "rot": 37,
+   "face": "",
+   "mirror": true,
+   "flow": "exhaust",
+   "leds": 16,
+   "label": "",
+   "bind": {
+    "device": "dev",
+    "zone": "a",
+    "order": 1,
+    "parallel": false
+   }
+  },
+  {
+   "id": "f3",
+   "part": "generic-fan-120",
+   "view": "side",
+   "x": 300,
+   "y": 300,
+   "rot": 90,
+   "face": "",
+   "mirror": false,
+   "flow": "exhaust",
+   "leds": 0,
+   "label": "",
+   "bind": {
+    "device": "dev",
+    "zone": "a",
+    "order": 2,
+    "parallel": true
+   }
+  },
+  {
+   "id": "s1",
+   "part": "generic-strip",
+   "view": "side",
+   "x": 10,
+   "y": 10,
+   "rot": 0,
+   "face": "",
+   "mirror": false,
+   "flow": "",
+   "leds": 30,
+   "len": 300,
+   "label": "",
+   "bind": {
+    "device": "dev",
+    "zone": "b",
+    "order": 0,
+    "parallel": false
+   }
+  },
+  {
+   "id": "s2",
+   "part": "generic-strip",
+   "view": "side",
+   "x": 20,
+   "y": 440,
+   "rot": 270,
+   "face": "",
+   "mirror": true,
+   "flow": "",
+   "leds": 0,
+   "len": 200,
+   "label": "",
+   "bind": {
+    "device": "dev",
+    "zone": "b",
+    "order": 1,
+    "parallel": false
+   }
+  },
+  {
+   "id": "g1",
+   "part": "generic-gpu-box",
+   "view": "side",
+   "x": 100,
+   "y": 250,
+   "rot": 0,
+   "face": "",
+   "mirror": false,
+   "flow": "",
+   "leds": 0,
+   "label": "",
+   "bind": {
+    "device": "dev",
+    "zone": "c",
+    "order": 0,
+    "parallel": false
+   }
+  },
+  {
+   "id": "r1",
+   "part": "generic-ram-dimm",
+   "view": "side",
+   "x": 330,
+   "y": 100,
+   "rot": 90,
+   "face": "",
+   "mirror": false,
+   "flow": "",
+   "leds": 0,
+   "label": "",
+   "bind": {
+    "device": "dev",
+    "zone": "d",
+    "order": 0,
+    "parallel": false
+   }
+  },
+  {
+   "id": "p1",
+   "part": "generic-pump-cyl",
+   "view": "side",
+   "x": 150,
+   "y": 150,
+   "rot": -45,
+   "face": "",
+   "mirror": false,
+   "flow": "",
+   "leds": 0,
+   "label": "",
+   "bind": {
+    "device": "dev",
+    "zone": "e",
+    "order": 0,
+    "parallel": false
+   }
+  },
+  {
+   "id": "d1",
+   "part": "generic-distro-rect",
+   "view": "side",
+   "x": 380,
+   "y": 330,
+   "rot": 180,
+   "face": "",
+   "mirror": true,
+   "flow": "",
+   "leds": 0,
+   "label": ""
+  },
+  {
+   "id": "e1",
+   "part": "generic-fan-120",
+   "view": "side",
+   "x": 60,
+   "y": 20,
+   "rot": 30,
+   "face": "top",
+   "mirror": false,
+   "flow": "",
+   "leds": 0,
+   "label": "",
+   "bind": {
+    "device": "dev",
+    "zone": "f",
+    "order": 0,
+    "parallel": false
+   }
+  },
+  {
+   "id": "e2",
+   "part": "generic-fan-120",
+   "view": "side",
+   "x": 5,
+   "y": 300,
+   "rot": 60,
+   "face": "front",
+   "mirror": true,
+   "flow": "",
+   "leds": 0,
+   "label": "",
+   "bind": {
+    "device": "dev",
+    "zone": "f",
+    "order": 1,
+    "parallel": false
+   }
+  },
+  {
+   "id": "e3",
+   "part": "generic-strip",
+   "view": "side",
+   "x": 430,
+   "y": 100,
+   "rot": 90,
+   "face": "front",
+   "mirror": false,
+   "flow": "",
+   "leds": 0,
+   "len": 150,
+   "label": "",
+   "bind": {
+    "device": "dev",
+    "zone": "f",
+    "order": 2,
+    "parallel": false
+   }
+  }
+ ]
+}

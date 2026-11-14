@@ -10,7 +10,7 @@
 //	5       payload length
 //	6..     payload
 //
-// Commands used (nothing else is ever sent):
+// Lighting commands (the lighting engine sends nothing else):
 //
 //	A1      status query without payload. The answer lists the fans as
 //	        3-byte records: an address byte (0x80 present, 0x40 firmware update
@@ -40,8 +40,11 @@
 //	passive      the engine sends only the A1 status query (explicit identify
 //	             requests, B3/B4, still write).
 //	hardware     firmware effect per port: AD (default grouping) + B0, once per
-//	             change.
-//	canvas       one canvas color per ring (two zone LEDs per fan: top ring,
+//	             change. Every port may override the effect and the direction
+//	             (settings port<N>Effect, port<N>Direction; "" = like all
+//	             ports), so fans on different ports can run in different
+//	             directions. Only the ports whose light changed are written.
+//	canvas      one canvas color per ring (two zone LEDs per fan: top ring,
 //	             bottom ring; one group per ring, 8 per port; ports with more
 //	             than 4 fans get one color) as static B0, at most once per
 //	             interval (default 60 s, minimum 30 s) and only on visible
@@ -57,7 +60,15 @@
 // The controller has no per-LED streaming (the finest unit is a ring of 13
 // LEDs through its own group). It stores every A3/B0 in its data flash, and
 // a fan control program may talk to the same device at the same time, so
-// writes are kept rare. Fan speed commands (AA, B1) are never sent.
+// writes are kept rare.
+//
+// Fan speed (fan.go) is separate from the lighting and only runs on explicit
+// calls; the lighting engine never sends these commands:
+//
+//	AA      speed of one fan [port<<4 | fan, duty]: duty 12..100, 1 stops it.
+//	        This command has no answer.
+//	B1      speed source of one fan [sync<<7 | port<<4 | fan]: sync 0 = AA,
+//	        sync 1 = the controller's PWM input, shared by all fans.
 package lianlitl
 
 import (
@@ -65,6 +76,7 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
+	"maps"
 	"sort"
 	"strings"
 	"sync"
@@ -106,7 +118,7 @@ const (
 	answerTimeout  = 150 * time.Millisecond
 	ackTimeout     = 100 * time.Millisecond
 	drainTimeout   = 2 * time.Millisecond
-	staleReads     = 8
+	staleReads     = 64 // every open handle gets a copy of each answer; an idle one collects a full queue
 	sendAttempts   = 3
 	writesPerFrame = 2 // spread fan updates over frames, keep the engine tick short
 	// Every A3/B0 is stored in the controller's data flash (two 4 KiB pages,
@@ -162,7 +174,7 @@ func (*Backend) Discover(ctx context.Context) ([]leds.Device, error) {
 			errs = append(errs, err)
 			continue
 		}
-		d, err := newDevice(h, max(info.InputLen, reportLen))
+		d, err := newDeviceShared(h, max(info.InputLen, reportLen), pathLock(info.Path))
 		if err != nil {
 			h.Close()
 			errs = append(errs, err)
@@ -195,6 +207,22 @@ type settings struct {
 	minDelta    int
 	merge       bool  // one group over all fans: the effect runs across every port
 	portOrder   []int // port order of the merged group (0-based)
+	// Per-port overrides of the hardware mode without merge (0-based port ->
+	// wire byte); a port without entry uses mode and direction.
+	portMode map[int]byte
+	portDir  map[int]byte
+}
+
+// portLight returns the firmware effect and direction of one port.
+func (s settings) portLight(port int) (mode, direction byte) {
+	mode, direction = s.mode, s.direction
+	if m, ok := s.portMode[port]; ok {
+		mode = m
+	}
+	if dir, ok := s.portDir[port]; ok {
+		direction = dir
+	}
+	return mode, direction
 }
 
 type device struct {
@@ -206,9 +234,11 @@ type device struct {
 	fw    string // controller firmware version, "" if unknown
 	now   func() time.Time
 
-	mu          sync.Mutex
+	// mu is shared by every handle on the same controller, see pathLock.
+	mu          *sync.Mutex
 	set         settings
 	dirty       bool         // the mode's state must be (re)sent
+	dirtyPorts  []int        // hardware mode: only these ports must be sent (nil = all)
 	pending     []int        // ports (hardware, canvas) or fans (motherboard) waiting for a write
 	grouped     map[int]bool // default grouping written (hardware mode)
 	rings       []ring
@@ -224,8 +254,33 @@ type device struct {
 	flashOK      bool      // allowFlashWrites
 }
 
+// pathLocks holds one lock per controller. The lighting and the fan control may
+// each hold a handle on the same controller. A command and its answer must not
+// be interleaved with another one, so all handles take the same lock.
+var (
+	pathLocksMu sync.Mutex
+	pathLocks   = map[string]*sync.Mutex{}
+)
+
+func pathLock(path string) *sync.Mutex {
+	pathLocksMu.Lock()
+	defer pathLocksMu.Unlock()
+	mu := pathLocks[path]
+	if mu == nil {
+		mu = &sync.Mutex{}
+		pathLocks[path] = mu
+	}
+	return mu
+}
+
 func newDevice(h transport, inLen int) (*device, error) {
-	d := &device{h: h, inLen: inLen, now: time.Now, synced: true}
+	return newDeviceShared(h, inLen, &sync.Mutex{})
+}
+
+func newDeviceShared(h transport, inLen int, mu *sync.Mutex) (*device, error) {
+	mu.Lock()
+	defer mu.Unlock()
+	d := &device{h: h, inLen: inLen, now: time.Now, synced: true, mu: mu}
 	fans, err := d.handshake()
 	if err != nil {
 		return nil, err
@@ -263,7 +318,7 @@ func packet(cmd byte, payload []byte) []byte {
 // those of other programs on the same device) are skipped.
 func (d *device) handshake() ([]fan, error) {
 	buf := make([]byte, d.inLen)
-	for i := 0; i < 16; i++ { // drain stale reports
+	for i := 0; i < staleReads; i++ { // drain stale reports
 		if _, err := d.h.Read(buf, 5*time.Millisecond); err != nil {
 			break
 		}
@@ -349,8 +404,12 @@ func defaultSettings() settings {
 }
 
 // Settings implements leds.Configurable.
-func (d *device) Settings() []leds.Param {
-	return []leds.Param{
+func (d *device) Settings() []leds.Param { return SettingsFor(d.ports) }
+
+// SettingsFor returns the settings of a controller with fans on the given
+// ports (0-based); the demo controller of the app declares the same.
+func SettingsFor(ports []int) []leds.Param {
+	ps := []leds.Param{
 		{Key: "mode", Label: "Lighting", Type: leds.ParamEnum, Values: []string{"passive", "motherboard", "hardware", "canvas"}, Default: "motherboard"},
 		{Key: "allowFlashWrites", Label: "Allow controller lighting (hardware, canvas): every change is stored in the controller's flash and wears it out", Type: leds.ParamBool, Default: false},
 		{Key: "syncSource", Label: "ARGB header the controller's sync input is connected to (device/zone, information for the layout)", Type: leds.ParamText, Default: ""},
@@ -368,8 +427,27 @@ func (d *device) Settings() []leds.Param {
 		{Key: "minDelta", Label: "Canvas: minimum color change", Type: leds.ParamNumber, Min: 0, Max: 255, Default: float64(defaultMinDelta)},
 		{Key: "merge", Label: "Hardware effect across all fans", Type: leds.ParamBool, Default: false},
 		{Key: "portOrder", Label: "Port order for the merged effect, e.g. 3,1,2", Type: leds.ParamText, Default: ""},
+		// The backend ignores follow: the app derives the colors and the
+		// per-port effects from the CaseHUD effect and the case sketch and
+		// passes them in the settings above and below.
+		{Key: "follow", Label: "Follow CaseHUD: colors from the effect, direction per port from the case sketch", Type: leds.ParamBool, Default: false},
 	}
+	for _, port := range ports {
+		ps = append(ps,
+			leds.Param{Key: fmt.Sprintf("port%dEffect", port+1), Label: fmt.Sprintf("Port %d: hardware effect (empty = like all ports)", port+1),
+				Type: leds.ParamEnum, Values: append([]string{""}, modes...), Default: ""},
+			leds.Param{Key: fmt.Sprintf("port%dDirection", port+1), Label: fmt.Sprintf("Port %d: direction (empty = like all ports)", port+1),
+				Type: leds.ParamEnum, Values: append([]string{""}, directions...), Default: ""})
+	}
+	return ps
 }
+
+// Modes lists the firmware effects (setting values), for the app layer that
+// derives per-port settings.
+func Modes() []string { return append([]string(nil), modes...) }
+
+// Directions lists the firmware directions (setting values).
+func Directions() []string { return append([]string(nil), directions...) }
 
 // Configure implements leds.Configurable.
 func (d *device) Configure(p leds.Params) error {
@@ -400,14 +478,43 @@ func (d *device) Configure(p leds.Params) error {
 	}
 	s.portOrder = order
 	s.direction = byte(max(indexOf(directions, p.String("direction")), 0))
+	for _, port := range d.ports {
+		if v := p.String(fmt.Sprintf("port%dEffect", port+1)); v != "" {
+			m := indexOf(modes, v)
+			if m < 0 {
+				return fmt.Errorf("lianlitl: port %d: unknown effect %q", port+1, v)
+			}
+			if s.portMode == nil {
+				s.portMode = map[int]byte{}
+			}
+			s.portMode[port] = byte(m + 1)
+		}
+		if v := p.String(fmt.Sprintf("port%dDirection", port+1)); v != "" {
+			dir := indexOf(directions, v)
+			if dir < 0 {
+				return fmt.Errorf("lianlitl: port %d: unknown direction %q", port+1, v)
+			}
+			if s.portDir == nil {
+				s.portDir = map[int]byte{}
+			}
+			s.portDir[port] = byte(dir)
+		}
+	}
 	for i := 1; i <= clampInt(p.Float("colors"), 1, maxColors); i++ {
 		s.colors = append(s.colors, p.Color(fmt.Sprintf("color%d", i)))
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if !equalSettings(s, d.set) {
+		only := changedPorts(d.set, s, d.ports)
+		switch {
+		case d.dirty && (d.dirtyPorts == nil || only == nil):
+			only = nil // an earlier change still waits for every port
+		case d.dirty:
+			only = union(d.dirtyPorts, only)
+		}
 		d.set = s
-		d.dirty = true
+		d.dirty, d.dirtyPorts = true, only
 		clear(d.sent)
 	}
 	d.flashOK = p.Bool("allowFlashWrites")
@@ -472,7 +579,7 @@ func (d *device) SetupGroups(port int) error {
 	if !contains(d.ports, port) {
 		return fmt.Errorf("lianlitl: no fans on port %d", port+1)
 	}
-	d.dirty = true
+	d.dirty, d.dirtyPorts = true, nil
 	return d.setupGroup(port)
 }
 
@@ -494,10 +601,11 @@ func (d *device) groupLight(port int, mode, brightness, speed, direction byte, c
 }
 
 // Probe sends one command and returns the answers that arrive within a short
-// time (research tool). Firmware and serial number commands are refused.
+// time (research tool). Firmware, serial number and fan speed commands are
+// refused.
 func (d *device) Probe(cmd byte, payload []byte) ([][]byte, error) {
 	switch {
-	case cmd == 0xA8 || cmd == 0xA9 || cmd == 0xAB || cmd == 0xAC, cmd < 0xA0:
+	case cmd == 0xA8 || cmd == 0xA9 || cmd == 0xAB || cmd == 0xAC, cmd == cmdFanSpeed, cmd == cmdSpeedSync, cmd < 0xA0:
 		return nil, fmt.Errorf("lianlitl: command %#02x refused", cmd)
 	}
 	d.mu.Lock()
@@ -693,10 +801,19 @@ func (d *device) SetFrame(frame map[string][]color.RGBA) error {
 	if s.hardware && !allBlack {
 		if d.dirty {
 			d.dirty = false
-			d.pending = append(d.pending[:0], d.ports...)
+			if d.dirtyPorts != nil {
+				// only per-port overrides changed: the other ports keep
+				// their light and get no flash write (ports still waiting
+				// from an earlier change stay queued)
+				d.pending = union(d.pending, d.dirtyPorts)
+			} else {
+				d.pending = append(d.pending[:0], d.ports...)
+			}
+			d.dirtyPorts = nil
 		}
 		return d.flush(func(port int) error {
-			return d.groupLight(port, s.mode, s.brightness, s.speed, s.direction, s.colors)
+			mode, dir := s.portLight(port)
+			return d.groupLight(port, mode, s.brightness, s.speed, dir, s.colors)
 		})
 	}
 
@@ -704,7 +821,7 @@ func (d *device) SetFrame(frame map[string][]color.RGBA) error {
 		// switched off by a black frame: every port static black, the
 		// effect is sent again after the pause
 		if !d.dirty {
-			d.dirty = true
+			d.dirty, d.dirtyPorts = true, nil
 			d.pending = append(d.pending[:0], d.ports...)
 		}
 		d.unlimited = true
@@ -873,7 +990,8 @@ func contains(list []int, v int) bool {
 func equalSettings(a, b settings) bool {
 	if a.hardware != b.hardware || a.motherboard != b.motherboard || a.passive != b.passive || a.mode != b.mode || a.brightness != b.brightness || a.speed != b.speed ||
 		a.direction != b.direction || a.interval != b.interval || a.minDelta != b.minDelta || len(a.colors) != len(b.colors) ||
-		a.merge != b.merge || fmt.Sprint(a.portOrder) != fmt.Sprint(b.portOrder) {
+		a.merge != b.merge || fmt.Sprint(a.portOrder) != fmt.Sprint(b.portOrder) ||
+		!maps.Equal(a.portMode, b.portMode) || !maps.Equal(a.portDir, b.portDir) {
 		return false
 	}
 	for i := range a.colors {
@@ -882,6 +1000,40 @@ func equalSettings(a, b settings) bool {
 		}
 	}
 	return true
+}
+
+// changedPorts returns the ports whose light differs when the only change
+// between two hardware settings (without merge) is in the per-port overrides;
+// nil when anything else changed and every port must be written.
+func changedPorts(old, cur settings, ports []int) []int {
+	if !old.hardware || !cur.hardware || old.merge || cur.merge {
+		return nil
+	}
+	a, b := old, cur
+	a.portMode, a.portDir, b.portMode, b.portDir = nil, nil, nil, nil
+	if !equalSettings(a, b) {
+		return nil
+	}
+	out := []int{}
+	for _, port := range ports {
+		m1, d1 := old.portLight(port)
+		m2, d2 := cur.portLight(port)
+		if m1 != m2 || d1 != d2 {
+			out = append(out, port)
+		}
+	}
+	return out
+}
+
+// union appends the items of b missing in a, keeping the order.
+func union(a, b []int) []int {
+	out := append([]int(nil), a...)
+	for _, v := range b {
+		if !contains(out, v) {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // parsePortOrder reads "3,1,2" (1-based) into 0-based ports; ports left out

@@ -4,6 +4,7 @@
 package conflicts
 
 import (
+	"slices"
 	"sort"
 	"strings"
 )
@@ -12,6 +13,7 @@ import (
 const (
 	CatDisplay  = "display"
 	CatLighting = "lighting"
+	CatCooling  = "cooling"
 )
 
 // Device keys: what a program can block. The GUI turns them into names.
@@ -23,6 +25,10 @@ const (
 	DevRingLED  = "ringled"  // 8.8" screen frame
 	DevBoardLED = "boardled" // mainboard lighting
 	DevRAMLED   = "ramled"   // memory lighting
+	DevFan      = "fan"      // fan speed control
+	// DevFanHint: the program can also regulate fans, but is often only running
+	// for lighting. It is a notice only and never locks the cooling.
+	DevFanHint = "fanhint"
 )
 
 // LightingDevices are the device keys that only matter while lighting is on.
@@ -33,7 +39,7 @@ type Entry struct {
 	// Exe is the image name, matched case-insensitively and exactly.
 	Exe  string `json:"exe"`
 	Name string `json:"name"`
-	// Category is CatDisplay or CatLighting.
+	// Category is CatDisplay, CatLighting or CatCooling.
 	Category string `json:"category"`
 	// Devices lists what the program can block.
 	Devices []string `json:"devices"`
@@ -43,9 +49,11 @@ type Entry struct {
 }
 
 var (
-	displayAll = []string{DevTLLCD, DevUS88, DevAIO, DevFanLED, DevRingLED}
+	displayAll = []string{DevTLLCD, DevUS88, DevAIO, DevFanLED, DevRingLED, DevFan}
+	fanOnly    = []string{DevFan}
 	lightAll   = []string{DevFanLED, DevRingLED, DevBoardLED, DevRAMLED}
 	boardRAM   = []string{DevBoardLED, DevRAMLED}
+	boardHint  = []string{DevBoardLED, DevRAMLED, DevFanHint}
 )
 
 // catalog is the complete list. Nothing outside it is touched.
@@ -53,9 +61,12 @@ var catalog = []Entry{
 	{Exe: "L-Connect 3.exe", Name: "L-Connect 3", Category: CatDisplay, Devices: displayAll},
 	{Exe: "L-Connect.exe", Name: "L-Connect", Category: CatDisplay, Devices: displayAll},
 	{Exe: "L-Connect-Service.exe", Name: "L-Connect (Dienst)", Category: CatDisplay, Devices: displayAll, Service: true},
+	{Exe: "FanControl.exe", Name: "FanControl", Category: CatCooling, Devices: fanOnly},
+	{Exe: "ArgusMonitor.exe", Name: "Argus Monitor", Category: CatCooling, Devices: fanOnly},
+	{Exe: "speedfan.exe", Name: "SpeedFan", Category: CatCooling, Devices: fanOnly},
 	{Exe: "SignalRgb.exe", Name: "SignalRGB", Category: CatLighting, Devices: lightAll},
 	{Exe: "OpenRGB.exe", Name: "OpenRGB", Category: CatLighting, Devices: lightAll},
-	{Exe: "ArmouryCrate.exe", Name: "Armoury Crate", Category: CatLighting, Devices: boardRAM},
+	{Exe: "ArmouryCrate.exe", Name: "Armoury Crate", Category: CatLighting, Devices: boardHint},
 	{Exe: "LightingService.exe", Name: "Armoury Crate (Beleuchtungsdienst)", Category: CatLighting, Devices: boardRAM, Service: true},
 }
 
@@ -78,6 +89,13 @@ func Lookup(exe string) (Entry, bool) {
 		}
 	}
 	return Entry{}, false
+}
+
+// IsFanProgram reports whether exe is a catalog program that sets fan speeds.
+// It is the one list behind the cooling lock.
+func IsFanProgram(exe string) bool {
+	e, ok := Lookup(exe)
+	return ok && slices.Contains(e.Devices, DevFan)
 }
 
 func isListed(exe string) bool {

@@ -337,6 +337,7 @@ func (p *tlLCD) start() error {
 		p.assignSerialIfEmpty(ans[tlHeadSize:]) // only a fan without any serial; see tlpersist.go
 	}
 	p.key = tlKeyFor(p.serial, p.posKnown, p.port, p.slot)
+	p.rate.attach(p.key)
 	// (oldKey: a serial written just now changes the key, the record is under the old one.)
 	// Start from what the fan was last given: the settings write below then
 	// carries values it already holds, so nothing in its flash changes.

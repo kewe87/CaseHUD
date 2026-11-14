@@ -21,7 +21,7 @@ type ZoneSegments struct {
 type Derived struct {
 	// Components has one component "sketch.<placementID>" per placement,
 	// in placement order: LED positions in mm from the top left of the
-	// placement's bounding box in the canvas view (Component.PositionsMM).
+	// placement's bounding box in the case net (Component.PositionsMM).
 	Components []leds.Component
 	// Zones has the segments of every bound (device, zone), sorted by
 	// device and zone.
@@ -55,14 +55,23 @@ const minExtentMM = 0.01
 // Parallel, the same start as the previous part (an LED driven twice takes
 // its canvas position from the first).
 //
-// The canvas shows the sketch's canvasView, letterboxed. Parts placed in
-// another view are mapped into it through the 3D coordinates of the case
-// (MapToView), so parts of different views end up where they really are
-// relative to each other. A component's LED positions are millimetres from
-// the top left of its bounding box in the canvas view. Parts up to MarginMM
-// outside the case, or larger than it, would leave the canvas: the segment
-// box is clamped to it.
+// The canvas shows the unfolded case net (NetLayout), letterboxed: every part
+// is projected onto its face (FaceOf, ProjectNet), and neighbouring faces
+// share their edges, so an effect runs on across the edges of the case. A
+// part seen edge-on on its face becomes a thin box. A component's LED
+// positions are millimetres from the top left of its bounding box in the
+// net. Parts up to MarginMM outside the case, or larger than it, would leave
+// the canvas: the segment box is clamped to it. Sketch.CanvasView does not
+// change the mapping (older view names are accepted and mean the net).
 func Derive(s Sketch, c Catalog) (Derived, error) {
+	return DeriveWith(s, c, nil)
+}
+
+// DeriveWith is Derive with the ring zones of the found devices (RingZone):
+// a part bound to one gives one LED per ring (RingGroups), at the centre of
+// that ring's LEDs, so a fan takes as many zone LEDs as the controller has
+// per fan.
+func DeriveWith(s Sketch, c Catalog, rings RingZones) (Derived, error) {
 	if err := Validate(s, c); err != nil {
 		return Derived{}, err
 	}
@@ -73,12 +82,11 @@ func Derive(s Sketch, c Catalog) (Derived, error) {
 	}
 	var out Derived
 	chains := map[[2]string][]bound{}
-	cv := s.CanvasViewOf()
-	cw, ch, _ := ViewSize(s.Case.Dims, cv)
-	ox, oy, sx, sy := Letterbox(cw, ch)
+	faces, net := SketchNet(s, c)
+	ox, oy, sx, sy := Letterbox(net.W, net.H)
 	for i, p := range s.Parts {
 		part := c.Parts[p.Part]
-		pr, err := Project(part, p)
+		pr, err := ProjectNet(part, p, s.Case, net, faces[i])
 		if err != nil {
 			return Derived{}, err
 		}
@@ -86,23 +94,20 @@ func Derive(s Sketch, c Catalog) (Derived, error) {
 		if label == "" {
 			label = p.ID
 		}
-		view := p.ViewOf()
-		toCanvas := func(x, y float64) Point {
-			u, v := MapToView(s.Case.Dims, view, cv, x, y)
-			return Point{X: u, Y: v}
-		}
-		a, b := toCanvas(pr.Box.X, pr.Box.Y), toCanvas(pr.Box.X+pr.Box.W, pr.Box.Y+pr.Box.H)
-		box := Rect{X: math.Min(a.X, b.X), Y: math.Min(a.Y, b.Y), W: math.Abs(a.X - b.X), H: math.Abs(a.Y - b.Y)}
+		box := pr.Box
 		bw, bh := math.Max(box.W, minExtentMM), math.Max(box.H, minExtentMM)
 		comp := leds.Component{
 			Name: ComponentName(p.ID), Label: label,
 			Width: int(math.Ceil(bw)), Height: int(math.Ceil(bh)),
 			SizeMM: leds.Point{X: bw, Y: bh}, Outline: "rect", PositionsMM: true,
 		}
-		for _, q := range pr.LEDs {
-			m := toCanvas(q.X, q.Y)
+		pts := pr.LEDs
+		if p.Bind != nil && p.Path == nil && rings != nil && rings(p.Bind.Device, p.Bind.Zone) {
+			pts = ringCentres(part, p, pts)
+		}
+		for _, q := range pts {
 			comp.LEDs = append(comp.LEDs, leds.Point{
-				X: clamp(round6(m.X-box.X), 0, bw), Y: clamp(round6(m.Y-box.Y), 0, bh)})
+				X: clamp(round6(q.X-box.X), 0, bw), Y: clamp(round6(q.Y-box.Y), 0, bh)})
 		}
 		out.Components = append(out.Components, comp)
 		if p.Bind == nil {
@@ -114,7 +119,7 @@ func Derive(s Sketch, c Catalog) (Derived, error) {
 			W: clamp(round6(bw*sx), 0, 1), H: clamp(round6(bh*sy), 0, 1),
 		}
 		key := [2]string{p.Bind.Device, p.Bind.Zone}
-		chains[key] = append(chains[key], bound{idx: i, seg: seg, n: len(pr.LEDs)})
+		chains[key] = append(chains[key], bound{idx: i, seg: seg, n: len(pts)})
 	}
 	keys := make([][2]string, 0, len(chains))
 	for k := range chains {

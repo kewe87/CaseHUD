@@ -1,0 +1,72 @@
+{
+ "version": 1,
+ "case": {
+  "source": "custom",
+  "id": "custom-box",
+  "dims": {
+   "w": 200,
+   "h": 400,
+   "d": 380
+  }
+ },
+ "canvasView": "",
+ "parts": [
+  {
+   "id": "a",
+   "part": "generic-fan-120",
+   "view": "",
+   "x": -30,
+   "y": -30,
+   "rot": 0,
+   "face": "",
+   "mirror": false,
+   "flow": "",
+   "leds": 0,
+   "label": "",
+   "bind": {
+    "device": "dev",
+    "zone": "a",
+    "order": 0,
+    "parallel": false
+   }
+  },
+  {
+   "id": "b",
+   "part": "generic-fan-140",
+   "view": "",
+   "x": 300,
+   "y": 350,
+   "rot": 15,
+   "face": "",
+   "mirror": false,
+   "flow": "",
+   "leds": 0,
+   "label": "",
+   "bind": {
+    "device": "dev",
+    "zone": "a",
+    "order": 1,
+    "parallel": false
+   }
+  },
+  {
+   "id": "c",
+   "part": "generic-ram-dimm",
+   "view": "",
+   "x": 200,
+   "y": 200,
+   "rot": 90,
+   "face": "",
+   "mirror": true,
+   "flow": "",
+   "leds": 0,
+   "label": "",
+   "bind": {
+    "device": "dev",
+    "zone": "b",
+    "order": 0,
+    "parallel": false
+   }
+  }
+ ]
+}

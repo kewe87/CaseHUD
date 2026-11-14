@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	leds "github.com/kewe87/casehud/internal/rgb"
@@ -10,21 +11,26 @@ import (
 )
 
 // demoController is the demo fan controller with a lighting mode, like the
-// real one: it follows the mainboard, shows CaseHUD effects, or is left alone.
+// real one: it follows the mainboard, shows CaseHUD effects, runs its own
+// effect (per port too), or is left alone. It declares the settings of the
+// real controller for its ports and only remembers what it was given.
 type demoController struct {
 	*fake.Device
 	mu     sync.Mutex
 	mode   string
+	last   leds.Params // the settings of the last Configure (tests)
 	report func(id string, err error)
 }
 
 func (d *demoController) Settings() []leds.Param {
-	return []leds.Param{
-		{Key: "mode", Label: "Lighting", Type: leds.ParamEnum,
-			Values: []string{"passive", "motherboard", "hardware", "canvas"}, Default: "motherboard"},
-		{Key: "allowFlashWrites", Label: "Allow controller lighting", Type: leds.ParamBool, Default: false},
-		{Key: "syncSource", Label: "Sync header", Type: leds.ParamText, Default: ""},
+	var ports []int
+	for _, z := range d.Device.Zones() {
+		var n int
+		if _, err := fmt.Sscanf(z.ID, "port%d", &n); err == nil && n > 0 {
+			ports = append(ports, n-1)
+		}
 	}
+	return lianlitl.SettingsFor(ports)
 }
 
 func (d *demoController) Configure(p leds.Params) error {
@@ -40,8 +46,16 @@ func (d *demoController) Configure(p leds.Params) error {
 	}
 	d.mu.Lock()
 	d.mode = p.String("mode")
+	d.last = p
 	d.mu.Unlock()
 	return nil
+}
+
+// configured returns the settings of the last Configure.
+func (d *demoController) configured() leds.Params {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.last
 }
 
 // demoBackend serves the demo devices, with the fan controller wrapped.

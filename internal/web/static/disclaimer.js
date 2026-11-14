@@ -2,7 +2,7 @@
 
 // ---------- Disclaimer, first-start dialog and one-time notices ----------
 Object.assign(STRINGS.de, {
-  "disc.first.sub": "Bitte lesen, bevor CaseHUD Geräte ansteuert",
+  "disc.first.sub": "Vor der Gerätesteuerung lesen",
   "disc.ok": "Verstanden – weiter", "disc.quit": "Beenden",
   "disc.status": "Zugestimmt am {d} (Version {v})", "disc.status.none": "Noch nicht zugestimmt – CaseHUD spricht kein Gerät an.",
   "ack.cancel": "Abbrechen",
@@ -11,7 +11,7 @@ Object.assign(STRINGS.de, {
   "ack.exp.p2": "CaseHUD schreibt dabei nichts dauerhaft in die Geräte.",
   "ack.exp.p3": "Rückmeldungen sind willkommen – ein kurzer Testbericht hilft allen.",
   "ack.light.title": "Beleuchtung", "ack.light.sub": "Einmalige Bestätigung", "ack.light.ok": "Verstanden – einschalten",
-  "ack.light.p1": "Damit steuert CaseHUD die Beleuchtung von Mainboard, Lüfter-Controller und RAM.",
+  "ack.light.p1": "Damit steuert CaseHUD die Beleuchtung der erkannten Geräte (z. B. Mainboard, Lüfter-Controller, RAM).",
   "ack.light.p2": "Je nach Einstellung „Mit Mainboard synchronisieren“ können Beleuchtungseinstellungen auch nach dem Beenden von CaseHUD aktiv bleiben.",
   "cap.title": "Bildschirm- und Audio-Effekte erlauben",
   "cap.sub": "Bildschirm-Ambilight und Audio-Visualizer lesen Bildschirm und Audioausgabe. Ausschalten widerruft die Erlaubnis und stellt einen laufenden Effekt auf den Standardeffekt zurück.",
@@ -19,10 +19,10 @@ Object.assign(STRINGS.de, {
   "ack.cap.p1": "Diese Effekte lesen den Bildschirminhalt (Bildschirm-Ambilight) beziehungsweise die Audioausgabe (Audio-Visualizer) und leiten daraus die LED-Farben ab.",
   "ack.cap.p2": "Bilder und Töne werden nur im Arbeitsspeicher verarbeitet, nie gespeichert, protokolliert, exportiert oder über das Netzwerk gesendet. Gelesen wird nur, solange der Effekt läuft.",
   "ack.cap.p3": "Auch die LED-Farben spiegeln den Inhalt wider. Darum nimmt die Diagnose bei diesen Effekten keinen Datenverkehr der Beleuchtungsgeräte auf.",
-  "ack.err": "Konnte nicht gespeichert werden: {e}",
+  "ack.err": "Speichern fehlgeschlagen: {e}",
 });
 Object.assign(STRINGS.en, {
-  "disc.first.sub": "Please read before CaseHUD talks to any device",
+  "disc.first.sub": "Read before device control",
   "disc.ok": "Understood – continue", "disc.quit": "Quit",
   "disc.status": "Accepted on {d} (version {v})", "disc.status.none": "Not accepted yet – CaseHUD does not talk to any device.",
   "ack.cancel": "Cancel",
@@ -31,7 +31,7 @@ Object.assign(STRINGS.en, {
   "ack.exp.p2": "CaseHUD does not write anything persistent to the devices.",
   "ack.exp.p3": "Feedback is welcome – a short test report helps everyone.",
   "ack.light.title": "Lighting", "ack.light.sub": "One-time confirmation", "ack.light.ok": "Understood – turn on",
-  "ack.light.p1": "This lets CaseHUD control the lighting of the mainboard, the fan controller and the RAM.",
+  "ack.light.p1": "This lets CaseHUD control the lighting of the detected devices (e.g. mainboard, fan controller, RAM).",
   "ack.light.p2": "Depending on “Sync with motherboard”, lighting settings may stay active after you quit CaseHUD.",
   "cap.title": "Allow screen and audio effects",
   "cap.sub": "Screen ambilight and the audio visualizer read the screen and the audio output. Switching off withdraws the permission and returns a running effect to the default one.",
@@ -39,23 +39,28 @@ Object.assign(STRINGS.en, {
   "ack.cap.p1": "These effects read what is on the screen (screen ambilight) or what the computer plays (audio visualizer) and turn it into LED colors.",
   "ack.cap.p2": "Pictures and sound are only processed in memory and are never stored, logged, exported or sent over the network. Nothing is read while the effect is not running.",
   "ack.cap.p3": "The LED colors also reflect that content, so diagnostics do not record the traffic to the lighting devices while one of these effects is in use.",
-  "ack.err": "Could not save: {e}",
+  "ack.err": "Save failed: {e}",
 });
 applyI18n();
 
 // notice shows the shared dialog and resolves true (ok) or false (cancel).
 // With locked set, Esc does nothing: the first-start dialog has to be answered.
-/** @param {{ title: string, sub: string, paras: string[], ok: string, cancel: string, locked?: boolean }} o */
-function notice({ title, sub, paras, ok, cancel, locked }) {
+// Texts are i18n keys; a paragraph may also be [key, vars] (shown in the current language only).
+/** @param {{ title: string, sub?: string, paras: (string|[string, any])[], ok: string, cancel: string, locked?: boolean, icon?: string }} o */
+function notice({ title, sub, paras, ok, cancel, locked, icon }) {
   const dlg = $("#notice");
   return new Promise((resolve) => {
-    const set = (id, key) => { const e = $(id); e.dataset.i18n = key; e.textContent = t(key); };
+    const set = (id, key) => { const e = $(id); e.hidden = !key; if (key) { e.dataset.i18n = key; e.textContent = t(key); } else { delete e.dataset.i18n; e.textContent = ""; } };
+    $("#notice-x").hidden = !!locked;
     set("#notice-title", title); set("#notice-sub", sub); set("#notice-ok", ok); set("#notice-no", cancel);
-    $("#notice-body").replaceChildren(...paras.map((k) => el("p", { "data-i18n": k }, t(k))));
+    // "!" warns; a neutral dialog shows "i" in the accent color.
+    $("#notice-icon").textContent = icon || "!";
+    $("#notice-icon").classList.toggle("neutral", !!icon && icon !== "!");
+    $("#notice-body").replaceChildren(...paras.map((k) => (Array.isArray(k) ? el("p", {}, t(k[0], k[1])) : el("p", { "data-i18n": k }, t(k)))));
     const done = (v) => {
       dlg.removeEventListener("cancel", onCancel);
       dlg.removeEventListener("close", onClose);
-      $("#notice-ok").onclick = $("#notice-no").onclick = null;
+      $("#notice-ok").onclick = $("#notice-no").onclick = $("#notice-x").onclick = null;
       dlg.close();
       resolve(v);
     };
@@ -65,9 +70,10 @@ function notice({ title, sub, paras, ok, cancel, locked }) {
     dlg.addEventListener("cancel", onCancel);
     if (locked) dlg.addEventListener("close", onClose);
     $("#notice-ok").onclick = () => done(true);
-    $("#notice-no").onclick = () => done(false);
+    $("#notice-no").onclick = $("#notice-x").onclick = () => done(false);
     dlg.showModal();
-    $("#notice-ok").focus();
+    // The first-start dialog must be read: focus the text, not the confirm button (Enter would accept unread).
+    if (locked) { $("#notice-body").tabIndex = -1; $("#notice-body").focus(); } else $("#notice-ok").focus();
   });
 }
 

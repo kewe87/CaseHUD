@@ -72,5 +72,22 @@ func (m *Mock) Get(source string) (Reading, bool) {
 	return Reading{Key: alt, Path: alt, Value: lo + (hi-lo)*w, Unit: unit}, true
 }
 
+// mockSensors is what a demo offers wherever sensors can be chosen.
+var mockSensors = []string{
+	"CPU/Temperatures/Package",
+	"GPU/Temperatures/Hot Spot",
+	"Board/Temperatures/Coolant",
+	"Board/Temperatures/VRM",
+	"Board/Fans/Pump",
+	"Board/Fans/Chassis Fan",
+}
+
 // All implements Provider.
-func (m *Mock) All() []Reading { return nil }
+func (m *Mock) All() []Reading {
+	out := make([]Reading, 0, len(mockSensors))
+	for _, s := range mockSensors {
+		r, _ := m.Get(s)
+		out = append(out, r)
+	}
+	return out
+}

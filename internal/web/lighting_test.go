@@ -37,7 +37,7 @@ func TestV1Lighting(t *testing.T) {
 			}
 		}
 	}
-	if len(featured) != 9 || !featured["sensor"] || !featured["meteor"] || featured["fill"] || len(v.Effects) < 8 {
+	if len(featured) != 10 || !featured["sensor"] || !featured["meteor"] || !featured["orbit"] || featured["fill"] || len(v.Effects) < 8 {
 		t.Fatalf("featured effects: %v of %d", featured, len(v.Effects))
 	}
 	wantStatus(t, v1(t, ts, "PATCH", "/api/v1/lighting", `{"enabled":true,"brightness":55,"effect":"breathing","params":{"period":99}}`, &v), 200)

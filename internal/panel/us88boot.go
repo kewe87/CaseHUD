@@ -204,3 +204,53 @@ func (p *universal88) BootFileSize() (uint32, error) {
 	p.drain()
 	return 0, fmt.Errorf("%s: file size query: no matching reply", p.name)
 }
+
+// usOpDeleteFile deletes a file or directory tree on the device, recursively
+// and permanently. It is built in DeleteBootFile only, from the constant
+// us88BootPath; nothing else may name this operation (see the source check in
+// us88boot_test.go).
+const usOpDeleteFile usOp = 0x2A
+
+// BootEraser is implemented by panels whose boot picture CaseHUD can read the
+// size of and remove again.
+type BootEraser interface {
+	BootImager
+	// BootFileSize returns the size of the boot file (0 = none).
+	BootFileSize() (uint32, error)
+	// DeleteBootFile removes the boot file CaseHUD wrote. It takes no path.
+	DeleteBootFile() error
+}
+
+// DeleteBootFile deletes /usr/data/boot.jpg on the 8.8". The path is the
+// constant us88BootPath, the same block layout as the size query. The device's
+// answer is not interpreted: the caller checks the result with BootFileSize.
+func (p *universal88) DeleteBootFile() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.mdl().bootLogo {
+		return fmt.Errorf("%s: no boot picture on this model", p.name)
+	}
+	if p.closed {
+		return ErrClosed
+	}
+	if err := p.reopen(); err != nil {
+		return fmt.Errorf("%s: %w: %w", p.name, ErrClosed, err)
+	}
+	if err := p.leaveLayers(); err != nil {
+		return err
+	}
+	args := make([]byte, 8+len(us88BootPath))
+	binary.BigEndian.PutUint32(args[0:4], uint32(len(us88BootPath)))
+	copy(args[8:], us88BootPath)
+	p.drain()
+	if err := p.write(p.seal88(usOpDeleteFile, args)); err != nil {
+		p.recover()
+		return fmt.Errorf("%s: delete boot picture: %w", p.name, err)
+	}
+	if _, err := p.ack(); err != nil {
+		log.Printf("%s: delete boot picture: no answer (%v)", p.name, err)
+	}
+	return nil
+}
+
+var _ BootEraser = (*universal88)(nil)

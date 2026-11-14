@@ -410,7 +410,7 @@ func cleanLightingConfig(in leds.Config, devSettings map[string][]leds.Param) (l
 			var err error
 			dc.Settings = migrateLightSettings(dc.Settings)
 			if decl, known := devSettings[id]; known {
-				nd.Settings, err = cleanParams(decl, dc.Settings)
+				nd.Settings, err = cleanParams(decl, dropStalePortSettings(decl, dc.Settings))
 			} else {
 				nd.Settings, err = cleanLooseSettings(dc.Settings)
 			}

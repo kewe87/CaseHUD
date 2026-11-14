@@ -137,3 +137,87 @@ func TestCloseConflictRescans(t *testing.T) {
 		t.Fatalf("posted = %v", sys.posted)
 	}
 }
+
+func TestFanProgramsAreConflictsOnlyWithCooling(t *testing.T) {
+	sys := &procSys{procs: []conflicts.Proc{{PID: 1, Exe: "FanControl.exe", Created: 1}}}
+	e := conflictEngine(t, sys)
+	e.scanConflicts()
+	pending := func() int { return e.ConflictsStatus().Pending }
+	if pending() != 0 {
+		t.Fatal("cooling not set up: no problem expected")
+	}
+	e.setCoolingState(coolingState{configured: true})
+	if pending() != 1 {
+		t.Fatalf("pending = %d", pending())
+	}
+	e.mu.Lock()
+	e.cfg.NoCooling = true
+	e.mu.Unlock()
+	if pending() != 0 {
+		t.Fatal("cooling off: no problem expected")
+	}
+}
+
+func TestIgnoringAFanProgramKeepsTheLock(t *testing.T) {
+	sys := &procSys{procs: []conflicts.Proc{{PID: 1, Exe: "FanControl.exe", Created: 1}}}
+	e := conflictEngine(t, sys)
+	e.setCoolingState(coolingState{configured: true})
+	e.scanConflicts()
+	if err := e.SetConflictIgnore("FanControl.exe", true); err != nil {
+		t.Fatal(err)
+	}
+	if st := e.ConflictsStatus(); st.Pending != 0 || !st.Items[slices.IndexFunc(st.Items, func(i conflicts.Item) bool { return i.Exe == "FanControl.exe" })].Ignored {
+		t.Fatalf("notice not hidden: %+v", st)
+	}
+	b, known := lookForRivals(sys, coolingBlock{}, false)
+	if b.reason != coolingBlockedProgram || b.program != "FanControl" || !known {
+		t.Fatalf("lock lifted by ignoring: %+v", b)
+	}
+	// Once the process is gone the lock ends by itself.
+	sys.mu.Lock()
+	sys.procs = nil
+	sys.mu.Unlock()
+	if b, _ = lookForRivals(sys, b, known); b.reason != "" {
+		t.Fatalf("lock stays: %+v", b)
+	}
+}
+
+func TestArmouryCrateIsOnlyAFanHint(t *testing.T) {
+	if conflicts.IsFanProgram("ArmouryCrate.exe") {
+		t.Fatal("a hint must not be a fan program")
+	}
+	sys := &procSys{procs: []conflicts.Proc{{PID: 1, Exe: "ArmouryCrate.exe", Created: 1}}}
+	e := conflictEngine(t, sys)
+	e.scanConflicts()
+	affects := func() []string {
+		st := e.ConflictsStatus()
+		return st.Items[slices.IndexFunc(st.Items, func(i conflicts.Item) bool { return i.Exe == "ArmouryCrate.exe" })].Affects
+	}
+	if len(affects()) != 0 || e.ConflictsStatus().Pending != 0 {
+		t.Fatalf("cooling and lighting not set up: no notice expected, %v", affects())
+	}
+	e.setCoolingState(coolingState{configured: true})
+	if !slices.Equal(affects(), []string{conflicts.DevFanHint}) || e.ConflictsStatus().Pending != 1 {
+		t.Fatalf("hint missing: %v", affects())
+	}
+	// No lock: neither the rival check nor the guard sees it.
+	if reason, _ := checkRivals(sys); reason != "" {
+		t.Fatalf("hint locks the cooling: %q", reason)
+	}
+	if b, _ := lookForRivals(sys, coolingBlock{}, false); b.reason != "" {
+		t.Fatalf("hint locks the cooling: %+v", b)
+	}
+	if err := e.SetConflictIgnore("ArmouryCrate.exe", true); err != nil {
+		t.Fatal(err)
+	}
+	if e.ConflictsStatus().Pending != 0 {
+		t.Fatal("hint not ignorable")
+	}
+	e.mu.Lock()
+	e.cfg.NoCooling = true
+	e.mu.Unlock()
+	_ = e.SetConflictIgnore("ArmouryCrate.exe", false)
+	if len(affects()) != 0 {
+		t.Fatalf("cooling off: no hint expected, %v", affects())
+	}
+}

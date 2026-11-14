@@ -7,8 +7,15 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"image"
 	"image/jpeg"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -121,5 +128,111 @@ func TestUS88BootTransferLimits(t *testing.T) {
 	}
 	if _, err := p.bootTransfer([]byte{1, 2, 3, 4, 5}); err == nil {
 		t.Fatal("non-JPEG accepted")
+	}
+}
+
+func TestUS88DeleteBootFileFrame(t *testing.T) {
+	s := &cmdUSB{script: func(op byte, _ []byte) []byte {
+		if op == byte(usOpDeleteFile) {
+			return []byte{0x2A, 0xC8}
+		}
+		return nil
+	}}
+	p := &universal88{dev: s, name: "us88", brightness: 100}
+	if err := p.DeleteBootFile(); err != nil {
+		t.Fatal(err)
+	}
+	var del [][]byte
+	for _, w := range s.writes {
+		if len(w) >= 512 && decryptBlock(w[:504])[0] == byte(usOpDeleteFile) {
+			del = append(del, w)
+		}
+	}
+	if len(del) != 1 || len(del[0]) != 512 {
+		t.Fatalf("%d delete blocks, want exactly one block", len(del))
+	}
+	plain := decryptBlock(del[0][:504])
+	n := binary.BigEndian.Uint32(plain[8:12])
+	if string(plain[16:16+n]) != "/usr/data/boot.jpg" || n != uint32(len(us88BootPath)) || plain[16+n] != 0 {
+		t.Fatalf("delete path %q", plain[16:16+n])
+	}
+}
+
+func TestUS88DeleteBootFileOnly88(t *testing.T) {
+	for _, m := range []*usModel{&usModel92, &usModelSL, &usModelTLFlex} {
+		s := &cmdUSB{}
+		p := &universal88{dev: s, m: m, name: m.name}
+		if err := p.DeleteBootFile(); err == nil || len(s.writes) != 0 {
+			t.Fatalf("%s: err %v, %d writes", m.name, err, len(s.writes))
+		}
+	}
+}
+
+// The delete operation and its only caller: us88BootPath is a constant, the
+// operation is named in DeleteBootFile alone, and DeleteBootFile is called
+// from one function outside the panel package.
+func TestDeleteOpReachableOnlyThroughOnePath(t *testing.T) {
+	fset := token.NewFileSet()
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var files []*ast.File
+	for _, e := range entries {
+		if n := e.Name(); e.IsDir() || !strings.HasSuffix(n, ".go") || strings.HasSuffix(n, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, e.Name(), nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, f)
+	}
+	var uses []string
+	isConst := false
+	for _, f := range files {
+		for _, d := range f.Decls {
+			if g, ok := d.(*ast.GenDecl); ok && g.Tok == token.CONST {
+				for _, sp := range g.Specs {
+					if v := sp.(*ast.ValueSpec); len(v.Names) > 0 && v.Names[0].Name == "us88BootPath" {
+						isConst = true
+					}
+				}
+			}
+			fd, ok := d.(*ast.FuncDecl)
+			if !ok {
+				continue
+			}
+			ast.Inspect(fd, func(n ast.Node) bool {
+				if id, ok := n.(*ast.Ident); ok && id.Name == "usOpDeleteFile" {
+					uses = append(uses, fd.Name.Name)
+				}
+				return true
+			})
+		}
+	}
+	if !isConst {
+		t.Fatal("us88BootPath must be a constant")
+	}
+	if len(uses) != 1 || uses[0] != "DeleteBootFile" {
+		t.Fatalf("delete operation named in %v, want DeleteBootFile only", uses)
+	}
+	// Outside the panel package, only internal/app/bootlogo.go may call it.
+	var callers []string
+	err = filepath.WalkDir(filepath.Join("..", ".."), func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return err
+		}
+		b, _ := os.ReadFile(path)
+		if strings.Contains(string(b), "DeleteBootFile()") && !strings.Contains(filepath.ToSlash(path), "internal/panel/") {
+			callers = append(callers, filepath.ToSlash(path))
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(callers) != 1 || !strings.HasSuffix(callers[0], "internal/app/bootlogo.go") {
+		t.Fatalf("DeleteBootFile called from %v", callers)
 	}
 }

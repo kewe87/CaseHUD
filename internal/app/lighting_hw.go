@@ -24,16 +24,18 @@ const (
 	// 0416:8050). The display itself (1CBE:A088) is a different device that
 	// this backend never opens.
 	ringDeviceID = "lianli:0416:8050"
-	ringName     = "Universal Screen 8.8\" \u2013 LED-Rahmen"
+	ringName     = "Universal Screen 8.8\" \u2013 LED frame"
 	ringLibrary  = "universal-screen-8-8" // optional library part with the ring outline
 
 	boardBackend    = "asusaura"
 	ramBackend      = "enram"
 	unsupportedPref = "enram-unsupported:"
 
-	ramHintText = "RAM-Beleuchtung braucht die SMBus-Br\u00fccke im Sensor-Dienst (Einstellungen \u2192 Datenquellen; Datei C:\\ProgramData\\CaseHUD\\sensors.json mit \"smbusBridge\": true, siehe docs/SMBUS-BRIDGE.md)."
+	ramHintDE = "RAM-Beleuchtung braucht die SMBus-Brücke im Sensor-Dienst (Einstellungen → Datenquellen; Datei C:\\ProgramData\\CaseHUD\\sensors.json mit \"smbusBridge\": true, siehe docs/SMBUS-BRIDGE.md)."
+	ramHintEN = "RAM lighting needs the SMBus bridge in the sensor service (Settings > Data sources; file C:\\ProgramData\\CaseHUD\\sensors.json with \"smbusBridge\": true, see docs/SMBUS-BRIDGE.md)."
 
-	flashWarnText = "Der Lüfter-Controller speichert jede Beleuchtungs-Änderung dauerhaft in seinem Flash-Speicher. Häufige Änderungen verschleißen ihn. Dieser Modus ist aus, bis du ihn bestätigst. Empfohlen: „Mit Mainboard synchronisieren“."
+	flashWarnDE = "Der Lüfter-Controller speichert jede Beleuchtungsänderung dauerhaft in seinem Flash-Speicher. Häufige Änderungen verschleißen ihn. Dieser Modus ist aus, bis er bestätigt wird. Empfohlen: „Mit Mainboard synchronisieren“ (setzt ein Sync-Kabel vom ARGB-Anschluss des Mainboards zum Controller voraus)."
+	flashWarnEN = "The fan controller stores every lighting change permanently in its flash memory. Frequent changes wear it out. This mode stays off until it is confirmed. Recommended: “Sync with motherboard” (needs a sync cable from the motherboard ARGB header to the controller)."
 )
 
 // smbusBridgePipe is the only way to the SMBus: the named pipe of the
@@ -61,8 +63,32 @@ var (
 	errRAMBusy   = errors.New("SMBus busy; the next scan tries again")
 	errRAMDenied = errors.New("the SMBus bridge refused the request (switched off or not allowed)")
 	// the text of the bridge check is translated here, not in the LED package
-	errRAMUntrusted = errors.New("SMBus-Brücke nicht vertrauenswürdig")
+	errRAMUntrusted = errors.New("SMBus bridge not trusted")
 )
+
+// The RAM status is kept as a key and turned into text in the interface
+// language when the view is built.
+const (
+	ramNoteUnsupported = "unsupported"
+	ramNoteBusy        = "busy"
+	ramNoteDenied      = "denied"
+	ramNoteUntrusted   = "untrusted"
+)
+
+var ramNoteText = map[string][2]string{
+	ramNoteUnsupported: {"Ein RAM-Modul ist nicht unterstützt und wird nicht beschrieben.", "A RAM module is not supported and is not written to."},
+	ramNoteBusy:        {"Der SMBus ist gerade belegt; CaseHUD versucht es beim nächsten Suchlauf erneut.", "The SMBus is busy; CaseHUD tries again at the next scan."},
+	ramNoteDenied:      {"Die SMBus-Brücke hat die Anfrage abgelehnt (Brücke ausgeschaltet oder Zugriff nicht erlaubt).", "The SMBus bridge refused the request (bridge switched off or access not allowed)."},
+	ramNoteUntrusted:   {"SMBus-Brücke nicht vertrauenswürdig: CaseHUD spricht sie nicht an.", "SMBus bridge not trusted: CaseHUD does not talk to it."},
+}
+
+// pick returns the German text for lang "de" and the English one otherwise.
+func pick(lang, de, en string) string {
+	if lang == "de" {
+		return de
+	}
+	return en
+}
 
 // ramNotes is the RAM status the Beleuchtung tab shows next to the hint.
 type ramNotes struct {
@@ -114,16 +140,16 @@ func (g *ramGate) Discover(ctx context.Context) ([]leds.Device, error) {
 		switch {
 		case errors.As(le, &us):
 			out = append(out, &unsupportedStick{addr: us.Addr, name: cleanDeviceText(us.Name)})
-			note = "Ein RAM-Modul ist nicht unterstützt und wird nicht beschrieben."
+			note = ramNoteUnsupported
 		case errors.Is(le, enram.ErrBusy):
 			rest = append(rest, errRAMBusy)
-			note = "Der SMBus ist gerade belegt; CaseHUD versucht es beim nächsten Suchlauf erneut."
+			note = ramNoteBusy
 		case errors.Is(le, enram.ErrDenied):
 			rest = append(rest, errRAMDenied)
-			note = "Die SMBus-Brücke hat die Anfrage abgelehnt (Brücke ausgeschaltet oder Zugriff nicht erlaubt)."
+			note = ramNoteDenied
 		case errors.Is(le, enram.ErrUntrusted):
 			rest = append(rest, errRAMUntrusted)
-			note = "SMBus-Brücke nicht vertrauenswürdig: CaseHUD spricht sie nicht an."
+			note = ramNoteUntrusted
 		default:
 			rest = append(rest, le)
 		}
@@ -182,7 +208,7 @@ type unsupportedStick struct {
 
 func (u *unsupportedStick) ID() string { return fmt.Sprintf("%s%02x", unsupportedPref, u.addr) }
 func (u *unsupportedStick) Name() string {
-	return fmt.Sprintf("RAM-Modul %s (nicht unterstützt)", u.name)
+	return fmt.Sprintf("RAM %s", u.name)
 }
 func (u *unsupportedStick) Zones() []leds.Zone                     { return nil }
 func (u *unsupportedStick) SetFrame(map[string][]color.RGBA) error { return nil }
@@ -305,15 +331,15 @@ func (l *lightingState) cfgErr(id string) error {
 }
 
 // deviceWarning is the user-facing text for a refused configuration.
-func (l *lightingState) deviceWarning(id string) string {
+func (l *lightingState) deviceWarning(id, lang string) string {
 	err := l.cfgErr(id)
 	switch {
 	case err == nil:
 		return ""
 	case errors.Is(err, lianlitl.ErrFlashWrites):
-		return flashWarnText
+		return pick(lang, flashWarnDE, flashWarnEN)
 	default:
-		return "Die Einstellungen wurden vom Gerät abgelehnt: " + cleanDeviceText(err.Error())
+		return pick(lang, "Die Einstellungen wurden vom Gerät abgelehnt: ", "The device refused the settings: ") + cleanDeviceText(err.Error())
 	}
 }
 
@@ -353,15 +379,19 @@ func (e *Engine) refreshBridgeProbe() {
 }
 
 func (e *Engine) ramView() LightingRAM {
+	lang := e.Language()
 	if e.Demo {
 		if os.Getenv("CASEHUD_DEMO_NO_BRIDGE") != "" {
-			return LightingRAM{Hint: ramHintText}
+			return LightingRAM{Hint: pick(lang, ramHintDE, ramHintEN)}
 		}
 		return LightingRAM{Available: true}
 	}
-	r := LightingRAM{Available: e.light.bridgeUp.Load(), Note: e.light.ramNotes.get()}
+	r := LightingRAM{Available: e.light.bridgeUp.Load()}
+	if t, ok := ramNoteText[e.light.ramNotes.get()]; ok {
+		r.Note = pick(lang, t[0], t[1])
+	}
 	if !r.Available {
-		r.Hint, r.Note = ramHintText, ""
+		r.Hint, r.Note = pick(lang, ramHintDE, ramHintEN), ""
 	}
 	return r
 }

@@ -303,7 +303,7 @@ func TestSketchPersistFailure(t *testing.T) {
 func TestSketchPartsInTheMarginAreAccepted(t *testing.T) {
 	e := startLit(t)
 	dims := sketch.Dims{W: 230, H: 480, D: 450}
-	for _, cv := range []string{"front", "side", "top"} {
+	for _, cv := range []string{"front", "rear", "side", "top", "bottom"} {
 		for _, view := range []string{"front", "side", "top"} {
 			vw, vh, _ := sketch.ViewSize(dims, view)
 			for name, pos := range map[string][2]float64{
@@ -312,9 +312,14 @@ func TestSketchPartsInTheMarginAreAccepted(t *testing.T) {
 				"top left":     {-sketch.MarginMM, -sketch.MarginMM},
 				"bottom/right": {vw + sketch.MarginMM, vh + sketch.MarginMM},
 			} {
-				p := sketch.Placement{ID: "m", Part: "generic-fan-120", View: view, X: pos[0], Y: pos[1], LEDs: 8, Bind: bindTo("argb1", 0)}
-				s := testSketch(p, sketch.Placement{ID: "w", Part: "generic-strip", View: view, X: pos[0], Y: pos[1], LEDs: 8, Len: 1000, Bind: bindTo("argb1", 1)})
-				s.CanvasView = cv
+				// drawn like a version 1 sketch (corner positions in the view), then upgraded
+				old := sketch.SketchV1{Version: 1, Case: testSketch().Case, CanvasView: cv, Parts: []sketch.PlacementV1{
+					{ID: "m", Part: "generic-fan-120", View: view, X: pos[0], Y: pos[1], LEDs: 8, Bind: bindTo("argb1", 0)},
+					{ID: "w", Part: "generic-strip", View: view, X: pos[0], Y: pos[1], LEDs: 8, Len: 1000, Bind: bindTo("argb1", 1)}}}
+				s, _, err := sketch.Upgrade(old, sketch.Builtin())
+				if err != nil {
+					t.Fatal(err)
+				}
 				v, err := e.SetSketch(s)
 				if err != nil {
 					t.Fatalf("canvas %s, view %s, %s: %v", cv, view, name, err)

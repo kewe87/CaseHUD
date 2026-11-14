@@ -113,7 +113,7 @@ func awtrixApp(id string, p metrics.Provider, fahrenheit, comma bool) (awtrix.Ca
 		}
 	case "coolant":
 		v, ok := val(srcCoolant)
-		a.Label = "H2O"
+		a.Label = "COOL"
 		a.Text = []awtrix.Fragment{{T: tnum(v, ok, 1), C: colour(v, ok, "3B82F6", 38, 42, false)}}
 	case "fps":
 		v, ok := val(srcFPS)
@@ -254,9 +254,18 @@ func (e *Engine) wakeAwtrix() {
 func (e *Engine) runAwtrix(ctx context.Context) {
 	t := time.NewTicker(awtrixInterval)
 	defer t.Stop()
+	cleared := false // the clocks were told to drop the apps because the displays are off
 	for {
-		if e.outputAllowed() {
+		switch {
+		case !e.outputAllowed():
+		case e.displayOn():
+			cleared = false
 			e.pushAwtrix(ctx)
+		case !cleared:
+			cleared = true
+			cleanup, cancel := context.WithTimeout(ctx, 3*time.Second)
+			e.removeAwtrix(cleanup, nil)
+			cancel()
 		}
 		select {
 		case <-ctx.Done():

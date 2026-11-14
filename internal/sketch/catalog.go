@@ -130,6 +130,12 @@ type CaseTemplate struct {
 	Mounts      []Mount             `json:"mounts,omitempty"`
 	Areas       []Area              `json:"areas,omitempty"`
 	GPUSlots    []GPUSlot           `json:"gpuSlots,omitempty"`
+	// Orientation is the template's orientation block (see Orientation).
+	// Side view data (outline, mounts, areas, gpu slots) is already converted
+	// to the rear-left convention.
+	Orientation Orientation `json:"orientation,omitzero"`
+	// Lighting is the lighting built into the case, in model coordinates.
+	Lighting []CaseLight `json:"lighting,omitempty"`
 }
 
 // CustomCaseID is the built-in case.

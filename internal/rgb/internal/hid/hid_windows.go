@@ -136,6 +136,7 @@ type Device struct {
 	h      windows.Handle
 	wEvent windows.Handle
 	rEvent windows.Handle
+	stuck  bool // a request ignored its cancel, see ErrStuck
 }
 
 // Open opens a collection for reading and writing. Collections Windows owns
@@ -193,7 +194,7 @@ func (d *Device) Write(report []byte, timeout time.Duration) error {
 	copy(buf, report)
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	err := d.io(true, buf, timeout)
+	_, err := d.transfer(windows.WriteFile, buf, d.wEvent, timeout)
 	d.trace("out", buf, err)
 	return err
 }
@@ -217,45 +218,63 @@ func (d *Device) trace(dir string, data []byte, err error) {
 func (d *Device) Read(buf []byte, timeout time.Duration) (int, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	n, err := d.ioRead(buf, timeout)
-	d.trace("in", buf[:max(n, 0)], err)
+	own := make([]byte, len(buf))
+	n, err := d.transfer(windows.ReadFile, own, d.rEvent, timeout)
+	copy(buf, own[:n])
+	d.trace("in", buf[:n], err)
 	return n, err
 }
 
-func (d *Device) io(write bool, buf []byte, timeout time.Duration) error {
-	if d.h == 0 {
-		return windows.ERROR_INVALID_HANDLE
-	}
-	ov := windows.Overlapped{HEvent: d.wEvent}
-	windows.ResetEvent(d.wEvent)
-	var done uint32
-	err := windows.WriteFile(d.h, buf, &done, &ov)
-	return d.finish(err, &ov, &done, timeout)
+// request is one overlapped read or write. Windows keeps the addresses of both
+// fields until the request ends, so they may not live on a goroutine stack: the
+// stack moves when it grows or shrinks, and the cancel would then name an address
+// Windows does not know, with the request and whoever waits for it left hanging.
+type request struct {
+	ov  windows.Overlapped
+	buf []byte
 }
 
-func (d *Device) ioRead(buf []byte, timeout time.Duration) (int, error) {
+// abandoned keeps requests alive that never ended, because Windows may still
+// write to them.
+var (
+	abandonedMu sync.Mutex
+	abandoned   []*request
+)
+
+// cancelWait bounds the wait for a cancelled request.
+const cancelWait = time.Second
+
+var cancelIO = windows.CancelIoEx
+
+// transfer runs one request and always comes back within timeout + cancelWait.
+// A request that ignores its cancel leaves the Device unusable, see ErrStuck.
+func (d *Device) transfer(start func(windows.Handle, []byte, *uint32, *windows.Overlapped) error,
+	buf []byte, event windows.Handle, timeout time.Duration) (int, error) {
 	if d.h == 0 {
 		return 0, windows.ERROR_INVALID_HANDLE
 	}
-	ov := windows.Overlapped{HEvent: d.rEvent}
-	windows.ResetEvent(d.rEvent)
+	if d.stuck {
+		return 0, ErrStuck
+	}
+	r := &request{ov: windows.Overlapped{HEvent: event}, buf: buf}
+	windows.ResetEvent(event)
 	var done uint32
-	err := windows.ReadFile(d.h, buf, &done, &ov)
-	err = d.finish(err, &ov, &done, timeout)
-	return int(done), err
-}
-
-func (d *Device) finish(err error, ov *windows.Overlapped, done *uint32, timeout time.Duration) error {
-	if err != nil && !errors.Is(err, windows.ERROR_IO_PENDING) {
-		return err
+	if err := start(d.h, r.buf, &done, &r.ov); err != nil && !errors.Is(err, windows.ERROR_IO_PENDING) {
+		return 0, err
 	}
-	ev, _ := windows.WaitForSingleObject(ov.HEvent, uint32(timeout.Milliseconds()))
-	if ev != windows.WAIT_OBJECT_0 {
-		windows.CancelIoEx(d.h, ov)
-		windows.GetOverlappedResult(d.h, ov, done, true)
-		return ErrTimeout
+	if ev, _ := windows.WaitForSingleObject(event, uint32(timeout.Milliseconds())); ev == windows.WAIT_OBJECT_0 {
+		err := windows.GetOverlappedResult(d.h, &r.ov, &done, false)
+		return int(done), err
 	}
-	return windows.GetOverlappedResult(d.h, ov, done, false)
+	_ = cancelIO(d.h, &r.ov) // the wait below tells whether it worked
+	if ev, _ := windows.WaitForSingleObject(event, uint32(cancelWait.Milliseconds())); ev != windows.WAIT_OBJECT_0 {
+		d.stuck = true
+		abandonedMu.Lock()
+		abandoned = append(abandoned, r)
+		abandonedMu.Unlock()
+		return 0, ErrStuck
+	}
+	return 0, ErrTimeout
 }
 
 // SetFeature sends a feature report (first byte = report ID).

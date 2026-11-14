@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -24,6 +25,12 @@ type LHM struct {
 	client   *http.Client
 	readings []Reading
 	active   int // index of the URL that answered last
+
+	// verifyService tells whether what answers on ServiceURL is the sensor
+	// service of this machine (see serviceTrusted). Tests replace it.
+	verifyService func() bool
+	serviceURL    string // the endpoint verifyService speaks for (ServiceURL; tests replace it)
+	displayOnly   bool   // the last snapshot was marked DisplayOnly (logged on change)
 }
 
 // NewLHM returns a provider for the given data.json URL ("" = auto).
@@ -32,7 +39,7 @@ func NewLHM(url string) *LHM {
 	if url != "" {
 		urls = []string{url}
 	}
-	return &LHM{URLs: urls, client: &http.Client{
+	return &LHM{URLs: urls, verifyService: serviceTrusted, serviceURL: ServiceURL, client: &http.Client{
 		Timeout: 1500 * time.Millisecond,
 		// A sensor endpoint answers itself; following redirects would let it
 		// point the app at other addresses.
@@ -46,18 +53,22 @@ func (l *LHM) Source() string { return l.URLs[l.active] }
 // lhmNode is one node of LibreHardwareMonitor's sensor tree:
 // Sensor -> <computer> -> <hardware> [-> <sub-hardware>] -> <group> -> <sensor>.
 type lhmNode struct {
-	Text     string    `json:"Text"`
-	Value    string    `json:"Value"`
-	SensorID string    `json:"SensorId"`
+	Text     string `json:"Text"`
+	Value    string `json:"Value"`
+	SensorID string `json:"SensorId"`
+	// AgeMs, on a hardware node of the CaseHUD sensor service: how long before the
+	// snapshot was made its values were read from the device.
+	AgeMs    *int64    `json:"AgeMs"`
 	Children []lhmNode `json:"Children"`
 }
 
-// Refresh implements Provider. It sticks with the endpoint that worked last
-// and only probes the others when that one fails.
+// Refresh implements Provider. The endpoints are tried in order on every call,
+// so the sensor service is used again as soon as it answers. Only its readings
+// may drive the cooling (see Reading.DisplayOnly); a fallback endpoint is for the
+// display.
 func (l *LHM) Refresh() error {
 	var firstErr error
-	for i := range l.URLs {
-		idx := (l.active + i) % len(l.URLs)
+	for idx := range l.URLs {
 		rs, err := l.fetch(l.URLs[idx])
 		if err == nil {
 			l.readings, l.active = rs, idx
@@ -89,15 +100,62 @@ func (l *LHM) fetch(url string) ([]Reading, error) {
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 16<<20)).Decode(&root); err != nil {
 		return nil, fmt.Errorf("decoding sensor JSON from %s: %w", url, err)
 	}
-	return flattenLHM(root), nil
+	var out []Reading
+	if age, ok := snapshotAge(resp.Header); ok {
+		out = flattenLHMAged(root, &age)
+	} else {
+		out = flattenLHM(root)
+	}
+	l.markTrust(url, out)
+	return out, nil
+}
+
+// markTrust sets Reading.DisplayOnly on a snapshot unless it comes from the
+// sensor service: any local process can listen on another port, and a source
+// that cannot be told from the service must not move fans or the pump.
+func (l *LHM) markTrust(url string, rs []Reading) {
+	trusted := url == l.serviceURL && l.verifyService != nil && l.verifyService()
+	for i := range rs {
+		rs[i].DisplayOnly = !trusted
+	}
+	if !trusted != l.displayOnly {
+		l.displayOnly = !trusted
+		if l.displayOnly {
+			log.Printf("sensors: %s is not the CaseHUD sensor service of this machine, its readings are for display only and do not drive the cooling", url)
+		} else {
+			log.Print("sensors: the readings come from the sensor service again")
+		}
+	}
+}
+
+// SnapshotAgeHeader is set by the CaseHUD sensor service on every answer: how
+// many milliseconds ago it last finished reading the hardware. Other sources do
+// not send it, and their readings have no known age.
+const SnapshotAgeHeader = "X-Snapshot-Age-Ms"
+
+// snapshotAge reads SnapshotAgeHeader.
+func snapshotAge(h http.Header) (time.Duration, bool) {
+	ms, err := strconv.ParseInt(strings.TrimSpace(h.Get(SnapshotAgeHeader)), 10, 64)
+	if err != nil || ms < 0 {
+		return 0, false
+	}
+	return time.Duration(ms) * time.Millisecond, true
 }
 
 // flattenLHM turns the sensor tree into readings. Paths skip the two top
 // levels ("Sensor" and the computer name) so they start at the hardware.
-func flattenLHM(root lhmNode) []Reading {
+func flattenLHM(root lhmNode) []Reading { return flattenLHMAged(root, nil) }
+
+// flattenLHMAged is flattenLHM with the age of the snapshot, if the source told
+// it. A reading is then as old as the snapshot plus the time its hardware was
+// read before it.
+func flattenLHMAged(root lhmNode, snapshot *time.Duration) []Reading {
 	var out []Reading
-	var walk func(n lhmNode, path []string)
-	walk = func(n lhmNode, path []string) {
+	var walk func(n lhmNode, path []string, hw time.Duration)
+	walk = func(n lhmNode, path []string, hw time.Duration) {
+		if len(path) == 2 && n.AgeMs != nil && *n.AgeMs >= 0 { // a hardware node
+			hw = time.Duration(*n.AgeMs) * time.Millisecond
+		}
 		if len(n.Children) == 0 {
 			v, unit, ok := parseLHMValue(n.Value)
 			if !ok || len(path) < 2 {
@@ -108,15 +166,19 @@ func flattenLHM(root lhmNode) []Reading {
 			if key == "" {
 				key = p
 			}
-			out = append(out, Reading{Key: key, Path: p, Value: v, Unit: unit})
+			r := Reading{Key: key, Path: p, Value: v, Unit: unit}
+			if snapshot != nil {
+				r.Age, r.AgeKnown = *snapshot+hw, true
+			}
+			out = append(out, r)
 			return
 		}
 		next := append(append([]string{}, path...), n.Text)
 		for _, c := range n.Children {
-			walk(c, next)
+			walk(c, next, hw)
 		}
 	}
-	walk(root, nil)
+	walk(root, nil, 0)
 	return out
 }
 

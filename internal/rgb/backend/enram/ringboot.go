@@ -63,9 +63,16 @@ func (p *PipeTransport) SetRingBootState(mode string, r, g, b uint8) error {
 		return err
 	}
 
+	return p.Repeatable(req)
+}
+
+// Repeatable sends a request that does no harm when it runs twice, so after a
+// dropped (e.g. idle-closed) connection one retry is fine.
+func (p *PipeTransport) Repeatable(req []byte) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	var resp *bridgeResponse
+	var err error
 	for attempt := 0; ; attempt++ {
 		reused := p.conn != nil
 		if !reused {
@@ -80,8 +87,6 @@ func (p *PipeTransport) SetRingBootState(mode string, r, g, b uint8) error {
 		}
 		p.conn.Close()
 		p.conn = nil
-		// Setting the same state twice is harmless, so after a dropped
-		// (e.g. idle-closed) connection one retry is fine.
 		if !reused || attempt > 0 {
 			return fmt.Errorf("enram: bridge: %w", err)
 		}

@@ -33,11 +33,22 @@ func TestMotionEffectsRender(t *testing.T) {
 }
 
 func TestFieldAround(t *testing.T) {
-	f := &field{path: "around"}
+	f := newField(Params{"path": "around"})
 	c := image.NewRGBA(image.Rect(0, 0, 100, 100))
 	u := f.coords(c)
 	top, right := u[0*100+50], u[50*100+99]
 	if top > 0.02 || right < 0.23 || right > 0.27 {
 		t.Fatalf("top %.3f right %.3f", top, right)
+	}
+}
+
+// A moved centre: radial starts there and reaches 1 at the farthest corner.
+func TestFieldRadialOrigin(t *testing.T) {
+	f := newField(Params{"path": "radial", "originX": 100.0, "originY": 0.0})
+	c := image.NewRGBA(image.Rect(0, 0, 100, 100))
+	u := f.coords(c)
+	near, far := u[0*100+99], u[99*100+0]
+	if near > 0.02 || far < 0.97 || far > 1 {
+		t.Fatalf("near %.3f far %.3f", near, far)
 	}
 }

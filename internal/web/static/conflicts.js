@@ -3,8 +3,9 @@
 // ---------- Other programs on the same devices: banner, dialog, settings ----------
 Object.assign(STRINGS.de, {
   "conf.title": "Andere Software steuert dieselben Geräte",
-  "conf.sub": "Zwei Programme gleichzeitig stören sich: das eine sperrt das Gerät oder überschreibt die Anzeige. CaseHUD schließt nichts von allein.",
+  "conf.sub": "Gleichzeitig laufende Programme stören sich gegenseitig (Gerätesperre, überschriebene Anzeige). CaseHUD beendet keine Programme automatisch.",
   "conf.banner": "Andere Software steuert dieselben Geräte: {names}",
+  "conf.banner.hint": "{names} kann Lüfter mitregeln. Die Lüfterfunktion dort abschalten, sonst arbeiten zwei Regelungen gegeneinander.",
   "conf.show": "Anzeigen",
   "conf.later": "Später",
   "conf.close": "Schließen",
@@ -12,36 +13,37 @@ Object.assign(STRINGS.de, {
   "conf.ignore": "Ignorieren",
   "conf.help": "Hilfe",
   "conf.affects": "Betrifft: {d}",
-  "conf.busy": "Wird geschlossen …",
+  "conf.busy": "Wird geschlossen…",
   "conf.done": "{n} wurde geschlossen",
   "conf.hard.ask": "{n} läuft noch. Hart beenden? Ungespeicherte Daten dieses Programms gehen verloren.",
   "conf.hard": "Hart beenden",
   "conf.hard.no": "Nein",
   "conf.path": "Pfad: {p}",
   "conf.unusual": "Ungewöhnlicher Speicherort: dieses Programm läuft nicht aus einem üblichen Installationsordner.",
-  "conf.unusual.ask": "Ungewöhnlicher Speicherort: {n} läuft von\n{p}\nDas ist kein üblicher Installationsordner (Programme, ProgramData, AppData\\Local\\Programs). Trotzdem schließen?",
-  "conf.service": "Läuft als Dienst – bitte in der Dienste-Verwaltung beenden.",
-  "conf.elevated": "Läuft mit Admin-Rechten – bitte als Administrator beenden.",
+  "conf.unusual.ask": "Ungewöhnlicher Speicherort: {n} läuft von\n{p}\nKein üblicher Installationsordner (Programme, ProgramData, AppData\\Local\\Programs). Trotzdem schließen?",
+  "conf.service": "Läuft als Dienst. In der Dienste-Verwaltung beenden.",
+  "conf.elevated": "Läuft mit Administratorrechten. Als Administrator beenden.",
   "conf.services": "Dienste öffnen",
   "conf.gone": "{n} läuft nicht mehr",
   "conf.err": "Das ging nicht: {e}",
-  "conf.helptext": "CaseHUD schließt nur Programme dieser Liste und nur nach deinem Klick: erst höflich (das Fenster wird um Schließen gebeten, bis zu 5 Sekunden), danach auf Wunsch hart. Dienste und Programme mit Admin-Rechten kann CaseHUD nicht beenden und versucht es auch nicht. Damit ein Programm beim nächsten Start nicht wieder mitläuft: Windows-Einstellungen → Apps → Autostart, oder Task-Manager → Autostart. Dienste lassen sich in der Dienste-Verwaltung (services.msc) beenden oder auf „Manuell“ stellen.",
+  "conf.helptext": "CaseHUD schließt nur Programme dieser Liste und nur nach Bestätigung: zuerst regulär (Fenster wird bis zu 5 Sekunden um Schließen gebeten), danach auf Wunsch erzwungen. Dienste und Programme mit Administratorrechten kann CaseHUD nicht beenden. Dauerhaft verhindern: Windows-Einstellungen → Apps → Autostart oder Task-Manager → Autostart. Dienste in der Dienste-Verwaltung (services.msc) beenden oder auf „Manuell“ stellen.",
   "conf.set.title": "Andere Software",
-  "conf.set.sub": "Programme, die dieselben Geräte steuern können. CaseHUD fragt, bevor etwas geschlossen wird.",
+  "conf.set.sub": "Programme, die dieselben Geräte steuern können. Vor dem Schließen erfolgt eine Rückfrage.",
   "conf.set.ask": "Beim Start und bei neuen Programmen fragen",
-  "conf.set.ask.sub": "Zeigt oben einen Hinweis, sobald eines dieser Programme läuft. Aus: kein Hinweis, die Liste hier bleibt.",
+  "conf.set.ask.sub": "Zeigt oben einen Hinweis, sobald eines dieser Programme läuft. Aus: kein Hinweis, die Liste bleibt erhalten.",
   "conf.set.running": "läuft",
   "conf.set.idle": "nicht gestartet",
   "conf.set.keep": "Nicht schließen",
   "conf.set.service": "Dienst",
   "conf.set.open": "Anzeigen",
   "conf.dev.tllcd": "Lüfter-LCDs", "conf.dev.us88": "Universal Screen 8.8\"", "conf.dev.aio": "Pumpen-Display",
-  "conf.dev.fanled": "Lüfter-Beleuchtung", "conf.dev.ringled": "8.8\"-Rand", "conf.dev.boardled": "Mainboard-Beleuchtung", "conf.dev.ramled": "RAM-Beleuchtung",
+  "conf.dev.fanled": "Lüfter-Beleuchtung", "conf.dev.ringled": "8.8\"-Rand", "conf.dev.boardled": "Mainboard-Beleuchtung", "conf.dev.ramled": "RAM-Beleuchtung", "conf.dev.fan": "Lüftersteuerung", "conf.dev.fanhint": "Lüfterfunktion (Hinweis)",
 });
 Object.assign(STRINGS.en, {
   "conf.title": "Other software controls the same devices",
-  "conf.sub": "Two programs at once get in each other's way: one locks the device or overwrites the picture. CaseHUD never closes anything by itself.",
+  "conf.sub": "Programs running at the same time interfere with each other (device lock, overwritten display). CaseHUD never closes programs automatically.",
   "conf.banner": "Other software controls the same devices: {names}",
+  "conf.banner.hint": "{names} can regulate fans as well. Switch its fan function off there, or two controls work against each other.",
   "conf.show": "Show",
   "conf.later": "Later",
   "conf.close": "Close",
@@ -49,31 +51,31 @@ Object.assign(STRINGS.en, {
   "conf.ignore": "Ignore",
   "conf.help": "Help",
   "conf.affects": "Affects: {d}",
-  "conf.busy": "Closing …",
+  "conf.busy": "Closing…",
   "conf.done": "{n} was closed",
   "conf.hard.ask": "{n} is still running. End it forcibly? Unsaved data of that program is lost.",
   "conf.hard": "End forcibly",
   "conf.hard.no": "No",
   "conf.path": "Path: {p}",
   "conf.unusual": "Unusual location: this program does not run from a usual install folder.",
-  "conf.unusual.ask": "Unusual location: {n} runs from\n{p}\nThis is not a usual install folder (Program Files, ProgramData, AppData\\Local\\Programs). Close it anyway?",
-  "conf.service": "Runs as a service – please stop it in the Services manager.",
-  "conf.elevated": "Runs with admin rights – please close it as administrator.",
+  "conf.unusual.ask": "Unusual location: {n} runs from\n{p}\nNot a usual install folder (Program Files, ProgramData, AppData\\Local\\Programs). Close it anyway?",
+  "conf.service": "Runs as a service. Stop it in the Services manager.",
+  "conf.elevated": "Runs with administrator rights. Close it as administrator.",
   "conf.services": "Open Services",
   "conf.gone": "{n} is not running any more",
   "conf.err": "That did not work: {e}",
-  "conf.helptext": "CaseHUD only closes programs from this list, and only after your click: first politely (the window is asked to close, up to 5 seconds), then forcibly if you want. Services and programs with admin rights cannot be ended by CaseHUD, and it does not try. To keep a program from starting again with Windows: Windows Settings → Apps → Startup, or Task Manager → Startup. Services can be stopped, or set to “Manual”, in the Services manager (services.msc).",
+  "conf.helptext": "CaseHUD only closes programs from this list, and only after confirmation: first regularly (the window is asked to close, up to 5 seconds), then forcibly on request. Services and programs with administrator rights cannot be ended by CaseHUD. To prevent a restart with Windows: Windows Settings → Apps → Startup, or Task Manager → Startup. Stop services in the Services manager (services.msc) or set them to “Manual”.",
   "conf.set.title": "Other software",
-  "conf.set.sub": "Programs that can control the same devices. CaseHUD asks before anything is closed.",
+  "conf.set.sub": "Programs that can control the same devices. A confirmation is requested before anything is closed.",
   "conf.set.ask": "Ask at start and when new programs appear",
-  "conf.set.ask.sub": "Shows a notice at the top as soon as one of these programs runs. Off: no notice, the list here stays.",
+  "conf.set.ask.sub": "Shows a notice at the top while one of these programs runs. Off: no notice, the list is kept.",
   "conf.set.running": "running",
   "conf.set.idle": "not started",
   "conf.set.keep": "Do not close",
   "conf.set.service": "service",
   "conf.set.open": "Show",
   "conf.dev.tllcd": "Fan LCDs", "conf.dev.us88": "Universal Screen 8.8\"", "conf.dev.aio": "Pump display",
-  "conf.dev.fanled": "Fan lighting", "conf.dev.ringled": "8.8\" frame", "conf.dev.boardled": "Mainboard lighting", "conf.dev.ramled": "RAM lighting",
+  "conf.dev.fanled": "Fan lighting", "conf.dev.ringled": "8.8\" frame", "conf.dev.boardled": "Mainboard lighting", "conf.dev.ramled": "RAM lighting", "conf.dev.fan": "Fan control", "conf.dev.fanhint": "Fan function (notice)",
 });
 
 const conf = { st: null, busy: {}, hard: {}, msg: {}, dismissed: "", asked: false, help: false, timer: 0 };
@@ -110,6 +112,7 @@ const confText = () => {
 };
 
 const confDevs = (list) => list.map((d) => t("conf.dev." + d)).join(", ");
+const confHintOnly = (list) => list.length > 0 && list.every((i) => i.affects.every((d) => d === "fanhint"));
 const confPending = () => (conf.st ? conf.st.items.filter((i) => i.running && !i.ignored && i.affects.length) : []);
 
 async function confLoad() {
@@ -118,7 +121,7 @@ async function confLoad() {
   } catch { return; }
   confRender();
   const accepted = !!(state && state.acks && state.acks.accepted); // never ahead of the first-start disclaimer
-  if (!conf.asked && conf.st.ask && accepted && confPending().length && !$("dialog[open]")) {
+  if (!conf.asked && conf.st.ask && accepted && confPending().length && !confHintOnly(confPending()) && !$("dialog[open]")) {
     conf.asked = true; // the first sight asks once; later programs show the banner
     confOpen();
   }
@@ -131,7 +134,7 @@ function confRender() {
   if (!pend.length) conf.dismissed = "";
   const banner = $("#conf-banner");
   banner.hidden = !pend.length || conf.dismissed === key;
-  if (!banner.hidden) $("#conf-banner-text").textContent = t("conf.banner", { names: pend.map((i) => i.name).join(", ") });
+  if (!banner.hidden) $("#conf-banner-text").textContent = t(confHintOnly(pend) ? "conf.banner.hint" : "conf.banner", { names: pend.map((i) => i.name).join(", ") });
   const dlg = $("#conf-dlg");
   if (dlg.open) {
     if (!confPending().length) dlg.close();
@@ -152,12 +155,12 @@ function confRows() {
         el("button", { class: "ghost", onclick: () => { delete conf.hard[i.exe]; confRows(); } }, t("conf.hard.no")));
     } else {
       if (bad && i.reason === "service") actions.push(el("button", { class: "ghost", onclick: confServices }, t("conf.services")));
-      if (!bad) actions.push(el("button", { class: "primary", onclick: () => confClose(i.exe, false) }, t("conf.close")));
+      if (!bad) actions.push(el("button", { class: "ghost", onclick: () => confClose(i.exe, false) }, t("conf.close")));
       actions.push(el("button", { class: "ghost", onclick: () => confIgnore(i.exe, true) }, t("conf.ignore")));
     }
     return el("div", { class: "conf-row" },
       el("div", { class: "conf-info" },
-        el("b", {}, i.name), " ", el("code", {}, i.exe),
+        el("div", { class: "conf-name" }, el("b", {}, i.name), el("code", {}, i.exe)),
         el("small", {}, t("conf.affects", { d: confDevs(i.affects) })),
         ...(i.paths || []).map((p) => el("small", { class: "conf-path" }, t("conf.path", { p }))),
         i.unusual ? el("small", { class: "conf-warn" }, t("conf.unusual")) : null,
@@ -229,7 +232,7 @@ function confSettings() {
   const list = $("#conf-set-list");
   list.replaceChildren(...conf.st.items.map((i) => el("div", { class: "row conf-set-row" },
     el("div", { class: "row-text" },
-      el("b", {}, i.name, " ", el("code", {}, i.exe)),
+      el("div", { class: "conf-name" }, el("b", {}, i.name), el("code", {}, i.exe)),
       el("small", {}, confDevs(i.devices) + (i.service ? " · " + t("conf.set.service") : ""))),
     el("span", { class: "conf-badge" + (i.running ? " on" : "") }, t(i.running ? "conf.set.running" : "conf.set.idle")),
     el("label", { class: "conf-keep" }, el("span", {}, t("conf.set.keep")),
@@ -245,7 +248,7 @@ function confSettings() {
   const group = $("#set-devices");
   if (!group) return;
   group.append(el("div", { class: "card rows", id: "conf-card" },
-    el("div", { class: "row-block" }, el("b", { id: "conf-set-title" }), el("p", { class: "sub", id: "conf-set-sub" })),
+    el("div", { class: "card-head" }, el("div", {}, el("h3", { id: "conf-set-title" }), el("p", { class: "sub", id: "conf-set-sub" }))),
     el("label", { class: "row" }, el("div", { class: "row-text" }, el("b", { id: "conf-set-ask-t" }), el("small", { id: "conf-set-ask-s" })),
       el("input", { type: "checkbox", class: "switch", id: "conf-set-ask" })),
     el("div", { id: "conf-set-list" })));

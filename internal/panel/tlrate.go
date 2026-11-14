@@ -2,6 +2,7 @@ package panel
 
 import (
 	"log"
+	"sync"
 	"time"
 )
 
@@ -17,12 +18,52 @@ var (
 	tlNow         = time.Now
 )
 
+// The day count, the cap and the time of the last write belong to the fan, not
+// to the object that talks to it: a rescan or a re-plug creates a new object
+// for the same fan and must not give it a fresh allowance. They are kept per
+// SettingsCache key for the life of the process.
+type tlRateSnap struct {
+	last   time.Time
+	day    string
+	count  int
+	capped bool
+}
+
+var (
+	tlRateMu  sync.Mutex
+	tlRateMem = map[string]tlRateSnap{}
+)
+
+// attach binds the limiter to the fan's key and takes over what an earlier
+// object for the same fan had used.
+func (r *tlRate) attach(key string) {
+	r.key = key
+	if key == "" {
+		return
+	}
+	tlRateMu.Lock()
+	s := tlRateMem[key]
+	tlRateMu.Unlock()
+	r.last, r.day, r.count, r.capped = s.last, s.day, s.count, s.capped
+}
+
+// remember stores the persistent part for the next object of this fan.
+func (r *tlRate) remember() {
+	if r.key == "" {
+		return
+	}
+	tlRateMu.Lock()
+	tlRateMem[r.key] = tlRateSnap{last: r.last, day: r.day, count: r.count, capped: r.capped}
+	tlRateMu.Unlock()
+}
+
 // tlRate is the state of the limiter of one fan (guarded by tlChain).
 type tlRate struct {
 	last     time.Time // of the last write made for a change
 	pendB    *int      // coalesced values waiting for the interval
 	pendR    *int
 	timer    *time.Timer
+	key      string // SettingsCache key of the fan, "" until known
 	day      string // date the count belongs to
 	count    int
 	capped   bool
@@ -92,6 +133,7 @@ func (p *tlLCD) flushPending() error {
 		return nil
 	}
 	p.rate.last = now
+	p.rate.remember()
 	if b != nil {
 		p.brightness = *b
 	}
@@ -110,6 +152,7 @@ func (p *tlLCD) spendWrite(now time.Time) bool {
 	}
 	if p.rate.capped || p.rate.count >= tlDailyMax {
 		p.rate.capped = true
+		p.rate.remember()
 		if !p.rate.capKnown {
 			p.rate.capKnown = true
 			log.Printf("TL LCD %s: %d brightness/rotation writes today: no more are made until CaseHUD restarts (they wear the display's flash)", p.ID(), tlDailyMax)
@@ -117,6 +160,7 @@ func (p *tlLCD) spendWrite(now time.Time) bool {
 		return false
 	}
 	p.rate.count++
+	p.rate.remember()
 	return true
 }
 

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -26,8 +27,26 @@ import (
 
 // SketchView is the sketch together with the lighting state after a change.
 type SketchView struct {
-	Sketch   *sketch.Sketch `json:"sketch"`
-	Lighting LightingView   `json:"lighting"`
+	Sketch *sketch.Sketch `json:"sketch"`
+	// Net is the layout of the unfolded case the LED canvas shows (nil
+	// without a sketch).
+	Net      *sketch.Net  `json:"net,omitempty"`
+	Lighting LightingView `json:"lighting"`
+}
+
+// ResolvedSketch returns a copy of the stored sketch with the face of every
+// part filled in and the lighting of its case brought in line with the case
+// template (SyncCaseLights; stored with the next change), and the case net
+// (nil, nil: no sketch).
+func (e *Engine) ResolvedSketch() (*sketch.Sketch, *sketch.Net) {
+	sk := e.GetSketch()
+	if sk == nil {
+		return nil, nil
+	}
+	cat := e.SketchCatalog()
+	r := sketch.ResolveFaces(sketch.SyncCaseLights(*sk, cat), cat)
+	_, n := sketch.SketchNet(r, cat)
+	return &r, &n
 }
 
 func cloneSketch(s *sketch.Sketch) *sketch.Sketch {
@@ -42,9 +61,20 @@ func cloneSketch(s *sketch.Sketch) *sketch.Sketch {
 			b := *p.Bind
 			p.Bind = &b
 		}
+		p.Path = append([]sketch.Vec3(nil), p.Path...)
 		out.Parts[i] = p
 	}
 	return &out
+}
+
+// demoFansID is the demo fan controller (lighting backend "lianlitl").
+const demoFansID = "demo:fans"
+
+// sketchRings tells the sketch which zones take one colour per fan ring: the
+// ports of the TL fan controller. It goes by the device id, so the stored
+// sketch is derived the same way at start, before any device is found.
+func sketchRings(device, zone string) bool {
+	return (strings.HasPrefix(device, "lianlitl:") || device == demoFansID) && sketch.RingZone("lianlitl", zone)
 }
 
 // GetSketch returns a copy of the stored sketch (nil: none).
@@ -62,14 +92,23 @@ func (e *Engine) SetSketch(s sketch.Sketch) (SketchView, error) {
 	l := &e.light
 	l.sketchMu.Lock()
 	defer l.sketchMu.Unlock()
-	d, err := sketch.Derive(s, e.SketchCatalog())
+	return e.setSketchLocked(s)
+}
+
+// setSketchLocked is SetSketch with l.sketchMu held.
+func (e *Engine) setSketchLocked(s sketch.Sketch) (SketchView, error) {
+	cat := e.SketchCatalog()
+	s = sketch.SyncCaseLights(s, cat) // the case decides where its lighting runs
+	d, err := sketch.DeriveWith(s, cat, sketchRings)
 	if err != nil {
 		return SketchView{}, lightErr("sketch: %v", err)
 	}
+	s = sketch.ResolveFaces(s, cat) // the face of every part is stored explicitly
 	if err := e.applySketch(&s, d); err != nil {
 		return SketchView{}, err
 	}
-	return SketchView{Sketch: e.GetSketch(), Lighting: e.Lighting()}, nil
+	sk, n := e.ResolvedSketch()
+	return SketchView{Sketch: sk, Net: n, Lighting: e.Lighting()}, nil
 }
 
 // DeleteSketch removes the sketch, its components and the segments derived
@@ -82,6 +121,37 @@ func (e *Engine) DeleteSketch() (SketchView, error) {
 		return SketchView{}, err
 	}
 	return SketchView{Lighting: e.Lighting()}, nil
+}
+
+// upgradeStoredSketch derives the sketch from the stored version 1 backup
+// (if there is one) with the current catalog, so library parts are placed by
+// their real size. The backup stays until the editor saves, so a catalog that
+// is incomplete at one start does not fix an approximate result for good.
+func (e *Engine) upgradeStoredSketch() {
+	e.mu.Lock()
+	raw := e.cfg.Lighting.SketchV1
+	e.mu.Unlock()
+	if len(raw) == 0 {
+		return
+	}
+	var old sketch.SketchV1
+	if err := json.Unmarshal(raw, &old); err != nil {
+		log.Printf("lighting: stored version 1 sketch not readable: %v", err)
+		return
+	}
+	cat := e.SketchCatalog()
+	up, notes, err := sketch.Upgrade(old, cat)
+	if err != nil {
+		log.Printf("lighting: stored version 1 sketch not upgraded: %v", err)
+		return
+	}
+	for _, n := range notes {
+		log.Printf("lighting: sketch upgrade: %s: %s", n.ID, n.Msg)
+	}
+	up = sketch.ResolveFaces(up, cat)
+	e.mu.Lock()
+	e.cfg.Lighting.Sketch = &up
+	e.mu.Unlock()
 }
 
 func sketchComponentNames() map[string]leds.Component {
@@ -160,7 +230,7 @@ func (e *Engine) restoreSketchComponents() {
 	usable, skipped := sketch.Usable(*sk, cat)
 	var comps []leds.Component
 	if len(usable.Parts) > 0 {
-		d, err := sketch.Derive(usable, cat)
+		d, err := sketch.DeriveWith(usable, cat, sketchRings)
 		if err != nil {
 			log.Printf("lighting: stored sketch not used: %v", err)
 			skipped = skipped[:0]
@@ -335,6 +405,7 @@ func (e *Engine) applySketch(sk *sketch.Sketch, d sketch.Derived) error {
 	l.cfg = clean
 	e.mu.Lock()
 	e.cfg.Lighting.Sketch = cloneSketch(sk)
+	e.cfg.Lighting.SketchV1 = nil // the editor has taken over: no more backup
 	e.mu.Unlock()
 	l.markDirty()
 	l.mu.Unlock()

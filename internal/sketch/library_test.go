@@ -96,3 +96,67 @@ func TestParsePartOutlineChecks(t *testing.T) {
 		}
 	}
 }
+
+func TestParseCaseOrientation(t *testing.T) {
+	with := func(block string) string {
+		return `{"format":1,"id":"o","model":"M","dimensions_mm":{"w":200,"h":400,"d":500},` + block + `"views":{"side":{"size_mm":{"w":500,"h":400},
+ "outline":[{"type":"rect","x":10,"y":20,"w":100,"h":50},{"type":"circle","cx":30,"cy":40,"r":5},{"type":"polygon","points":[[0,0],[100,10],[50,50]]}]}},
+ "mounts":[{"id":"front-mount","face":"front","view":"side","region":{"type":"rect","x":0,"y":10,"w":25,"h":300},
+   "layouts":[{"fan_mm":120,"count":1,"snap_mm":[[12.5,100]]}]},
+  {"id":"fv","face":"front","view":"front","region":{"type":"rect","x":0,"y":10,"w":25,"h":30},"layouts":[{"fan_mm":120,"count":1,"snap_mm":[[12.5,100]]}]}],
+ "areas":[{"id":"mb","kind":"motherboard","view":"side","shape":{"type":"rect","x":100,"y":50,"w":300,"h":250}}],
+ "gpu_slots":[{"id":"s1","view":"side","region":{"type":"rect","x":120,"y":100,"w":200,"h":60}}]}`
+	}
+	// no block: the default, nothing converted
+	c, err := ParseCase([]byte(with("")))
+	if err != nil || c.Orientation != (Orientation{}) || c.Mounts[0].Layouts[0].Snap[0][0] != 12.5 {
+		t.Fatalf("no block: %v %+v", err, c.Orientation)
+	}
+	// explicit defaults are kept and change nothing
+	c, err = ParseCase([]byte(with(`"orientation":{"side_view_left":"rear","glass_side":"left"},`)))
+	if err != nil || c.Orientation != (Orientation{SideViewLeft: "rear", GlassSide: "left"}) || c.Mounts[0].Layouts[0].Snap[0][0] != 12.5 {
+		t.Fatalf("defaults: %v %+v", err, c.Orientation)
+	}
+	if _, err := ParseCase([]byte(with(`"orientation":{"glass_side":"right"},`))); err != nil {
+		t.Fatalf("partial block: %v", err)
+	}
+	// front on the left: side view data is measured from the rear afterwards (z = D - u)
+	c, err = ParseCase([]byte(with(`"orientation":{"side_view_left":"front","glass_side":"right"},`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Orientation.FrontOnSideLeft() || !c.Orientation.GlassRight() {
+		t.Fatalf("orientation %+v", c.Orientation)
+	}
+	m := c.Mounts[0]
+	if m.Layouts[0].Snap[0] != [2]float64{487.5, 100} || m.Region.X != 475 || m.Region.W != 25 || m.Region.Y != 10 {
+		t.Errorf("side mount not converted: %+v", m)
+	}
+	if c.Mounts[1].Layouts[0].Snap[0] != [2]float64{12.5, 100} || c.Mounts[1].Region.X != 0 {
+		t.Errorf("front view mount changed: %+v", c.Mounts[1])
+	}
+	if a := c.Areas[0].Shape; a.X != 100 || a.W != 300 { // 500 - 100 - 300
+		t.Errorf("area: %+v", a)
+	}
+	if g := c.GPUSlots[0].Region; g.X != 180 || g.W != 200 {
+		t.Errorf("gpu slot: %+v", g)
+	}
+	out := c.Views["side"].Outline
+	if out[0].X != 390 || out[1].CX != 470 || out[2].Points[1] != [2]float64{400, 10} {
+		t.Errorf("outline: %+v", out)
+	}
+	// converting twice returns to the start, and the parsed input is not shared
+	again, _ := ParseCase([]byte(with(`"orientation":{"side_view_left":"front"},`)))
+	again.flipSideView()
+	if again.Mounts[0].Layouts[0].Snap[0][0] != 12.5 {
+		t.Errorf("not an involution: %v", again.Mounts[0].Layouts[0].Snap)
+	}
+	for name, block := range map[string]string{
+		"side": `"orientation":{"side_view_left":"top"},`, "glass": `"orientation":{"glass_side":"middle"},`,
+		"mixed case": `"orientation":{"side_view_left":"Rear"},`,
+	} {
+		if _, err := ParseCase([]byte(with(block))); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}

@@ -1,92 +1,12 @@
 package mcp
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"strings"
-	"time"
 )
-
-// API is the running CaseHUD app's local HTTP API.
-type API struct {
-	Base, Token string
-	HTTP        *http.Client
-}
-
-// NewAPI parses the GUI address CaseHUD writes to instance.url
-// ("http://127.0.0.1:PORT/?t=TOKEN").
-func NewAPI(instanceURL string) (*API, error) {
-	u, err := url.Parse(strings.TrimSpace(instanceURL))
-	if err != nil || u.Host == "" || u.Query().Get("t") == "" {
-		return nil, fmt.Errorf("CaseHUD is not running (no valid instance.url)")
-	}
-	return &API{Base: u.Scheme + "://" + u.Host, Token: u.Query().Get("t"), HTTP: &http.Client{Timeout: 15 * time.Second}}, nil
-}
-
-func (a *API) call(method, path string, body any, out any) ([]byte, error) {
-	var rd io.Reader
-	if body != nil {
-		b, err := json.Marshal(body)
-		if err != nil {
-			return nil, err
-		}
-		rd = bytes.NewReader(b)
-	}
-	req, err := http.NewRequest(method, a.Base+path, rd)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("X-Token", a.Token)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	resp, err := a.HTTP.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("CaseHUD is not reachable, is it running? (%w)", err)
-	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
-	if resp.StatusCode/100 != 2 {
-		return nil, fmt.Errorf("CaseHUD: %s", strings.TrimSpace(string(b)))
-	}
-	if out != nil && len(b) > 0 {
-		if err := json.Unmarshal(b, out); err != nil {
-			return nil, err
-		}
-	}
-	return b, nil
-}
-
-type panelState struct {
-	ID     string          `json:"id"`
-	Name   string          `json:"name"`
-	Width  int             `json:"width"`
-	Height int             `json:"height"`
-	Round  bool            `json:"round"`
-	Config json.RawMessage `json:"config"`
-}
-
-type state struct {
-	Panels   []panelState    `json:"panels"`
-	Designs  json.RawMessage `json:"designs"`
-	Settings struct {
-		MCP bool `json:"mcp"`
-	} `json:"settings"`
-}
-
-func (a *API) state() (state, error) {
-	var s state
-	_, err := a.call("GET", "/api/state", nil, &s)
-	if err == nil && !s.Settings.MCP {
-		err = fmt.Errorf("the MCP interface is turned off in CaseHUD. Ask the user to enable it under Settings (expert mode) > \"MCP interface for AI assistants\"")
-	}
-	return s, err
-}
 
 func pretty(v any) string {
 	b, _ := json.MarshalIndent(v, "", "  ")
@@ -101,11 +21,21 @@ func schema(props map[string]any, required ...string) map[string]any {
 	return s
 }
 
-// NewCaseHUD returns the MCP server exposing CaseHUD's tools.
+// status is the part of GET /api/v1/status the tools use.
+type status struct {
+	Areas *struct {
+		Display bool `json:"display"`
+	} `json:"areas"`
+	Panels json.RawMessage `json:"panels"`
+}
+
+// NewCaseHUD returns the MCP server exposing CaseHUD's tools. Every tool goes
+// through the public API (/api/v1/) with the token the user granted; the MCP
+// switch of the settings is enforced by CaseHUD itself.
 func NewCaseHUD(api *API, version string) *Server {
 	str := func(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
 	designArg := map[string]any{"type": "object", "description": "A CaseHUD layout (see the design_guide tool)."}
-	s := &Server{Name: "casehud", Version: version, Instructions: instructions}
+	s := &Server{Name: "casehud", Version: version, Instructions: instructions, OnClient: api.SetClient}
 	s.Tools = []Tool{
 		{
 			Name: "design_guide", Title: "Design guide",
@@ -118,11 +48,18 @@ func NewCaseHUD(api *API, version string) *Server {
 			Description: "Lists the connected LCDs (id, name, resolution, round or square) and what each one currently shows.",
 			InputSchema: schema(map[string]any{}),
 			Handler: func(json.RawMessage) (ToolResult, error) {
-				st, err := api.state()
-				if err != nil {
+				var st status
+				if _, err := api.call("GET", "/api/v1/status", nil, &st); err != nil {
 					return ToolResult{}, err
 				}
-				return Text(pretty(st.Panels)), nil
+				if st.Areas != nil && !st.Areas.Display {
+					return Text("area_off: the display area is switched off in the CaseHUD settings; no displays are active."), nil
+				}
+				var panels any
+				if err := json.Unmarshal(st.Panels, &panels); err != nil {
+					return ToolResult{}, err
+				}
+				return Text(pretty(panels)), nil
 			},
 		},
 		{
@@ -134,15 +71,12 @@ func NewCaseHUD(api *API, version string) *Server {
 				if err := ParseArgs(args, &p); err != nil {
 					return ToolResult{}, err
 				}
-				if _, err := api.state(); err != nil {
-					return ToolResult{}, err
-				}
 				var rs []struct {
-					Path  string  `json:"Path"`
-					Value float64 `json:"Value"`
-					Unit  string  `json:"Unit"`
+					Path  string  `json:"path"`
+					Value float64 `json:"value"`
+					Unit  string  `json:"unit"`
 				}
-				if _, err := api.call("GET", "/api/sensors", nil, &rs); err != nil {
+				if _, err := api.call("GET", "/api/v1/sensors", nil, &rs); err != nil {
 					return ToolResult{}, err
 				}
 				var b strings.Builder
@@ -163,11 +97,11 @@ func NewCaseHUD(api *API, version string) *Server {
 			Description: "Lists built-in and user designs with their ids.",
 			InputSchema: schema(map[string]any{}),
 			Handler: func(json.RawMessage) (ToolResult, error) {
-				st, err := api.state()
+				b, err := api.call("GET", "/api/v1/designs", nil, nil)
 				if err != nil {
 					return ToolResult{}, err
 				}
-				return Text(string(st.Designs)), nil
+				return Text(string(b)), nil
 			},
 		},
 		{
@@ -179,10 +113,7 @@ func NewCaseHUD(api *API, version string) *Server {
 				if err := ParseArgs(args, &p); err != nil {
 					return ToolResult{}, err
 				}
-				if _, err := api.state(); err != nil {
-					return ToolResult{}, err
-				}
-				b, err := api.call("GET", "/api/designs/"+url.PathEscape(p.ID), nil, nil)
+				b, err := api.call("GET", "/api/v1/designs/"+url.PathEscape(p.ID), nil, nil)
 				if err != nil {
 					return ToolResult{}, err
 				}
@@ -204,14 +135,11 @@ func NewCaseHUD(api *API, version string) *Server {
 				if err := ParseArgs(args, &p); err != nil {
 					return ToolResult{}, err
 				}
-				if _, err := api.state(); err != nil {
-					return ToolResult{}, err
-				}
 				q := "?w=400"
 				if p.Theme == "light" {
 					q += "&theme=light"
 				}
-				b, err := api.call("POST", "/api/render"+q, p.Design, nil)
+				b, err := api.call("POST", "/api/v1/render"+q, p.Design, nil)
 				if err != nil {
 					return ToolResult{}, err
 				}
@@ -233,10 +161,7 @@ func NewCaseHUD(api *API, version string) *Server {
 				if err := ParseArgs(args, &p); err != nil {
 					return ToolResult{}, err
 				}
-				if _, err := api.state(); err != nil {
-					return ToolResult{}, err
-				}
-				if _, err := api.call("PUT", "/api/designs/"+url.PathEscape(p.ID), p.Design, nil); err != nil {
+				if _, err := api.call("PUT", "/api/v1/designs/"+url.PathEscape(p.ID), p.Design, nil); err != nil {
 					return ToolResult{}, err
 				}
 				return Text("saved as " + p.ID), nil
@@ -259,42 +184,39 @@ func NewCaseHUD(api *API, version string) *Server {
 				if err := ParseArgs(args, &p); err != nil {
 					return ToolResult{}, err
 				}
-				st, err := api.state()
-				if err != nil {
+				patch := map[string]any{"mode": "hud", "design": p.DesignID}
+				if p.Theme != "" {
+					patch["theme"] = p.Theme
+				}
+				var panel struct {
+					Name string `json:"name"`
+				}
+				if _, err := api.call("PATCH", "/api/v1/panels/"+url.PathEscape(p.DisplayID), patch, &panel); err != nil {
+					if strings.Contains(err.Error(), "not_found") {
+						return ToolResult{}, fmt.Errorf("no display with id %q, see list_displays", p.DisplayID)
+					}
 					return ToolResult{}, err
 				}
-				for _, ps := range st.Panels {
-					if ps.ID != p.DisplayID {
-						continue
-					}
-					var cfg map[string]any
-					if len(ps.Config) > 0 {
-						if err := json.Unmarshal(ps.Config, &cfg); err != nil {
-							return ToolResult{}, fmt.Errorf("the config of %s is not readable: %w", ps.Name, err)
-						}
-					}
-					if cfg == nil {
-						cfg = map[string]any{}
-					}
-					cfg["mode"], cfg["design"] = "design", p.DesignID
-					delete(cfg, "grid") // a single design replaces a grid
-					delete(cfg, "tiles")
-					if p.Theme != "" {
-						cfg["theme"] = p.Theme
-					}
-					if _, err := api.call("PUT", "/api/panels/"+url.PathEscape(ps.ID), cfg, nil); err != nil {
-						return ToolResult{}, err
-					}
-					return Text(fmt.Sprintf("%s now shows %s", ps.Name, p.DesignID)), nil
-				}
-				return ToolResult{}, fmt.Errorf("no display with id %q, see list_displays", p.DisplayID)
+				return Text(fmt.Sprintf("%s now shows %s", panel.Name, p.DesignID)), nil
 			},
 		},
 	}
+	s.Tools = append(s.Tools, curatedTools(api)...)
 	return s
 }
 
-const instructions = `CaseHUD drives small LCD screens inside PC cases (fan LCDs about 2" round, pump heads, case screens) with sensor dashboards. Use design_guide before creating designs, list_sensors to find real sources, render_design to check your work visually, then save_design. Only change what is on a display (apply_design) when the user asks.`
+const instructions = `CaseHUD controls a PC's case hardware through a Windows app: small LCD screens (fan LCDs about 2" round, pump heads, bar displays), RGB lighting, and the cooling (fans and, if present, a pump), plus scenes, rotation, automation and a few settings.
+
+Start with status: it shows which areas (displays, lighting, cooling) are on, the displays, the cooling state and alarm. An area that is switched off cannot be changed; tell the user to switch it on in CaseHUD > Settings > Areas.
+
+Displays: design_guide before creating designs, list_sensors to find real sources, render_design to check visually, then save_design; apply_design or set_display put a design on a display; list_scenes and apply_scene for stored setups.
+Lighting: lighting_status, lighting_set, lighting_presets, lighting_preset_apply.
+Cooling: cooling_status shows the state, cooling_get_config the outputs and curves (always read it before changing), cooling_set_output gives one fan or pump a curve or a fixed value, cooling_set_curve and cooling_delete_curve edit curves, cooling_presets, cooling_preset_activate and cooling_preset_save handle presets, cooling_calibrate starts a speed measurement.
+Everything else (rotation, automation, settings, layouts, designs, scenes, AWTRIX clocks, power): look the route up with api_spec, then call it with api_call.
+
+Safety rules. Only change something when the user asked for it; reading is always fine. A pump (if there is one) must never be set below 30 % and never off; CaseHUD refuses it, do not try to work around it. A fan set too low can overheat the PC: prefer curves over fixed values and check cooling_status afterwards (alarm, problem, temperatures). A speed measurement stops fans and pump for minutes: explain that and get the user's agreement before cooling_calibrate (confirm=true), and never run it while the PC is under load. Quitting or updating CaseHUD, API/MCP switches, sensor source, areas and flashing devices are not available through MCP; some lighting options are only possible in the CaseHUD window (gui_only): tell the user where to do it.
+
+Access. The first call needs the user to confirm access in the CaseHUD window; if a tool says so, tell the user and call it again afterwards. This connection can change things only if the user allowed Control; a tool that answers insufficient_scope needs the user to grant it in CaseHUD > Settings > Access (Change rights). Errors name the code (area_off, revision_mismatch, busy, blocked ...); read the message and tell the user what is needed instead of retrying blindly.`
 
 const designGuide = `# CaseHUD design format
 
@@ -343,8 +265,8 @@ or subtract: "Powers/Package + Powers/GPU Package". Handy ones:
 - CPU load "Load/CPU Total", GPU load "Load/GPU Core|Load/D3D 3D"
 - CPU temp "Temperatures/CPU Package|Temperatures/Core (Tctl/Tdie)|Temperatures/Core (Tctl)"
 - GPU temp "Temperatures/GPU Core", hotspot "Temperatures/GPU Hot Spot"
-- Coolant "Temperatures/T Sensor|Temperatures/Coolant|Temperatures/Water|Temperatures/Liquid"
-- Pump "Fans/Pump|Fans/AIO Pump|Fans/W_PUMP+"
+- Coolant (only if the PC has a coolant sensor; check list_sensors) "Temperatures/Coolant|Temperatures/Water|Temperatures/Liquid"
+- Pump (only if present) "Fans/Pump|Fans/AIO Pump|Fans/Water Pump"
 - FPS "FPS/Framerate", frametime "FPS/Frametime", latency "FPS/Latency"
 - VRAM "Data/GPU Memory Used" (GB), "Load/GPU Memory" (%)
 

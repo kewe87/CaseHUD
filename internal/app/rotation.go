@@ -418,3 +418,7 @@ func (e *Engine) validBackground(bg string) bool {
 	}
 	return false
 }
+
+// CleanSceneName is the form a scene name is stored in: control characters
+// dropped, blanks trimmed; an empty or over-long name is an error.
+func CleanSceneName(n string) (string, error) { return cleanSceneName(n) }

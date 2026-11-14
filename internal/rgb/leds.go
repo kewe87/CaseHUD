@@ -149,6 +149,10 @@ type EffectInfo struct {
 	Params []Param `json:"params"`
 	// New creates an effect. params contains every declared key (defaults filled in).
 	New func(params Params) (Effect, error) `json:"-"`
+	// Scalable: the picture depends only on time, parameters and the position
+	// relative to the canvas size, so a second instance can draw it sharper
+	// for the GUI preview (see PreviewWidth).
+	Scalable bool `json:"-"`
 }
 
 // DeviceState is the coarse status of a device for the UI.

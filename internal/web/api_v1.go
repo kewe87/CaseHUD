@@ -2,14 +2,13 @@ package web
 
 import (
 	"bytes"
-	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"image/jpeg"
 	"image/png"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"slices"
@@ -50,8 +49,11 @@ func notFound(w http.ResponseWriter, format string, a ...any) {
 	apiFail(w, http.StatusNotFound, "not_found", fmt.Sprintf(format, a...))
 }
 
+// internalError answers 500 without the text of the error: it may name files
+// and folders. The text goes to the log.
 func internalError(w http.ResponseWriter, err error) {
-	apiFail(w, http.StatusInternalServerError, "internal", err.Error())
+	log.Printf("api: internal error: %v", err)
+	apiFail(w, http.StatusInternalServerError, "internal", "internal error; the details are in the CaseHUD log")
 }
 
 func badGateway(w http.ResponseWriter, err error) {
@@ -78,48 +80,6 @@ func (s *Server) hostOK(host string) bool {
 		return false
 	}
 	return s.ln == nil || p == strconv.Itoa(s.port())
-}
-
-// authV1 guards /api/v1/: right Host header, then the client token or the
-// GUI token (X-Token header; ?t= only for GET .../preview.png so <img> works).
-func (s *Server) authV1(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.hostOK(r.Host) {
-			apiFail(w, http.StatusForbidden, "forbidden", "unexpected Host header")
-			return
-		}
-		tok := r.Header.Get("X-Token")
-		if tok == "" && r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "preview.png") {
-			tok = r.URL.Query().Get("t")
-		}
-		isGUI := tok != "" && subtle.ConstantTimeCompare([]byte(tok), []byte(s.token)) == 1
-		gen, isClient := s.clientAuth(tok)
-		isClient = isClient && tok != ""
-		if !isGUI && !s.Engine.APIEnabled() {
-			// The GUI's own token keeps working so the window is not affected.
-			apiFail(w, http.StatusForbidden, "api_disabled", "the API is switched off in the CaseHUD settings (Settings > Interfaces)")
-			return
-		}
-		if !(isClient || isGUI) {
-			apiFail(w, http.StatusForbidden, "unauthorized", "missing or wrong token")
-			return
-		}
-		w.Header().Set("Cache-Control", "no-store")
-		if isClient && !isGUI && gen != nil {
-			// Switching the API off ends this client's streams at once.
-			ctx, cancel := context.WithCancel(r.Context())
-			defer cancel()
-			go func() {
-				select {
-				case <-gen:
-					cancel()
-				case <-ctx.Done():
-				}
-			}()
-			r = r.WithContext(ctx)
-		}
-		next.ServeHTTP(w, r)
-	})
 }
 
 // decodeBody reads a JSON object into v, rejecting unknown fields so typos
@@ -152,57 +112,15 @@ func decodeBodyOpt(w http.ResponseWriter, r *http.Request, v any) (ok, empty boo
 	return true, false
 }
 
+// apiV1 builds the handler of /api/v1/ from the route table: the scope check
+// first, then the check of the areas, then the route.
 func (s *Server) apiV1() http.Handler {
 	m := http.NewServeMux()
-	m.HandleFunc("GET /api/v1/status", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, s.v1Status()) })
-	m.HandleFunc("GET /api/v1/events", s.v1Events)
-	m.HandleFunc("GET /api/v1/panels", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, s.v1Panels()) })
-	m.HandleFunc("PATCH /api/v1/panels/{id}", s.v1PatchPanel)
-	m.HandleFunc("GET /api/v1/panels/{id}/preview.png", s.v1PanelPreview)
-	m.HandleFunc("POST /api/v1/panels/{id}/identify", func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
-		if !s.panelExists(id) {
-			notFound(w, "panel %q not found", id)
-			return
-		}
-		if err := s.Engine.Identify(id); err != nil {
-			notFound(w, "%v", err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
-	m.HandleFunc("POST /api/v1/identify", func(w http.ResponseWriter, r *http.Request) {
-		if err := s.Engine.Identify(""); err != nil {
-			notFound(w, "no displays connected")
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
-	m.HandleFunc("GET /api/v1/designs", s.v1Designs)
-	m.HandleFunc("GET /api/v1/designs/{id}/preview.png", s.v1DesignPreview)
-	m.HandleFunc("GET /api/v1/sets", s.v1Sets)
-	m.HandleFunc("GET /api/v1/layouts", s.v1Layouts)
-	m.HandleFunc("POST /api/v1/sets/apply", s.v1ApplySet)
-	m.HandleFunc("GET /api/v1/scenes", s.v1Scenes)
-	m.HandleFunc("POST /api/v1/scenes/{id}/activate", s.v1ActivateScene)
-	m.HandleFunc("PATCH /api/v1/rotation", s.v1PatchRotation)
-	m.HandleFunc("PATCH /api/v1/automation", s.v1PatchAutomation)
-	m.HandleFunc("POST /api/v1/rotation/next", func(w http.ResponseWriter, r *http.Request) {
-		s.Engine.NextRotation()
-		w.WriteHeader(http.StatusNoContent)
-	})
-	m.HandleFunc("POST /api/v1/power", s.v1Power)
-	m.HandleFunc("POST /api/v1/gaming", s.v1Gaming)
-	m.HandleFunc("GET /api/v1/community", s.v1CommunityList)
-	m.HandleFunc("GET /api/v1/community/{id}/preview.png", s.v1CommunityPreview)
-	m.HandleFunc("POST /api/v1/community/{id}/import", s.v1CommunityImport)
-	m.HandleFunc("PATCH /api/v1/awtrix", s.v1PatchAwtrix)
-	s.lightingRoutesV1(m)
-	m.HandleFunc("GET /api/v1/update", s.v1Update)
-	m.HandleFunc("POST /api/v1/update/check", s.v1UpdateCheck)
-	m.HandleFunc("POST /api/v1/update/install", s.v1UpdateInstall)
-	m.HandleFunc("POST /api/v1/quit", s.v1Quit)
-	m.HandleFunc("POST /api/v1/gui/open", s.v1GUIOpen)
+	scopes := map[string]string{}
+	for _, rt := range s.v1Routes() {
+		m.HandleFunc(rt.Pattern, rt.Handler)
+		scopes[rt.Pattern] = rt.Scope
+	}
 	m.HandleFunc("/api/v1/", func(w http.ResponseWriter, r *http.Request) {
 		// A known path with another method is 405, anything else 404.
 		var allow []string
@@ -220,7 +138,7 @@ func (s *Server) apiV1() http.Handler {
 		}
 		notFound(w, "no such endpoint: %s %s", r.Method, r.URL.Path)
 	})
-	return m
+	return s.scopeGate(m, scopes, s.areaGate(m))
 }
 
 // --- status and panels ---
@@ -372,6 +290,9 @@ type v1Status struct {
 		Active  bool   `json:"active"`
 		Preset  string `json:"preset"` // ID of the matching lighting preset, "" when none
 	} `json:"lighting"`
+	// Areas tells which core areas are switched on in the settings. What an area
+	// that is off would report (displays, lighting) is reported as off.
+	Areas app.Modules `json:"areas"`
 	// Conflicts names the programs of a fixed list that run and may use the
 	// same devices (image names only; closing them is GUI-only).
 	Conflicts []string  `json:"conflicts"`
@@ -424,8 +345,10 @@ func (s *Server) v1Status() v1Status {
 		st.Awtrix.Devices = append(st.Awtrix.Devices, v1AwtrixInfo{Name: name, Host: d.Host,
 			Model: infos[d.ID].Model, OK: !d.Disabled && seen && msg == ""})
 	}
+	st.Areas = e.Modules()
+	st.Awtrix.Enabled = st.Awtrix.Enabled && st.Areas.Display
 	lb := e.LightingBrief()
-	st.Lighting.Enabled, st.Lighting.Active = lb.Enabled, lb.Active
+	st.Lighting.Enabled, st.Lighting.Active = lb.Enabled && st.Areas.Lighting, lb.Active
 	st.Lighting.Preset = e.ActiveLightingPreset()
 	st.Conflicts = e.ConflictsRunning()
 	st.Panels = s.v1Panels()
@@ -673,11 +596,7 @@ func (s *Server) v1Sets(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) v1ApplySet(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Set    string   `json:"set"`
-		Theme  string   `json:"theme"`
-		Panels []string `json:"panels"`
-	}
+	var req v1ApplySetRequest
 	if !decodeBody(w, r, &req) {
 		return
 	}
@@ -704,20 +623,15 @@ func (s *Server) v1ApplySet(w http.ResponseWriter, r *http.Request) {
 	if done == nil {
 		done = []string{}
 	}
-	writeJSON(w, map[string]any{"applied": done})
+	writeJSON(w, v1Applied{Applied: done})
 }
 
 // --- scenes, rotation, power, gaming ---
 
 func (s *Server) v1Scenes(w http.ResponseWriter, r *http.Request) {
-	type scene struct {
-		ID     string `json:"id"`
-		Name   string `json:"name"`
-		Active bool   `json:"active"`
-	}
-	out := []scene{}
+	out := []v1Scene{}
 	for _, sc := range s.Engine.Scenes() {
-		out = append(out, scene{sc.Name, sc.Name, sc.Active})
+		out = append(out, v1Scene{sc.Name, sc.Name, sc.Active})
 	}
 	writeJSON(w, out)
 }
@@ -725,9 +639,7 @@ func (s *Server) v1Scenes(w http.ResponseWriter, r *http.Request) {
 func (s *Server) v1ActivateScene(w http.ResponseWriter, r *http.Request) {
 	// persist (query ?persist=true or body {"persist":true}) saves the scene as
 	// the displays' configuration; by default it is only shown for now.
-	var req struct {
-		Persist bool `json:"persist"`
-	}
+	var req v1ActivateRequest
 	if ok, _ := decodeBodyOpt(w, r, &req); !ok {
 		return
 	}
@@ -747,9 +659,7 @@ func (s *Server) v1ActivateScene(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) v1PatchRotation(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Enabled *bool `json:"enabled"`
-	}
+	var req v1EnabledRequest
 	if !decodeBody(w, r, &req) {
 		return
 	}
@@ -761,13 +671,11 @@ func (s *Server) v1PatchRotation(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "%v", err)
 		return
 	}
-	writeJSON(w, map[string]bool{"enabled": s.Engine.Rotation().Enabled})
+	writeJSON(w, v1Enabled{Enabled: s.Engine.Rotation().Enabled})
 }
 
 func (s *Server) v1PatchAutomation(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Enabled *bool `json:"enabled"`
-	}
+	var req v1EnabledRequest
 	if !decodeBody(w, r, &req) {
 		return
 	}
@@ -781,13 +689,11 @@ func (s *Server) v1PatchAutomation(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "%v", err)
 		return
 	}
-	writeJSON(w, map[string]bool{"enabled": s.Engine.Automation().Enabled})
+	writeJSON(w, v1Enabled{Enabled: s.Engine.Automation().Enabled})
 }
 
 func (s *Server) v1Power(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		On *bool `json:"on"`
-	}
+	var req v1PowerRequest
 	if !decodeBody(w, r, &req) {
 		return
 	}
@@ -796,16 +702,11 @@ func (s *Server) v1Power(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.Engine.SetPower(*req.On)
-	writeJSON(w, map[string]bool{"power": s.Engine.Power()})
+	writeJSON(w, v1PowerState{Power: s.Engine.Power()})
 }
 
 func (s *Server) v1Gaming(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Active       *bool  `json:"active"`
-		Game         string `json:"game"`
-		PID          int    `json:"pid"`
-		LeaseSeconds *int   `json:"leaseSeconds"`
-	}
+	var req v1GamingRequest
 	if !decodeBody(w, r, &req) {
 		return
 	}
@@ -819,7 +720,7 @@ func (s *Server) v1Gaming(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Engine.SetGamingHint(*req.Active, req.Game, req.PID, lease)
 	g := s.Engine.Gaming(s.Engine.Clock())
-	writeJSON(w, map[string]any{"active": g.Active, "source": g.Source, "game": g.Game})
+	writeJSON(w, v1GamingState{Active: g.Active, Source: g.Source, Game: g.Game})
 }
 
 // --- community ---
@@ -830,16 +731,9 @@ func (s *Server) v1CommunityList(w http.ResponseWriter, r *http.Request) {
 		badGateway(w, err)
 		return
 	}
-	type entry struct {
-		ID     string `json:"id"`
-		Name   string `json:"name"`
-		Author string `json:"author"`
-		Set    string `json:"set"`
-		Theme  string `json:"theme"`
-	}
-	out := []entry{}
+	out := []v1CommunityEntry{}
 	for _, e := range es { // the gallery index has no set or theme: they stay empty
-		out = append(out, entry{ID: e.ID, Name: e.Name, Author: e.Author})
+		out = append(out, v1CommunityEntry{ID: e.ID, Name: e.Name, Author: e.Author})
 	}
 	writeJSON(w, out)
 }
@@ -882,15 +776,13 @@ func (s *Server) v1CommunityImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.Engine.DesignChanged(id)
-	writeJSON(w, map[string]string{"id": id})
+	writeJSON(w, v1ID{ID: id})
 }
 
 // --- awtrix, quit ---
 
 func (s *Server) v1PatchAwtrix(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Enabled *bool `json:"enabled"`
-	}
+	var req v1EnabledRequest
 	if !decodeBody(w, r, &req) {
 		return
 	}
@@ -902,7 +794,7 @@ func (s *Server) v1PatchAwtrix(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "%v", err)
 		return
 	}
-	writeJSON(w, map[string]bool{"enabled": s.v1Status().Awtrix.Enabled})
+	writeJSON(w, v1Enabled{Enabled: s.v1Status().Awtrix.Enabled})
 }
 
 func (s *Server) v1Quit(w http.ResponseWriter, r *http.Request) {
@@ -910,6 +802,7 @@ func (s *Server) v1Quit(w http.ResponseWriter, r *http.Request) {
 		internalError(w, errors.New("quit is not available"))
 		return
 	}
+	s.SetEnding()
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	io.WriteString(w, `{"status":"quitting"}`+"\n")
@@ -942,6 +835,8 @@ const (
 	eventsCheck     = 500 * time.Millisecond
 	eventsPing      = 15 * time.Second
 	maxEventClients = 8
+	// maxEventsPerClient is how many of these one program (one token) may hold.
+	maxEventsPerClient = 3
 )
 
 // statusJSON is the marshalled status, built at most once per check interval
@@ -961,7 +856,8 @@ func (s *Server) statusJSON() ([]byte, error) {
 }
 
 // v1Events streams the status as server-sent events: "status" on connect and
-// whenever it changes, "ping" every 15 s.
+// whenever it changes, "cooling" when the preset, state, alarm or a problem of
+// the cooling changes, "ping" every 15 s.
 func (s *Server) v1Events(w http.ResponseWriter, r *http.Request) {
 	fl, ok := w.(http.Flusher)
 	if !ok {
@@ -974,6 +870,26 @@ func (s *Server) v1Events(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer s.eventClients.Add(-1)
+	// One program may not take all the slots.
+	who, _ := identityOf(r)
+	s.eventMu.Lock()
+	if s.eventBy[who.ID] >= maxEventsPerClient {
+		s.eventMu.Unlock()
+		apiFail(w, http.StatusServiceUnavailable, "too_many_clients", "this program already has the most event streams it may open")
+		return
+	}
+	if s.eventBy == nil {
+		s.eventBy = map[string]int{}
+	}
+	s.eventBy[who.ID]++
+	s.eventMu.Unlock()
+	defer func() {
+		s.eventMu.Lock()
+		if s.eventBy[who.ID]--; s.eventBy[who.ID] <= 0 {
+			delete(s.eventBy, who.ID)
+		}
+		s.eventMu.Unlock()
+	}()
 	h := w.Header()
 	h.Set("Content-Type", "text/event-stream")
 	h.Set("Cache-Control", "no-store")
@@ -983,7 +899,17 @@ func (s *Server) v1Events(w http.ResponseWriter, r *http.Request) {
 	ping := time.NewTicker(eventsPing)
 	defer ping.Stop()
 	var last []byte
+	lastCooling := s.Engine.CoolingAPIView().EventKey() // the state on connect is read with GET
 	for {
+		if v := s.Engine.CoolingAPIView(); v.EventKey() != lastCooling {
+			lastCooling = v.EventKey()
+			if b, err := json.Marshal(v); err == nil {
+				if _, err := fmt.Fprintf(w, "event: cooling\ndata: %s\n\n", b); err != nil {
+					return
+				}
+				fl.Flush()
+			}
+		}
 		b, err := s.statusJSON()
 		if err == nil && !bytes.Equal(b, last) {
 			last = b

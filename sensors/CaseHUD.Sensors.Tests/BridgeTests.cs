@@ -258,6 +258,26 @@ namespace CaseHUD.Sensors.Tests
             Assert.Equal(1, r.Lock.Released);
         }
 
+        [Fact]
+        public void ARepeatedIoErrorIsLoggedOnceUntilTheAddressAnswersAgain()
+        {
+            var r = new Rig(verified: false);
+            MakeEne(r.Bus, "AUDA0-E6K5-0101");
+            string rb = Req("{\"op\":\"rb\",\"reg\":1}");
+            Assert.StartsWith("{\"ok\":true", r.One(rb));
+            for (int i = 0; i < 3; i++)
+            {
+                r.Bus.FailAt = r.Bus.Calls.Count; // an empty slot: every scan fails the same way
+                Assert.Equal(Io, r.One(rb));
+            }
+            Assert.Single(r.Log, l => l.StartsWith("SMBus transfer failed"));
+            r.Bus.FailAt = -1;
+            Assert.StartsWith("{\"ok\":true", r.One(rb));
+            r.Bus.FailAt = r.Bus.Calls.Count;
+            Assert.Equal(Io, r.One(rb));
+            Assert.Equal(2, r.Log.Count(l => l.StartsWith("SMBus transfer failed")));
+        }
+
         // ---- ENE verification and register allow-list ----
 
         private const string Wb = "{\"op\":\"wb\",\"reg\":32801,\"val\":1}";

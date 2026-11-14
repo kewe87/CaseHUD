@@ -1,12 +1,12 @@
 //go:build windows
 
-package web
+package fileacl
 
 import "golang.org/x/sys/windows"
 
-// restrictFile gives path a protected DACL that allows only the current
+// Restrict gives path a protected DACL that allows only the current
 // user, SYSTEM and Administrators (os.Chmod does nothing useful on Windows).
-func restrictFile(path string) error {
+func Restrict(path string) error {
 	user, err := windows.GetCurrentProcessToken().GetTokenUser()
 	if err != nil {
 		return err
@@ -38,4 +38,29 @@ func restrictFile(path string) error {
 	}
 	return windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT,
 		windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, acl, nil)
+}
+
+// CopyDACL gives dst the access rights of src (the same entries, and whether
+// it inherits from its folder), so a file that replaces another one is no more
+// open than the old one was.
+func CopyDACL(src, dst string) error {
+	sd, err := windows.GetNamedSecurityInfo(src, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
+	if err != nil {
+		return err
+	}
+	dacl, _, err := sd.DACL()
+	if err != nil {
+		return err
+	}
+	ctrl, _, err := sd.Control()
+	if err != nil {
+		return err
+	}
+	info := windows.SECURITY_INFORMATION(windows.DACL_SECURITY_INFORMATION)
+	if ctrl&windows.SE_DACL_PROTECTED != 0 {
+		info |= windows.PROTECTED_DACL_SECURITY_INFORMATION
+	} else {
+		info |= windows.UNPROTECTED_DACL_SECURITY_INFORMATION
+	}
+	return windows.SetNamedSecurityInfo(dst, windows.SE_FILE_OBJECT, info, nil, nil, dacl, nil)
 }
