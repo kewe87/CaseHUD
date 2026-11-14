@@ -132,6 +132,12 @@ No cloud, no account, no telemetry. Network use: update notice (`api.github.com`
 
 Drittanbieter-Komponenten und ihre Lizenzen: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
+## Gefällt dir CaseHUD? / Like CaseHUD?
+
+Dann freue ich mich über einen ⭐ auf [GitHub](https://github.com/kewe87/CaseHUD). Das hilft anderen, das Projekt zu finden. Fehler und Ideen gerne als [Issue](https://github.com/kewe87/CaseHUD/issues).
+
+Then I'd be happy about a ⭐ on [GitHub](https://github.com/kewe87/CaseHUD). It helps others find the project. Bugs and ideas are welcome as [issues](https://github.com/kewe87/CaseHUD/issues).
+
 ## Lizenz / License
 
 Copyright © 2026 **kewe87**. Freie Software unter der **GNU General Public License v3.0** ([LICENSE](LICENSE)): Nutzen, verändern und weitergeben erlaubt; Forks und Weiterentwicklungen müssen unter der GPL-3.0 offen bleiben und den Copyright-Hinweis „kewe87“ behalten. Free software under the GPL-3.0: forks and derivatives must stay open source under the same license and keep the copyright notice.
