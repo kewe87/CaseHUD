@@ -104,7 +104,7 @@ func main() {
 				return instanceRunning(running)
 			}
 			return showExisting(running, store.Dir)
-		}, lockWait, lockPoll)
+		}, func() bool { return lastHoldFailure() != "" }, lockWait, lockPoll)
 		switch res {
 		case lockHandedOver:
 			return
@@ -118,9 +118,11 @@ func main() {
 				fmt.Fprintf(f, "%s CaseHUD %s: %s; this start (pid %d) ended\n", time.Now().Format(time.RFC3339), version, what, os.Getpid())
 				f.Close()
 			}
-			// Also for a start meant for the tray (autostart): without this message
-			// nothing would say that no cooling control runs.
-			showError(lockTimeoutText(uiGerman(), failure))
+			// A start meant for the tray (autostart, --minimized) only logs: a
+			// dialog nobody asked for at logon helps no one.
+			if !quietStart {
+				showError(lockTimeoutText(uiGerman(), failure))
+			}
 			os.Exit(1)
 		}
 	}

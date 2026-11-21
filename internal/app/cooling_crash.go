@@ -173,4 +173,7 @@ func (e *Engine) addCrashInfo(v *CoolingView) {
 	v.Restored, v.RestoredFile = restored, kept
 	v.SensorsDown = e.prov != nil && e.prov.Err() != ""
 	v.SensorsStale = e.prov != nil && e.prov.Stale()
+	if e.prov != nil {
+		v.SensorSource, v.SensorsDisplayOnly = e.prov.DisplayOnlySource()
+	}
 }

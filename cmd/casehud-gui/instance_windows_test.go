@@ -27,7 +27,7 @@ func helperLock() int {
 	dir, id, name := os.Getenv(dirEnv), os.Getenv("CASEHUD_TEST_ID"), os.Getenv(nsEnv)
 	ms, _ := strconv.Atoi(os.Getenv(lockWaitEnv))
 	waitFile(filepath.Join(dir, "go"), 30*time.Second)
-	res := acquireInstance(func() bool { return tryHoldNamed(name) }, func() bool { return false },
+	res := acquireInstance(func() bool { return tryHoldNamed(name) }, func() bool { return false }, func() bool { return false },
 		time.Duration(ms)*time.Millisecond, 10*time.Millisecond)
 	out := map[lockResult]string{lockHeld: "held", lockHandedOver: "handed", lockTimeout: "timeout"}[res]
 	_ = os.WriteFile(filepath.Join(dir, "res."+id), []byte(out), 0o600)

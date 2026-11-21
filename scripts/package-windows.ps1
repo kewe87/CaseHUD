@@ -39,6 +39,10 @@ go run ./cmd/casehud write-icon installer\casehud.ico; Check "icon"
 # Icon, version info and manifest as Windows resources (.syso, picked up by
 # go build), so Explorer, the taskbar and shortcuts show the CaseHUD logo.
 $fileVersion = ($Version -split '[-+]')[0]
+# The .syso files exist only while the binaries are built: a leftover one would
+# be linked into every later build and test (go test -race: "multiple
+# non-default manifests" from the linker).
+try {
 foreach ($t in @(@{ Dir = "cmd\casehud"; Exe = "casehud-cli.exe"; Manifest = "cli" }, @{ Dir = "cmd\casehud-gui"; Exe = "CaseHUD.exe"; Manifest = "gui" })) {
   go run github.com/tc-hib/go-winres@v0.3.3 simply --arch amd64 --out "$($t.Dir)\rsrc" --manifest $t.Manifest `
     --icon installer\casehud.ico --product-name CaseHUD --file-description CaseHUD --copyright "Copyright (C) 2026 kewe87" `
@@ -46,6 +50,9 @@ foreach ($t in @(@{ Dir = "cmd\casehud"; Exe = "casehud-cli.exe"; Manifest = "cl
 }
 go build -trimpath -ldflags $ld -o "$stage\casehud-cli.exe" ./cmd/casehud; Check "casehud build"
 go build -trimpath -ldflags "$ld -H windowsgui" -o "$stage\CaseHUD.exe" ./cmd/casehud-gui; Check "CaseHUD build"
+} finally {
+  Remove-Item "cmd\casehud\rsrc_windows_amd64.syso", "cmd\casehud-gui\rsrc_windows_amd64.syso" -ErrorAction SilentlyContinue
+}
 
 # --- Sensor service (LibreHardwareMonitorLib bundled) ---------------------
 $lhm = Join-Path $root "third_party\lhm"

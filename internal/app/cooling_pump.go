@@ -23,7 +23,7 @@ import (
 // silent, so a crash of CaseHUD leaves the pump under the board's regulation.
 
 // The sensor service refuses a duty below cooling.LowestPumpDuty too.
-const coolingPipe = `\\.\pipe\CaseHUD.Cooling`
+const coolingPipe = enram.CoolingPipe
 
 var pumpSensorKey = regexp.MustCompile(`^(/lpc/[a-z0-9]{1,32}/[0-9]{1,2})/fan/([0-9]{1,2})$`)
 
@@ -381,9 +381,12 @@ func (b *boardPumps) takeOver(from *boardPumps) {
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	released := false // a hold stays on a header this control does not take over
 	for id, duty := range last {
 		if key, ok := b.keys[id]; ok && key == from.keys[id] && b.state(id) == pumpMatched {
 			b.last[id] = duty
+		} else {
+			released = true
 		}
 	}
 	if len(b.last) == 0 {
@@ -391,4 +394,24 @@ func (b *boardPumps) takeOver(from *boardPumps) {
 		return
 	}
 	b.line = line
+	if released {
+		b.releaseOthers(line)
+	}
+}
+
+// releaseOthers hands the headers that are no longer held back to the board at
+// once. The service has no release for a single header: a hold ends with its
+// connection. So the holds that stay are made on a new line first, then the old one
+// is closed. If the new line cannot hold them all, the old one stays and the
+// service releases the rest after its silence limit.
+func (b *boardPumps) releaseOthers(old pumpLine) {
+	nl := coolingOpenPumpLine()
+	for id, duty := range b.last {
+		if err := nl.Hold(b.keys[id], duty); err != nil {
+			nl.Close()
+			return
+		}
+	}
+	b.line = nl
+	old.Close()
 }

@@ -4,6 +4,9 @@ package main
 
 import (
 	"errors"
+	"os"
+	"strconv"
+	"testing"
 
 	"golang.org/x/sys/windows"
 )
@@ -15,7 +18,12 @@ import (
 // tryHold takes the single-instance lock; false if it did not get it. Why not,
 // if it is not simply held, is noted for the message (noteHoldFailure).
 func tryHold() bool {
-	held, err := holdNamed(runningMutexName)
+	name := runningMutexName
+	if testing.Testing() {
+		// A test never takes (or waits for) the lock of a running CaseHUD.
+		name += ".test" + strconv.Itoa(os.Getpid())
+	}
+	held, err := holdNamed(name)
 	if err != nil {
 		noteHoldFailure(err)
 	}

@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"github.com/kewe87/casehud/internal/rgb/internal/diag"
 	"io"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 )
 
@@ -52,9 +55,22 @@ func PipeName(name string) string {
 	return name
 }
 
+// Isolated is name, except in a test process: there the well-known pipes of
+// the sensor service get a suffix of their own, so a test never reaches the
+// service of a CaseHUD that really runs. Other names stay as they are.
+func Isolated(name string) string {
+	if testing.Testing() && (name == BridgePipe || name == RingPipe || name == CoolingPipe) {
+		return name + ".test" + strconv.Itoa(os.Getpid())
+	}
+	return name
+}
+
+// CoolingPipe is the pipe of the sensor service for a pump on a mainboard header.
+const CoolingPipe = `\\.\pipe\CaseHUD.Cooling`
+
 // NewPipeTransport connects to the bridge pipe (see PipeName) on first use.
 func NewPipeTransport(name string) *PipeTransport {
-	name = PipeName(name)
+	name = Isolated(PipeName(name))
 	return NewStreamTransport(func() (io.ReadWriteCloser, error) {
 		f, err := openPipe(name)
 		if err != nil {

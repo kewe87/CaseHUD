@@ -310,3 +310,21 @@ func TestReadingsOfAnUnverifiedSourceAreForTheDisplayOnly(t *testing.T) {
 		t.Fatalf("%v", got)
 	}
 }
+
+func TestTheViewSaysWhenOnlyADisplaySourceDelivers(t *testing.T) {
+	p := &coolingReadings{readings: []metrics.Reading{{Key: "/water", Value: 28.4, Unit: "°C", DisplayOnly: true}}}
+	e := &Engine{prov: NewSafeProvider(p)}
+	e.prov.Refresh()
+	var v CoolingView
+	e.addCrashInfo(&v)
+	if !v.SensorsDisplayOnly || v.SensorSource != "custom" {
+		t.Fatalf("%+v", v)
+	}
+	p.readings = []metrics.Reading{{Key: "/water", Value: 28.4, Unit: "°C"}}
+	e.prov.Refresh()
+	v = CoolingView{}
+	e.addCrashInfo(&v)
+	if v.SensorsDisplayOnly || v.SensorSource != "" {
+		t.Fatalf("%+v", v)
+	}
+}

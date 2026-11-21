@@ -50,7 +50,8 @@ var smbusBridgeProbe = func() bool {
 	if err != nil {
 		return false
 	}
-	want := strings.ToLower(smbusBridgePipe[strings.LastIndex(smbusBridgePipe, `\`)+1:])
+	probed := enram.Isolated(smbusBridgePipe)
+	want := strings.ToLower(probed[strings.LastIndex(probed, `\`)+1:])
 	for _, en := range ents {
 		if strings.ToLower(en.Name()) == want {
 			return true

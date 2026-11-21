@@ -1537,6 +1537,30 @@ func (s *SafeProvider) SensorSource() string {
 	return ""
 }
 
+// DisplayOnlySource tells whether the readings come from a source that may show
+// values but not drive the cooling (anything but the sensor service), and which
+// one: "lhm" (the default LibreHardwareMonitor port) or "custom". It never waits
+// for a refresh in progress.
+func (s *SafeProvider) DisplayOnlySource() (string, bool) {
+	rs, known := s.snapshot()
+	if !known || len(rs) == 0 {
+		return "", false
+	}
+	for _, r := range rs {
+		if !r.DisplayOnly {
+			return "", false
+		}
+	}
+	src := "custom"
+	if s.mu.TryRLock() {
+		if m, ok := s.p.(interface{ Source() string }); ok && m.Source() == metrics.DefaultLHMURL {
+			src = "lhm"
+		}
+		s.mu.RUnlock()
+	}
+	return src, true
+}
+
 // Err is the last refresh error ("" when sensors are fine).
 func (s *SafeProvider) Err() string {
 	if s.mu.TryRLock() {

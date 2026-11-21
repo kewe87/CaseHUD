@@ -36,9 +36,14 @@ const (
 // it was won). If another start holds it, it waits up to wait: when
 // answered reports that the holder is up, the start is handed over to it; when
 // the lock becomes free in the meantime, this start takes over.
-func acquireInstance(try, answered func() bool, wait, poll time.Duration) lockResult {
+// If try fails for another reason than "held" (failed reports that), waiting
+// would not help and the start ends at once.
+func acquireInstance(try, answered, failed func() bool, wait, poll time.Duration) lockResult {
 	if try() {
 		return lockHeld
+	}
+	if failed() {
+		return lockTimeout
 	}
 	deadline := time.Now().Add(wait)
 	for {
@@ -47,6 +52,9 @@ func acquireInstance(try, answered func() bool, wait, poll time.Duration) lockRe
 		}
 		if try() {
 			return lockHeld
+		}
+		if failed() {
+			return lockTimeout
 		}
 		if !time.Now().Before(deadline) {
 			return lockTimeout

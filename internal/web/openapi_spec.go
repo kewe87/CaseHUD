@@ -137,7 +137,7 @@ func v1Spec() []specOp {
 
 		// --- cooling ---
 		op("GET", "/api/v1/cooling", R, "Cooling", "The cooling as CaseHUD sees it",
-			opDesc("state, mode, revision, alarm and the outputs. Outputs say mode (curve, manual, none), manual, unregulated, calibrating, unproven, notReleased, notMatched, noSource and problem, so a client can tell the user what to do. Releasing a pump stays in the window."),
+			opDesc("state, mode, revision, alarm and the outputs. alarm.code is one of pump, pump_unknown, stale, config, emergency, device, write, sensor, stalled, service, config_backup, halted (the control stopped while CaseHUD keeps running: restart CaseHUD); treat unknown codes generally. sensorsDisplayOnly is true while the sensor readings come from a source other than the CaseHUD sensor service (sensorSource lhm or custom): they are shown but do not drive the cooling, which holds the safe speeds. Outputs say mode (curve, manual, none), manual, unregulated, calibrating, unproven, notReleased, notMatched, noSource and problem, so a client can tell the user what to do. Releasing a pump stays in the window."),
 			opOK(200, "the cooling", app.CoolingAPI{})),
 		op("POST", "/api/v1/cooling/preset", C, "Cooling", "Activate a cooling preset",
 			opBody(v1IDRequest{}, "the id of the preset"), opOK(200, "the cooling after the change", app.CoolingAPI{}), opErrs(400, 404, 409)),

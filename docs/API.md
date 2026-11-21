@@ -856,7 +856,11 @@ Older versions answer `404 not_found`.
   runs on its last safety copy), `halted` (the control was stopped while CaseHUD keeps running, for example by the end of the
   session; fans and pump are not regulated, restart CaseHUD); `name` is the name the user gave the output concerned, or `""`; it is always
   `""` for `service`, `config_backup` and `halted`. It is a code, not a sentence. A block by another program is not an alarm,
-  `state` says it.
+  `state` says it. Treat unknown codes generally.
+- `sensorsDisplayOnly` and `sensorSource` (since 1.2.1): `sensorsDisplayOnly` is `true` while all sensor readings come from a source
+  other than the CaseHUD sensor service, that is LibreHardwareMonitor on port 8085 (`sensorSource` `lhm`) or a custom URL (`custom`).
+  Those values are shown but never drive the cooling, so fans and pump stay at their safe speeds (`sensor_lost`, alarm `sensor`).
+  Otherwise `false` and `sensorSource` is `""`. Clients can show "control only with the CaseHUD sensor service".
 - `outputs`: the fans and the pump CaseHUD regulates. `kind` is `pump`, `fan` or `case` (a case fan that always runs).
   `rpm` and `temp` are `null` while unknown. `temp` is the temperature the output's curve follows, in °C.
   `mode` (since 1.2.0) is `curve`, `manual` or `none`. `manual` outputs carry `manual`: `{ "value": number, "unit": "percent" | "rpm" }`, a fixed value instead of a curve; they follow no temperature, so `temp` is `null`.

@@ -50,6 +50,9 @@ type pipeInformation struct {
 func Paths(guid GUID, vid, pid uint16) ([]string, error) {
 	g := windows.GUID(guid)
 	all, err := windows.CM_Get_Device_Interface_List("", &g, windows.CM_GET_DEVICE_INTERFACE_LIST_PRESENT)
+	if errors.Is(err, windows.ERROR_NO_SUCH_DEVICE_INTERFACE) {
+		return nil, nil // no device of this class is present: an empty list, not a failure
+	}
 	if err != nil {
 		return nil, fmt.Errorf("winusb: list interfaces: %w", err)
 	}

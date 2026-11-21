@@ -34,8 +34,14 @@ type CoolingAPI struct {
 	Preset    *string            `json:"preset"`
 	Presets   []CoolingPresetAPI `json:"presets"`
 	Alarm     *CoolingAPIAlarm   `json:"alarm"`
-	Outputs   []CoolingAPIOutput `json:"outputs"`
-	Temps     []CoolingAPITemp   `json:"temperatures"`
+	// SensorsDisplayOnly is true while the sensor readings come from a source
+	// other than the CaseHUD sensor service (SensorSource "lhm" or "custom"):
+	// they are shown, but the cooling does not use them and holds the safe
+	// speeds. SensorSource is "" while the service or nothing delivers.
+	SensorsDisplayOnly bool               `json:"sensorsDisplayOnly"`
+	SensorSource       string             `json:"sensorSource"`
+	Outputs            []CoolingAPIOutput `json:"outputs"`
+	Temps              []CoolingAPITemp   `json:"temperatures"`
 }
 
 // CoolingPresetAPI is a preset in the public answer.
@@ -128,6 +134,7 @@ func (e *Engine) CoolingAPIView() CoolingAPI {
 		}
 	}
 	out.Alarm = apiAlarm(v)
+	out.SensorsDisplayOnly, out.SensorSource = v.SensorsDisplayOnly, v.SensorSource
 	if out.State == CoolingStateUnconfigured {
 		return out
 	}
@@ -296,7 +303,7 @@ func (v CoolingAPI) EventKey() string {
 	if v.Preset != nil {
 		preset = *v.Preset
 	}
-	fmt.Fprintf(&b, "%t|%s|%s|%s", v.Enabled, v.State, v.BlockedBy, preset)
+	fmt.Fprintf(&b, "%t|%s|%s|%s|%t", v.Enabled, v.State, v.BlockedBy, preset, v.SensorsDisplayOnly)
 	if v.Alarm != nil {
 		fmt.Fprintf(&b, "|%s|%s", v.Alarm.Code, v.Alarm.Name)
 	}

@@ -72,6 +72,9 @@ Object.assign(STRINGS.de, {
   "cool.alarm.stalled": "{n} steht trotz Drehzahlvorgabe.",
   "cool.alarm.service": "Sensordienst antwortet nicht: Temperaturen und Drehzahlen fehlen. Lüfter auf sicherer Drehzahl. Dienst „CaseHUD Sensors“ in den Windows-Diensten prüfen.",
   "cool.alarm.configBackup": "cooling.json beschädigt, Betrieb mit der letzten Sicherung. Defekte Datei als {n} im Datenordner. Einstellungen prüfen und neu speichern.",
+  "cool.sensorSourceHint": "Regelung nur mit dem CaseHUD-Sensordienst. Aktuelle Quelle: {s}. Die Werte dienen nur der Anzeige, die Lüfter laufen auf sicherer Drehzahl.",
+  "cool.src.lhm": "LibreHardwareMonitor (Port 8085)",
+  "cool.src.custom": "eigene URL",
   "cool.alarm.halted": "Lüfterregelung angehalten, CaseHUD läuft weiter. Lüfter (und Pumpe) werden nicht geregelt. CaseHUD neu starten.",
   "cool.alarmOpen": "Zur Kühlung",
   "cool.stalled": "Steht trotz Vorgabe",
@@ -392,6 +395,9 @@ Object.assign(STRINGS.en, {
   "cool.alarm.stalled": "{n} is stopped despite a speed target.",
   "cool.alarm.service": "Sensor service not responding: temperatures and speeds are missing. Fans at safe speed. Check the “CaseHUD Sensors” service in Windows Services.",
   "cool.alarm.configBackup": "cooling.json damaged, running on the last backup. Damaged file kept as {n} in the data folder. Check the settings and save again.",
+  "cool.sensorSourceHint": "Control only works with the CaseHUD sensor service. Current source: {s}. The values are for display only, the fans stay at their safe speed.",
+  "cool.src.lhm": "LibreHardwareMonitor (port 8085)",
+  "cool.src.custom": "custom URL",
   "cool.alarm.halted": "Fan control stopped while CaseHUD keeps running. Fans (and pump) are not controlled. Restart CaseHUD.",
   "cool.alarmOpen": "Open cooling",
   "cool.stalled": "Stopped despite target",
@@ -2798,9 +2804,10 @@ function renderCooling(view) {
   const blocked = view.blocked ? t("cool.blocked." + view.blocked, { p: view.program || "" }) : "";
   const brokenPump = outputs.find((o) => o.pumpDown);
   const defect = brokenPump ? t("cool.pumpDefect", { n: brokenPump.name || brokenPump.id }) : "";
-  msg.hidden = !defect && !view.error && !blocked && (started || outputs.length === 0);
-  msg.textContent = defect || (view.error ? t("cool.badfile", { e: view.error }) : blocked || t("cool.waiting"));
-  msg.classList.toggle("cool-alarm", !!defect || !!blocked || !!view.error);
+  const srcHint = view.sensorsDisplayOnly ? t("cool.sensorSourceHint", { s: t("cool.src." + (view.sensorSource || "custom")) }) : "";
+  msg.hidden = !defect && !view.error && !blocked && !srcHint && (started || outputs.length === 0);
+  msg.textContent = defect || (view.error ? t("cool.badfile", { e: view.error }) : blocked || srcHint || t("cool.waiting"));
+  msg.classList.toggle("cool-alarm", !!defect || !!blocked || !!view.error || !!srcHint);
   const regulating = outputs.some((o) => !o.pump) || (coolSetup?.config?.outputs || []).some((o) => o.pump && coolDriven(o));
   $("#cool-sub").textContent = t(!view.live ? "cool.sub" : regulating ? "cool.subLive" : "cool.subIdle");
   const measuring = !!(view.measure && view.measure.running);

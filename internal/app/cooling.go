@@ -580,6 +580,11 @@ type CoolingView struct {
 	SensorsDown bool `json:"sensorsDown,omitempty"`
 	// SensorsStale: readings are left out because they are old or frozen.
 	SensorsStale bool `json:"sensorsStale,omitempty"`
+	// SensorsDisplayOnly: the readings come from a source other than the sensor
+	// service ("lhm" or "custom" in SensorSource). They are shown but never drive
+	// the cooling, so the outputs stay at their safe speed.
+	SensorsDisplayOnly bool   `json:"sensorsDisplayOnly,omitempty"`
+	SensorSource       string `json:"sensorSource,omitempty"`
 }
 
 // coolingState is the running control. It is replaced as a whole (coolMu).

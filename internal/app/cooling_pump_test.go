@@ -513,3 +513,41 @@ func TestEndKeptGivesTheHeaderBack(t *testing.T) {
 		t.Fatalf("closed %d", line.closed)
 	}
 }
+
+func TestAHoldOnAHeaderNotTakenOverIsReleasedAtOnce(t *testing.T) {
+	old1, new1 := &fakePumpLine{}, &fakePumpLine{}
+	lines := []*fakePumpLine{old1, new1}
+	before := coolingOpenPumpLine
+	coolingOpenPumpLine = func() pumpLine { l := lines[0]; lines = lines[1:]; return l }
+	t.Cleanup(func() { coolingOpenPumpLine = before })
+	two := `{"mode":"live","curves":[
+ {"id":"water","name":"Water","sources":["/t"],"points":[[20,60],[40,80]],"rise_by":1,"fall_by":1,"rise_after":1,"fall_after":1}
+],"outputs":[
+ {"id":"pump","name":"P1","pump":true,"rpm_sensor":"` + pumpRPMKey + `","curve":"water","step_up":100,"step_down":100,"min_duty":50,"safe_duty":100},
+ {"id":"pump2","name":"P2","pump":true,"rpm_sensor":"/lpc/chip/0/fan/7","curve":"water","step_up":100,"step_down":100,"min_duty":50,"safe_duty":100}
+]}`
+	cfg2, err := parseCoolingConfig([]byte(two))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg1, err := parseCoolingConfig([]byte(pumpExample))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := func() (string, string) { return "", "" }
+	old := newBoardPumps(cfg2, nil, gate)
+	old.markMatched(old.ids()...)
+	old.SetDuty("pump", 70)
+	old.SetDuty("pump2", 60)
+	old.keepLine()
+	old.Close()
+	next := newBoardPumps(cfg1, nil, gate) // the second pump is gone
+	next.markMatched(next.ids()...)
+	next.takeOver(old)
+	if old1.closed != 1 {
+		t.Fatalf("the old line was not closed (%d): the header of the dropped pump stays held", old1.closed)
+	}
+	if len(new1.holds) != 1 || new1.holds[0] != 70 || next.line != pumpLine(new1) {
+		t.Fatalf("holds %v", new1.holds)
+	}
+}

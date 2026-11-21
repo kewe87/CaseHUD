@@ -2,6 +2,8 @@ package enram
 
 import (
 	"errors"
+	"fmt"
+	"os"
 	"testing"
 
 	"golang.org/x/sys/windows"
@@ -28,7 +30,7 @@ func TestTrustedPipeOwner(t *testing.T) {
 // A pipe created by this (standard user) process is owned by the user and must
 // be rejected.
 func TestVerifyServerRejectsUserOwnedPipe(t *testing.T) {
-	name := `\\.\pipe\CaseHUD.Test.` + t.Name()
+	name := fmt.Sprintf(`\\.\pipe\CaseHUD.Test.%d.%s`, os.Getpid(), t.Name())
 	n, _ := windows.UTF16PtrFromString(name)
 	h, err := windows.CreateNamedPipe(n, windows.PIPE_ACCESS_DUPLEX, windows.PIPE_TYPE_BYTE|windows.PIPE_WAIT, 2, 4096, 4096, 0, nil)
 	if err != nil {

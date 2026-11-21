@@ -256,6 +256,12 @@ func (e *Engine) storeCooling(cfg coolingConfig) error {
 // they are if a live loop takes over the same outputs; in every other case the
 // old loop leaves them at their safe duty, because nothing may keep them low.
 func (e *Engine) replaceCooling(cfg coolingConfig) {
+	if e.ctx != nil && e.ctx.Err() != nil {
+		// The program is ending (a stop in the middle of "all"): the file is
+		// written, and neither a new loop nor a guard is wanted behind it. The
+		// old loop ends on its own and leaves the fans safe.
+		return
+	}
 	old := e.coolingSnapshot()
 	e.dropChangedPairs(old.cfg, cfg)
 	var prev <-chan struct{} // the old loop, if it is still stuck after coolingStopWait

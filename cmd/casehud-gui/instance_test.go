@@ -15,23 +15,28 @@ func TestAcquireInstance(t *testing.T) {
 	never := func() bool { return false }
 	always := func() bool { return true }
 
-	if got := acquireInstance(always, never, time.Second, time.Millisecond); got != lockHeld {
+	if got := acquireInstance(always, never, never, time.Second, time.Millisecond); got != lockHeld {
 		t.Fatalf("free lock: %v", got)
 	}
-	if got := acquireInstance(never, always, time.Second, time.Millisecond); got != lockHandedOver {
+	if got := acquireInstance(never, always, never, time.Second, time.Millisecond); got != lockHandedOver {
 		t.Fatalf("holder answers: %v", got)
 	}
 	start := time.Now()
-	if got := acquireInstance(never, never, 50*time.Millisecond, time.Millisecond); got != lockTimeout {
+	if got := acquireInstance(never, never, never, 50*time.Millisecond, time.Millisecond); got != lockTimeout {
 		t.Fatalf("nobody answers: %v", got)
 	}
 	if time.Since(start) < 50*time.Millisecond {
 		t.Fatal("gave up before the wait was over")
 	}
+	// Another failure than "held": no waiting.
+	start = time.Now()
+	if got := acquireInstance(never, never, always, 5*time.Second, time.Millisecond); got != lockTimeout || time.Since(start) > time.Second {
+		t.Fatalf("failure waited: %v", got)
+	}
 	// The lock becomes free while waiting: this start takes over.
 	n := 0
 	freed := func() bool { n++; return n >= 4 }
-	if got := acquireInstance(freed, never, time.Second, time.Millisecond); got != lockHeld {
+	if got := acquireInstance(freed, never, never, time.Second, time.Millisecond); got != lockHeld {
 		t.Fatalf("lock freed: %v", got)
 	}
 }

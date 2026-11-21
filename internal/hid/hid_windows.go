@@ -101,6 +101,9 @@ func query(path string) (Info, hidpCaps, error) {
 
 func enumerate(ids []ID) ([]Info, error) {
 	paths, err := windows.CM_Get_Device_Interface_List("", &guidDevinterfaceHID, windows.CM_GET_DEVICE_INTERFACE_LIST_PRESENT)
+	if errors.Is(err, windows.ERROR_NO_SUCH_DEVICE_INTERFACE) {
+		return nil, nil // nothing of this class is present: an empty list, not a failure
+	}
 	if err != nil {
 		return nil, fmt.Errorf("listing HID devices: %w", err)
 	}
